@@ -46,11 +46,15 @@ jobs:
 
       - name: 创建 或 更新 GitHub Release
         if: github.event_name == 'push'
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: zh-cn-${{ github.run_number }}
           name: 简体中文版 构建 #${{ github.run_number }}
-          generate_release_notes: true
+          body: |
+            Cyber Hub Manager 简体中文版 构建。
+            由 GitHub Actions 自动 构建，JDK 17 + Android SDK 34 + build-tools 35.0.0。
+            若 此 Release 创建 失败（私有 仓库 release 权限 受限），请 在 仓库 Actions 页面 手动 下载 本次 运行 的 APK 产物。
           files: |
             dist/Cyber-Hub-Manager-zh-CN.apk
           draft: false
