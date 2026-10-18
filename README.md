@@ -56,6 +56,16 @@ Java compilation requires valid, compilable source. Decompiled Java is not guara
 | Tools | Local profile/preferences, activity record, file comparisons, shell terminal, own-format `.sh` plugins. |
 | Network | FTP/explicit FTPS client; token-protected read-only local HTTP sharing; local MCP `list_files`/`read_text`. |
 
+### File multi-select gestures
+
+Selecting several files/folders in the two-pane file view supports three continuous gestures, without opening the context menu:
+
+1. **Anchor (Rule 1)** — press and hold a row, then slide left/right. That row becomes the selection anchor `a` and multi-select mode starts (a status banner and a highlighted anchor appear).
+2. **Range select (Rule 2)** — while still holding (without lifting the finger), keep sliding vertically over the rows. The continuous range from anchor `a` to the row under the finger (`b`, the active end) is selected live; sliding back shrinks the range, with `a` fixed as the anchor.
+3. **Append (Rule 3)** — after the anchor/range gesture is released, simply tapping another file/folder `c` appends it to the existing selection (giving `{a, c, ...}`), and tapping a selected entry removes it. Multiple files/folders work the same way.
+
+A plain long-press without sliding still opens the file action menu as before; a tap with no active selection still opens the file/folder as before.
+
 Remote/network tools run only while the app process lives and respect Android permissions. Terminal commands have a 20-second timeout. DEX searches are capped; usage search covers selected DEX instructions/type declarations, not reflection. Register analysis is a usage/count view, not liveness analysis. General resource-table editing, root escalation, cloud subscriptions, remote desktop control and proprietary plugins are not provided.
 
 ## Validation and limits

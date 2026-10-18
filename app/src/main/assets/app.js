@@ -127,7 +127,7 @@ function renderFiles(){iconObservers.forEach(o=>o.disconnect());iconObservers=[]
  $('#subbar').innerHTML=state.info&&!state.info.permission?'<div class="permission"><span>正在浏览应用工作区</span><button id="grant">授予文件访问权限</button></div>':'';if($('#grant'))$('#grant').onclick=()=>act(()=>rpc('permission'));
  $('#content').innerHTML='<div class="filepanes"></div>';const panes=$('.filepanes');state.panes.forEach((pane,index)=>{const el=document.createElement('section');el.className='pane'+(state.active===index?' active':'');el.setAttribute('aria-label',index===0?'左侧文件窗格':'右侧文件窗格');el.onscroll=()=>pane.scrollTop=el.scrollTop;el.onpointerdown=()=>{if(state.active!==index){state.active=index;document.querySelectorAll('.pane').forEach((x,j)=>x.classList.toggle('active',j===index));const folders=pane.items.filter(x=>x.dir).length;fitPath($('#toolbar .title'),displayPath(pane));$('#toolbar .subtitle').textContent=paneSummary(pane);renderFileBottom();}};
  const parent=document.createElement('button');parent.className='file parent';parent.innerHTML=`<span class="fileicon">${icon('folder')}</span><span class="filename">..</span>`;parent.onclick=()=>act(async()=>{state.active=index;await up();});el.append(parent);
- if(pane.error){const e=document.createElement('div');e.className='empty';e.textContent=pane.error;el.append(e);}else if(!pane.items.length){const e=document.createElement('div');e.className='empty';e.textContent='空文件夹';el.append(e);}for(const f of pane.items){const row=document.createElement('button');row.className='file'+(pane.selected&&pane.selected.has(fileKey(f))?' selected':'');row.setAttribute('aria-selected',String(!!(pane.selected&&pane.selected.has(fileKey(f)))));const type=fileType(f);if(type==='apk'&&!f.archive){row.dataset.apkPath=f.path;row.dataset.apkStamp=String(f.time)+'|'+f.size;}row.innerHTML=`<span class="fileicon ${type}">${icon(type)}</span><span class="fileinfo"><span class="filename">${esc(f.name)}</span><span class="filemeta">${date(f.time)}${f.dir?'':'  '+size(f.size)}</span></span>`;hold(row,()=>{state.active=index;if(!pane.selected)pane.selected=new Set();pane.selected.add(fileKey(f));renderFiles();fileActions(f);},()=>{state.active=index;if(pane.selected&&pane.selected.size)toggleFile(f,index);else return openFile(f,index);});el.append(row);}panes.append(el);el.scrollTop=pane.scrollTop||0;loadVisibleApkIcons(el);});
+ if(pane.error){const e=document.createElement('div');e.className='empty';e.textContent=pane.error;el.append(e);}else if(!pane.items.length){const e=document.createElement('div');e.className='empty';e.textContent='空文件夹';el.append(e);}pane.items.forEach((f,i)=>{const row=document.createElement('button');row.className='file'+(pane.selected&&pane.selected.has(fileKey(f))?' selected':'');row.setAttribute('aria-selected',String(!!(pane.selected&&pane.selected.has(fileKey(f)))));row.dataset.index=String(i);const type=fileType(f);if(type==='apk'&&!f.archive){row.dataset.apkPath=f.path;row.dataset.apkStamp=String(f.time)+'|'+f.size;}row.innerHTML=`<span class="fileicon ${type}">${icon(type)}</span><span class="fileinfo"><span class="filename">${esc(f.name)}</span><span class="filemeta">${date(f.time)}${f.dir?'':'  '+size(f.size)}</span></span>`;fileGesture(row,f,index);el.append(row);});panes.append(el);el.scrollTop=pane.scrollTop||0;loadVisibleApkIcons(el);});
  renderFileBottom();}
 function renderFileBottom(){const bottom=$('#bottom');bottom.replaceChildren(iconButton('back','返回',()=>backPane()),iconButton('forward','Forward',()=>backPane(true)),iconButton('plus','新建或粘贴',createMenu),iconButton('swap','交换窗格',async()=>{[state.panes[0],state.panes[1]]=[state.panes[1],state.panes[0]];state.active=1-state.active;renderFiles();}),iconButton('up','上级目录',up));if(selectedFiles().length)selectionBar();}
 
@@ -235,6 +235,83 @@ function navigationDialog(query=''){
  d.querySelector('input').oninput=e=>draw(e.target.value);draw(query);
 }
 function hold(button,longPress,click){let timer,held=false,x=0,y=0;button.onpointerdown=e=>{held=false;x=e.clientX;y=e.clientY;timer=setTimeout(()=>{held=true;act(longPress);},500);};button.onpointerup=button.onpointercancel=()=>clearTimeout(timer);button.onpointermove=e=>{if(Math.abs(e.clientX-x)>8||Math.abs(e.clientY-y)>8)clearTimeout(timer);};button.oncontextmenu=e=>{e.preventDefault();held=true;act(longPress);};button.onclick=()=>{if(held){held=false;return;}act(click);};}
+// 文件/文件夹多选手势：规则一（横向滑动选中锚点）、规则二（按住纵向滑动框选区间）、规则三（松手后点击追加/移除）
+function fileGesture(row,f,index){
+  const pane=state.panes[index];
+  const key=fileKey(f);
+  const listIndex=pane.items.indexOf(f);
+  if(!pane.selected)pane.selected=new Set();
+  let timer=null,startX=0,startY=0,listening=false,slide=false,menuFired=false,suppressClick=false;
+  let drag=null; // {anchor,hi} 就地区间标记
+  const banner=(msg,show)=>{let b=document.getElementById('gestureBanner');if(!b){b=document.createElement('div');b.id='gestureBanner';b.setAttribute('role','status');b.setAttribute('aria-live','polite');document.body.append(b);}if(show){b.textContent=msg;b.classList.add('show');}else b.classList.remove('show');};
+  const applyRange=(lo,hi)=>{
+    pane.selected.clear();
+    for(let j=lo;j<=hi;j++){const fj=pane.items[j];if(fj)pane.selected.add(fileKey(fj));}
+    pane.querySelectorAll('.file[data-index]').forEach(r=>{
+      const j=Number(r.dataset.index),inRange=j>=lo&&j<=hi;
+      r.classList.toggle('dragAnchor',j===listIndex);
+      r.classList.toggle('dragRange',inRange&&j!==listIndex);
+      r.classList.toggle('selected',inRange);
+    });
+  };
+  const endDrag=(commit)=>{
+    if(!drag)return;
+    const {lo,hi}=drag;
+    if(commit)applyRange(lo,hi);else pane.selected.clear();
+    pane.classList.remove('dragging');
+    pane.querySelectorAll('.file.dragAnchor,.file.dragRange').forEach(r=>r.classList.remove('dragAnchor','dragRange'));
+    const n=pane.selected.size;
+    banner(commit?(n?'已选 '+n+' 项 · 点击文件可继续追加/移除':'未选择'):'已取消选择',commit&&n>0);
+    if(commit)renderFileBottom();else renderFiles();
+    drag=null;
+  };
+  row.addEventListener('pointerdown',e=>{
+    state.active=index;
+    listening=true;slide=false;menuFired=false;suppressClick=false;
+    startX=e.clientX;startY=e.clientY;
+    timer=setTimeout(()=>{ // 长按不动 → 弹出文件操作菜单（保留原行为）
+      if(!slide&&listening){listening=false;menuFired=true;clearTimeout(timer);
+        pane.selected.add(key);
+        renderFiles();act(()=>fileActions(f));
+      }
+    },500);
+  },{passive:true});
+  row.addEventListener('pointermove',e=>{
+    if(!listening)return;
+    const dx=e.clientX-startX,dy=e.clientY-startY;
+    if(!slide){
+      if(Math.abs(dx)>10&&Math.abs(dx)>Math.abs(dy)){ // 规则一：横向滑动 → 选中锚点、进入多选
+        slide=true;clearTimeout(timer);suppressClick=true;
+        pane.classList.add('dragging');
+        pane.selected.clear();pane.selected.add(key);
+        drag={lo:listIndex,hi:listIndex,anchor:listIndex};
+        applyRange(listIndex,listIndex);
+        banner('锚点：'+f.name+' · 按住并纵向滑动可框选区间',true);
+      } else if(Math.abs(dy)>10&&Math.abs(dy)>Math.abs(dx)){ // 纵向移动 → 取消长按（允许滚动）
+        clearTimeout(timer);listening=false;
+      }
+      return;
+    }
+    if(!drag)return;
+    // 规则二：按住纵向滑动 → 实时框选 a 到当前手指所在行；回滑收缩
+    const t=document.elementFromPoint(e.clientX,e.clientY);
+    const tr=t&&t.closest?t.closest('.file[data-index]'):null;
+    if(tr&&tr.dataset.index!==undefined){
+      const ai=Number(tr.dataset.index);
+      if(ai!==drag.hi){drag.hi=ai;const lo=Math.min(drag.anchor,ai),hi=Math.max(drag.anchor,ai);applyRange(lo,hi);}
+    }
+  },{passive:true});
+  const stop=()=>{clearTimeout(timer);if(slide&&drag){endDrag(true);listening=false;}else if(!menuFired){listening=false;}};
+  row.addEventListener('pointerup',stop,{passive:true});
+  row.addEventListener('pointercancel',stop,{passive:true});
+  row.addEventListener('click',()=>{
+    if(menuFired){menuFired=false;return;}              // 长按弹菜单后的合成 click
+    if(suppressClick){suppressClick=false;return;}      // 滑动手势松手后的合成 click，抑制一次
+    // 规则三：已有选区 → 点击追加/移除；否则打开
+    if(pane.selected&&pane.selected.size){toggleFile(f,index);const n=pane.selected.size;banner(n?'已选 '+n+' 项 · 点击文件可继续追加/移除':'',n>0);}
+    else openFile(f,index);
+  });
+}
 const navigationOptions={class:[['usages','查找用法'],['subclasses','查找子类'],['signature','复制类签名'],['frida','复制为 Frida 片段'],['xposed','复制为 Xposed 片段']],field:[['usages','查找用法'],['signature','复制字段签名'],['get','复制字段 get 代码'],['put','复制字段 put 代码'],['frida','复制为 Frida 片段'],['xposed','复制为 Xposed 片段']],method:[['usages','查找用法'],['overrides','查找重写方法'],['signature','复制方法签名'],['code','复制方法代码'],['frida','复制为 Frida 片段'],['xposed','复制为 Xposed 片段']]};
 function navigationPreferences(){const d=dialog('菜单',Object.keys(navigationOptions).map(kind=>'<h3>'+({class:'类',field:'字段',method:'方法'})[kind]+'</h3>'+navigationOptions[kind].map(([id,label])=>'<label class="toggleRow"><span>'+label+'</span><input type="checkbox" data-nav-option="'+kind+'.'+id+'" '+(!(pref.navigation&&pref.navigation[kind+'.'+id]===false)?'checked':'')+'></label>').join('')).join(''),[['取消',navigationDialog],['确定',()=>{pref.navigation={};d.querySelectorAll('[data-nav-option]').forEach(i=>pref.navigation[i.dataset.navOption]=i.checked);savePref();navigationDialog();}]]);d.classList.add('navigationPrefs');}
 function javaTypes(descriptor){const result=[];let i=0;while(i<descriptor.length){let start=i;while(descriptor[i]==='[')i++;if(descriptor[i]==='L'){let end=descriptor.indexOf(';',i);if(end<0)break;i=end+1;}else i++;const raw=descriptor.slice(start,i),names={V:'void',Z:'boolean',B:'byte',S:'short',C:'char',I:'int',J:'long',F:'float',D:'double'};result.push(raw.startsWith('[')?raw.replace(/\//g,'.'):raw.startsWith('L')?raw.slice(1,-1).replace(/\//g,'.'):names[raw]||raw);}return result;}

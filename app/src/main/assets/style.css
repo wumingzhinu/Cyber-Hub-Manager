@@ -195,6 +195,13 @@ to{transform:translateX(0)}
 /* Video reference: navigation, editing, selection and archive dialogs. */
 .file.selected{background:#285361}
 .file.selected .filename{color:#d7e9ed}
+/* 多选手势（规则一锚点 / 规则二区间）反馈 */
+.pane.dragging{overflow:hidden;touch-action:none}
+.file.dragAnchor{background:#1f6f43;box-shadow:inset 0 0 0 2px #7fd6a0}
+.file.dragAnchor .filename{color:#eafaf0}
+.file.dragRange{background:rgba(31,111,67,.35)}
+#gestureBanner{position:fixed;left:50%;bottom:64px;transform:translateX(-50%) translateY(8px);z-index:90;max-width:calc(100% - 32px);padding:8px 14px;border-radius:18px;background:#0c1214ee;color:#dbe9ec;font-size:12.5px;line-height:1.35;box-shadow:0 4px 16px #0008;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;text-align:center}
+#gestureBanner.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .fileActionMenu{position:fixed;z-index:41;left:50%;top:50%;transform:translate(-50%,-50%);width:calc(100% - 48px);max-width:420px;max-height:calc(100vh - 40px);overflow-y:auto;background:var(--bg);box-shadow:0 6px 24px #0008;border-radius:2px}
 .actionHint{font-size:11px;line-height:15px;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--line)}
 .actionGrid{display:grid;grid-template-columns:1fr 1fr;padding:4px}
