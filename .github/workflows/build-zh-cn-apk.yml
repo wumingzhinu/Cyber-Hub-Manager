@@ -1,0 +1,59 @@
+name: 构建并发布 简体中文版 APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出 仓库
+        uses: actions/checkout@v4
+
+      - name: 配置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 安装 Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 接受 许可 协议
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      - name: 安装 所需 SDK 组件
+        run: $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;35.0.0" "platform-tools"
+
+      - name: 配置 Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: 构建 调试 APK
+        run: bash gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: 重命名 产物
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/Cyber-Hub-Manager-zh-CN.apk"
+
+      - name: 上传 构建 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cyber-Hub-Manager-zh-CN
+          path: dist/Cyber-Hub-Manager-zh-CN.apk
+
+      - name: 创建 或 更新 GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: zh-cn-${{ github.run_number }}
+          name: 简体中文版 构建 #${{ github.run_number }}
+          generate_release_notes: true
+          files: |
+            dist/Cyber-Hub-Manager-zh-CN.apk
+          draft: false
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
