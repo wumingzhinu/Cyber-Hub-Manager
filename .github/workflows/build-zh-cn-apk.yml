@@ -18,13 +18,9 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: 安装 Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: 安装 所需 SDK 组件
+      - name: 安装 Android SDK 组件
         run: |
           export ANDROID_SDK_ROOT="$ANDROID_HOME"
-          export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
           sdkmanager() { "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_HOME" "$@"; }
           yes | sdkmanager --licenses || true
           sdkmanager "platforms;android-34" "build-tools;35.0.0"
