@@ -238,6 +238,7 @@ function hold(button,longPress,click){let timer,held=false,x=0,y=0;button.onpoin
 // 文件/文件夹多选手势：规则一（横向滑动选中锚点）、规则二（按住纵向滑动框选区间）、规则三（松手后点击追加/移除）
 function fileGesture(row,f,index){
   const pane=state.panes[index];
+  const paneEl=row.closest('.pane'); // DOM 窗格元素（classList / querySelectorAll）
   const key=fileKey(f);
   const listIndex=pane.items.indexOf(f);
   if(!pane.selected)pane.selected=new Set();
@@ -247,7 +248,7 @@ function fileGesture(row,f,index){
   const applyRange=(lo,hi)=>{
     pane.selected.clear();
     for(let j=lo;j<=hi;j++){const fj=pane.items[j];if(fj)pane.selected.add(fileKey(fj));}
-    pane.querySelectorAll('.file[data-index]').forEach(r=>{
+    paneEl.querySelectorAll('.file[data-index]').forEach(r=>{
       const j=Number(r.dataset.index),inRange=j>=lo&&j<=hi;
       r.classList.toggle('dragAnchor',j===listIndex);
       r.classList.toggle('dragRange',inRange&&j!==listIndex);
@@ -258,8 +259,8 @@ function fileGesture(row,f,index){
     if(!drag)return;
     const {lo,hi}=drag;
     if(commit)applyRange(lo,hi);else pane.selected.clear();
-    pane.classList.remove('dragging');
-    pane.querySelectorAll('.file.dragAnchor,.file.dragRange').forEach(r=>r.classList.remove('dragAnchor','dragRange'));
+    paneEl.classList.remove('dragging');
+    paneEl.querySelectorAll('.file.dragAnchor,.file.dragRange').forEach(r=>r.classList.remove('dragAnchor','dragRange'));
     const n=pane.selected.size;
     banner(commit?(n?'已选 '+n+' 项 · 点击文件可继续追加/移除':'未选择'):'已取消选择',commit&&n>0);
     if(commit)renderFileBottom();else renderFiles();
@@ -282,7 +283,7 @@ function fileGesture(row,f,index){
     if(!slide){
       if(Math.abs(dx)>10&&Math.abs(dx)>Math.abs(dy)){ // 规则一：横向滑动 → 选中锚点、进入多选
         slide=true;clearTimeout(timer);suppressClick=true;
-        pane.classList.add('dragging');
+        paneEl.classList.add('dragging');
         pane.selected.clear();pane.selected.add(key);
         drag={lo:listIndex,hi:listIndex,anchor:listIndex};
         applyRange(listIndex,listIndex);
