@@ -22,10 +22,14 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: 接受 许可 协议
-        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+        run: |
+          sdkmanager() { "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "$@"; }
+          yes | sdkmanager --licenses || true
 
       - name: 安装 所需 SDK 组件
-        run: $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;35.0.0" "platform-tools"
+        run: |
+          sdkmanager() { "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "$@"; }
+          sdkmanager "platforms;android-34" "build-tools;35.0.0"
 
       - name: 配置 Gradle
         uses: gradle/actions/setup-gradle@v3
