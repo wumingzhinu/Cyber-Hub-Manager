@@ -82,7 +82,7 @@ public class MainActivity extends Activity {
                     case "share":{File shared=shareCopy(new File(a.getString("path")));runOnUiThread(()->share(shared));result=true;break;}
                     case "clipboard":runOnUiThread(()->((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("赛博中枢管家",a.optString("text"))));result=true;break;
                     case "colorPicker":result=colorPicker(a);break;
-                    case "elevated":result=ElevatedAccess.call(this,a);break;
+                    case "elevated":result=ElevatedAccess.call(MainActivity.this,a);break;
                     default:result=engine.call(action,a);
                 }
                 response.put("id",id);response.put("ok",true);response.put("data",result==null?JSONObject.NULL:result);
