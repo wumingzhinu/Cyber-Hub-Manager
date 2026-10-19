@@ -235,50 +235,39 @@ function navigationDialog(query=''){
  d.querySelector('input').oninput=e=>draw(e.target.value);draw(query);
 }
 function hold(button,longPress,click){let timer,held=false,x=0,y=0;button.onpointerdown=e=>{held=false;x=e.clientX;y=e.clientY;timer=setTimeout(()=>{held=true;act(longPress);},500);};button.onpointerup=button.onpointercancel=()=>clearTimeout(timer);button.onpointermove=e=>{if(Math.abs(e.clientX-x)>8||Math.abs(e.clientY-y)>8)clearTimeout(timer);};button.oncontextmenu=e=>{e.preventDefault();held=true;act(longPress);};button.onclick=()=>{if(held){held=false;return;}act(click);};}
-// 文件/文件夹多选手势（参考 MP-Manager handleSwipe / handleMultiSelect）：
-// 规则一 横向滑动 → 选中锚点 a（进入多选模式，锚点持久高亮）
-// 规则二 规则一手指不松开继续滑动 → 实时框选 a 到当前行的连续区间，回滑收缩
-// 规则三 松手后再横向滑动另一文件/文件夹 c → 选中锚点 a 到 c 的连续区间（区间选择后重置锚点，可继续滑新区间）
+// 文件/文件夹多选手势 —— 完全照搬 MP-Manager SwipeTouchListener + handleSwipe + handleMultiSelect
+// 横滑一段距离后行跟随手指平移；松手时滑动够远即确认一次选择：
+//   非多选 → 进入多选、设锚点 a、选中该行（规则一）
+//   多选且有锚点 → 选中 锚点 a .. 当前行 的连续区间并重置锚点（规则三，可继续滑新区间）
+//   多选且锚点已重置 → 重新设锚点
+// 追加模式下单击某行 → toggle 追加/移除（选空则退出多选）；非追加模式单击 → 打开
 function fileGesture(row,f,index){
   const pane=state.panes[index];
   const key=fileKey(f);
-  const listIndex=pane.items.indexOf(f);
+  const pos=pane.items.indexOf(f);
   if(!pane.selected)pane.selected=new Set();
   if(pane.gestureAnchor===undefined)pane.gestureAnchor=null;
-  let startX=0,startY=0,sliding=false,suppressClick=false,longTimer=null,paneEl=null;
-  const rowsOf=()=>paneEl?paneEl.querySelectorAll('.file[data-index]'):[];
-  const paintSelection=()=>{ // 就地刷新选中/锚点高亮（手势进行中不重建 DOM，保持手势连续）
-    rowsOf().forEach(r=>{
-      const j=Number(r.dataset.index);
-      const fj=pane.items[j];
-      r.classList.toggle('selected',fj?pane.selected.has(fileKey(fj)):false);
-      r.classList.toggle('dragAnchor',j===pane.gestureAnchor);
-    });
-  };
-  const selectRange=(lo,hi)=>{ // 选中 lo..hi 连续区间并就地高亮
-    pane.selected=new Set();
-    for(let j=lo;j<=hi;j++){const fj=pane.items[j];if(fj)pane.selected.add(fileKey(fj));}
-    paintSelection();
-  };
-  // 参考 MP-Manager handleSwipe：横向滑动一次触发一次选择
-  const handleSwipe=(pos)=>{
+  let startX=0,startY=0,swiping=false,suppressClick=false,longTimer=null,paneEl=null,tx=0;
+  const SLOP=12,CONFIRM=45; // 滑动起判阈值 / 确认阈值（px）
+  // 参考 MP-Manager handleSwipe：横滑确认后触发一次选择
+  const handleSwipe=()=>{
     state.active=index;
-    if(!pane.appendMode){            // 规则一：进入多选模式，锚点 = pos
+    if(!pane.appendMode){                 // 规则一：进入多选，锚点 = 当前行
       pane.appendMode=true;
       pane.gestureAnchor=pos;
-      pane.selected=new Set([fileKey(pane.items[pos])]);
-      paintSelection();
-    } else if(pane.gestureAnchor!==null){ // 规则三：有锚点 → 选 锚点..pos 区间，重置锚点
-      selectRange(Math.min(pane.gestureAnchor,pos),Math.max(pane.gestureAnchor,pos));
+      pane.selected=new Set([key]);
+    } else if(pane.gestureAnchor!==null){ // 规则三：选 锚点 a .. 当前行 区间，重置锚点
+      const lo=Math.min(pane.gestureAnchor,pos),hi=Math.max(pane.gestureAnchor,pos);
+      pane.selected=new Set();
+      for(let j=lo;j<=hi;j++){const fj=pane.items[j];if(fj)pane.selected.add(fileKey(fj));}
       pane.gestureAnchor=null;
-      paintSelection();
-    } else {                         // 锚点已重置 → 新锚点 = pos
+    } else {                              // 锚点已重置 → 重新设锚点 = 当前行
       pane.gestureAnchor=pos;
-      pane.selected.add(fileKey(pane.items[pos]));
-      paintSelection();
+      pane.selected.add(key);
     }
+    renderFiles();
   };
-  // 参考 MP-Manager handleMultiSelect：点击 toggle（追加/移除），选空则退出多选模式
+  // 参考 MP-Manager handleMultiSelect：追加模式下单击 → toggle 追加/移除；选空则退出多选
   const handleMultiSelect=()=>{
     state.active=index;
     if(pane.selected.has(key))pane.selected.delete(key);
@@ -289,37 +278,34 @@ function fileGesture(row,f,index){
   row.addEventListener('pointerdown',e=>{
     state.active=index;
     paneEl=row.closest('.pane');
-    sliding=false;suppressClick=false;
+    swiping=false;suppressClick=false;tx=0;
     startX=e.clientX;startY=e.clientY;
     longTimer=setTimeout(()=>{ // 长按不动 → 弹出文件操作菜单（保留原行为）
-      if(!sliding){pane.selected.add(key);renderFiles();act(()=>fileActions(f));suppressClick=true;}
+      if(!swiping){pane.selected.add(key);renderFiles();act(()=>fileActions(f));suppressClick=true;}
     },500);
   },{passive:true});
   row.addEventListener('pointermove',e=>{
     const dx=e.clientX-startX,dy=e.clientY-startY;
-    if(!sliding&&Math.abs(dx)>12&&Math.abs(dx)>Math.abs(dy)){ // 横向滑动 → 触发锚选/区间端点
-      sliding=true;clearTimeout(longTimer);suppressClick=true;
-      paneEl.classList.add('dragging');
-      handleSwipe(listIndex);
-    } else if(sliding){ // 规则二：不松手继续滑动 → 实时扩展/收缩区间（以锚点为基准）
-      const t=document.elementFromPoint(e.clientX,e.clientY);
-      const tr=t&&t.closest?t.closest('.file[data-index]'):null;
-      if(tr&&tr.dataset.index!==undefined){
-        const ai=Number(tr.dataset.index);
-        const anchor=pane.gestureAnchor!==null?pane.gestureAnchor:listIndex;
-        selectRange(Math.min(anchor,ai),Math.max(anchor,ai));
-      }
+    if(!swiping&&Math.abs(dx)>SLOP&&Math.abs(dx)>Math.abs(dy)){ // 判定为横向滑动
+      swiping=true;clearTimeout(longTimer);
+      paneEl.classList.add('dragging'); // 手势期间锁定窗格滚动
     }
+    if(swiping){tx=dx;row.style.transform='translateX('+dx+'px)';} // 行跟随手指平移（视觉反馈）
   },{passive:true});
-  const stop=()=>{
+  const endGesture=e=>{
     clearTimeout(longTimer);
-    if(sliding){sliding=false;paneEl.classList.remove('dragging');renderFiles();}
+    if(!swiping)return;
+    const confirmed=Math.abs(tx)>=CONFIRM;
+    swiping=false;paneEl.classList.remove('dragging');
+    row.style.transition='transform .18s ease';row.style.transform=''; // 回弹
+    setTimeout(()=>{if(row.isConnected)row.style.transition='';},200);
+    if(confirmed&&e.type==='pointerup'){suppressClick=true;handleSwipe();}
   };
-  row.addEventListener('pointerup',stop,{passive:true});
-  row.addEventListener('pointercancel',stop,{passive:true});
+  row.addEventListener('pointerup',endGesture,{passive:true});
+  row.addEventListener('pointercancel',endGesture,{passive:true});
   row.addEventListener('click',()=>{
     if(suppressClick){suppressClick=false;return;} // 滑动手势后的合成 click，抑制一次
-    if(pane.appendMode)handleMultiSelect();        // 追加模式 → 点击 toggle
+    if(pane.appendMode)handleMultiSelect();        // 追加模式 → 单击 toggle
     else if(pane.selected&&pane.selected.size)toggleFile(f,index);
     else openFile(f,index);
   });
