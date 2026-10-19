@@ -62,7 +62,7 @@ Selecting several files/folders in the two-pane file view supports three continu
 
 1. **Anchor (Rule 1)** — press and hold a row, then slide left/right. That row becomes the selection anchor `a` and multi-select mode starts (a status banner and a highlighted anchor appear).
 2. **Range select (Rule 2)** — while still holding (without lifting the finger), keep sliding vertically over the rows. The continuous range from anchor `a` to the row under the finger (`b`, the active end) is selected live; sliding back shrinks the range, with `a` fixed as the anchor.
-3. **Append (Rule 3)** — after the anchor/range gesture is released, simply tapping another file/folder `c` appends it to the existing selection (giving `{a, c, ...}`), and tapping a selected entry removes it. Multiple files/folders work the same way.
+3. **Append / range endpoint (Rule 3)** — after the anchor gesture is released (anchor `a` stays highlighted), slide left/right on another row `c`. The continuous range from anchor `a` to `c` is selected (giving `{a..c}`); sliding on more rows moves the endpoint, so multiple files/folders work the same way. Tapping a row while in append mode toggles that single entry in/out of the selection.
 
 A plain long-press without sliding still opens the file action menu as before; a tap with no active selection still opens the file/folder as before.
 
