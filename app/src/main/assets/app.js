@@ -238,7 +238,7 @@ function hold(button,longPress,click){let timer,held=false,x=0,y=0;button.onpoin
 // 文件/文件夹多选手势：规则一（横向滑动选中锚点）、规则二（按住纵向滑动框选区间）、规则三（松手后点击追加/移除）
 function fileGesture(row,f,index){
   const pane=state.panes[index];
-  const paneEl=row.closest('.pane'); // DOM 窗格元素（classList / querySelectorAll）
+  let paneEl=null; // DOM 窗格元素（classList / querySelectorAll），手势触发时才获取（row 当时已在 DOM）
   const key=fileKey(f);
   const listIndex=pane.items.indexOf(f);
   if(!pane.selected)pane.selected=new Set();
@@ -268,6 +268,7 @@ function fileGesture(row,f,index){
   };
   row.addEventListener('pointerdown',e=>{
     state.active=index;
+    paneEl=row.closest('.pane'); // 此时 row 已在 DOM，可正确取到窗格元素
     listening=true;slide=false;menuFired=false;suppressClick=false;
     startX=e.clientX;startY=e.clientY;
     timer=setTimeout(()=>{ // 长按不动 → 弹出文件操作菜单（保留原行为）
