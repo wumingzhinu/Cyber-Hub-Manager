@@ -24,10 +24,10 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--blue)}
 #subbar:empty{display:none}
 #subbar{flex:none}
 .filepanes{display:flex;height:100%;width:100%}
-.pane{width:50%;overflow-y:auto;overflow-x:hidden;border-right:1px solid #242424;position:relative;scrollbar-width:thin;scrollbar-color:#686868 transparent;box-shadow:inset -2px 0 4px #0002}
+.pane{width:50%;overflow-y:auto;overflow-x:hidden;border-right:1px solid #242424;position:relative;scrollbar-width:thin;scrollbar-color:#686868 transparent;box-shadow:inset -2px 0 4px #0002;touch-action:pan-y}
 .pane:last-child{border-right:0}
 .pane.active{box-shadow:inset -1px 0 3px #0004}
-.file{width:100%;display:flex;align-items:center;text-align:left;padding:4px 5px;min-height:40px;user-select:none}
+.file{width:100%;display:flex;align-items:center;text-align:left;padding:4px 5px;min-height:40px;user-select:none;touch-action:pan-y}
 .file:active,.file.selected{background:var(--hover)}
 .fileicon{width:28px;height:28px;border-radius:5px;flex:none;display:flex;align-items:center;justify-content:center;background:var(--icon);color:#ccc;margin-right:4px}
 .fileicon svg{width:18px;height:18px}
