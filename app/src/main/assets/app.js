@@ -248,16 +248,17 @@ function fileGesture(row,f,index){
   const applyRange=(lo,hi)=>{
     pane.selected.clear();
     for(let j=lo;j<=hi;j++){const fj=pane.items[j];if(fj)pane.selected.add(fileKey(fj));}
+    const anchor=pane.gestureAnchor!==undefined?pane.gestureAnchor:listIndex; // 区间锚点（初始锚点 a）
     paneEl.querySelectorAll('.file[data-index]').forEach(r=>{
       const j=Number(r.dataset.index),inRange=j>=lo&&j<=hi;
-      r.classList.toggle('dragAnchor',j===listIndex);
-      r.classList.toggle('dragRange',inRange&&j!==listIndex);
+      r.classList.toggle('dragAnchor',j===anchor);
+      r.classList.toggle('dragRange',inRange&&j!==anchor);
       r.classList.toggle('selected',inRange);
     });
   };
   const endDrag=(commit)=>{
     if(!drag)return;
-    const {lo,hi}=drag;
+    const lo=Math.min(drag.anchor,drag.hi),hi=Math.max(drag.anchor,drag.hi);
     if(commit)applyRange(lo,hi);else pane.selected.clear();
     paneEl.classList.remove('dragging');
     paneEl.querySelectorAll('.file.dragAnchor,.file.dragRange').forEach(r=>r.classList.remove('dragAnchor','dragRange'));
@@ -281,14 +282,24 @@ function fileGesture(row,f,index){
     if(!listening)return;
     const dx=e.clientX-startX,dy=e.clientY-startY;
     if(!slide){
-      if(Math.abs(dx)>10&&Math.abs(dx)>Math.abs(dy)){ // 规则一：横向滑动 → 选中锚点、进入多选
+      if(Math.abs(dx)>10&&Math.abs(dx)>Math.abs(dy)){ // 横向滑动
         slide=true;clearTimeout(timer);suppressClick=true;
         paneEl.classList.add('dragging');
-        pane.appendMode=true; // 进入追加多选模式（规则三）
-        pane.selected.clear();pane.selected.add(key);
-        drag={lo:listIndex,hi:listIndex,anchor:listIndex};
-        applyRange(listIndex,listIndex);
-        banner('锚点：'+f.name+' · 按住并纵向滑动可框选区间',true);
+        if(pane.appendMode&&pane.gestureAnchor!==undefined){
+          // 规则三：追加模式下，当前文件/文件夹为活动端，选择 初始锚点a .. 当前 的连续区间
+          const anchor=pane.gestureAnchor;
+          drag={anchor:anchor,hi:listIndex};
+          const lo=Math.min(anchor,listIndex),hi=Math.max(anchor,listIndex);
+          applyRange(lo,hi);
+          const an=pane.items[anchor]?pane.items[anchor].name:anchor;
+          banner('区间：'+an+' 到 '+f.name+' · 可继续滑动调整',true);
+        } else {
+          // 规则一：选中当前文件/文件夹为锚点 a，进入追加多选模式
+          pane.appendMode=true;pane.gestureAnchor=listIndex;
+          drag={anchor:listIndex,hi:listIndex};
+          applyRange(listIndex,listIndex);
+          banner('锚点：'+f.name+' · 继续横向滑动可框选区间',true);
+        }
       } else if(Math.abs(dy)>10&&Math.abs(dy)>Math.abs(dx)){ // 纵向移动 → 取消长按（允许滚动）
         clearTimeout(timer);listening=false;
       }
