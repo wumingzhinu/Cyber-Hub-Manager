@@ -256,10 +256,9 @@ function fileGesture(row,f,index){
       pane.appendMode=true;
       pane.gestureAnchor=pos;
       pane.selected=new Set([key]);
-    } else if(pane.gestureAnchor!==null){ // 规则三：选 锚点 a .. 当前行 区间，重置锚点
+    } else if(pane.gestureAnchor!==null){ // 规则三：累加选中 锚点 a .. 当前行 区间（不清空既有选区），重置锚点
       const lo=Math.min(pane.gestureAnchor,pos),hi=Math.max(pane.gestureAnchor,pos);
-      pane.selected=new Set();
-      for(let j=lo;j<=hi;j++){const fj=pane.items[j];if(fj)pane.selected.add(fileKey(fj));}
+      for(let j=lo;j<=hi;j++){const fj=pane.items[j];if(fj)pane.selected.add(fileKey(fj));} // 累加区间
       pane.gestureAnchor=null;
     } else {                              // 锚点已重置 → 重新设锚点 = 当前行
       pane.gestureAnchor=pos;
