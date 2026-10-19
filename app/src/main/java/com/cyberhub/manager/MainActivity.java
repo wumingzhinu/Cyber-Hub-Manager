@@ -9,6 +9,7 @@ import android.net.Uri;
 import android.provider.Settings;
 import android.webkit.*;
 import android.view.*;
+import com.cyberhub.manager.color.*;
 import org.json.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -80,6 +81,7 @@ public class MainActivity extends Activity {
                     case "shareMultiple":{ArrayList<Uri>uris=new ArrayList<>();JSONArray paths=a.getJSONArray("paths");for(int i=0;i<paths.length();i++)uris.add(shareUri(shareCopy(new File(paths.getString(i)))));if(uris.isEmpty())throw new IOException("未选择文件");runOnUiThread(()->{try{Intent intent=new Intent(Intent.ACTION_SEND_MULTIPLE).setType("application/octet-stream").putParcelableArrayListExtra(Intent.EXTRA_STREAM,uris).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);ClipData clip=ClipData.newRawUri("文件",uris.get(0));for(int i=1;i<uris.size();i++)clip.addItem(new ClipData.Item(uris.get(i)));intent.setClipData(clip);startActivity(Intent.createChooser(intent,"分享文件"));}catch(Exception error){toast(error.getMessage());}});result=true;break;}
                     case "share":{File shared=shareCopy(new File(a.getString("path")));runOnUiThread(()->share(shared));result=true;break;}
                     case "clipboard":runOnUiThread(()->((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("赛博中枢管家",a.optString("text"))));result=true;break;
+                    case "colorPicker":result=colorPicker(a);break;
                     default:result=engine.call(action,a);
                 }
                 response.put("id",id);response.put("ok",true);response.put("data",result==null?JSONObject.NULL:result);
@@ -97,6 +99,78 @@ public class MainActivity extends Activity {
     private void share(File f){try{Intent i=new Intent(Intent.ACTION_SEND).setType("application/octet-stream").putExtra(Intent.EXTRA_STREAM,shareUri(f)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);startActivity(Intent.createChooser(i,"分享文件"));}catch(Exception e){toast(e.getMessage());}}
     private void storagePermission(){try{if(Build.VERSION.SDK_INT>=30)startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,Uri.parse("package:"+getPackageName())));else requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE,Manifest.permission.WRITE_EXTERNAL_STORAGE},10);}catch(Exception e){startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));}}
     private void toast(String s){android.widget.Toast.makeText(this,s,android.widget.Toast.LENGTH_LONG).show();}
+    private static final int COLOR_PICK_REQ=200;
+    private static final int COLOR_PICK_NOTIF_REQ=201;
+    private boolean colorPickerNotifPending=false;
+    /** 屏幕取色入口：悬浮窗权限 → 通知权限（33+）→ 屏幕录制授权 → 启动前台服务。 */
+    void startColorPicker(){
+        if(ColorPicker.isRunning()){toast("屏幕取色已在运行");return;}
+        if(!Settings.canDrawOverlays(this)){
+            toast("请先允许本应用「显示在其他应用上层」，然后再次点击开始取色");
+            try{startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+getPackageName())));}catch(Exception ignored){}
+            return;
+        }
+        if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED){
+            colorPickerNotifPending=true;
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},COLOR_PICK_NOTIF_REQ);
+            toast("请允许通知（取色以前台服务运行），然后按提示继续");
+            return;
+        }
+        launchColorProjection();
+    }
+    private void launchColorProjection(){
+        try{
+            android.media.projection.MediaProjectionManager m=(android.media.projection.MediaProjectionManager)getSystemService("media_projection");
+            if(m==null){toast("此设备不支持屏幕取色");return;}
+            startActivityForResult(m.createScreenCaptureIntent(),COLOR_PICK_REQ);
+        }catch(Exception e){toast("无法启动屏幕取色："+(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage()));}
+    }
+    Object colorPicker(JSONObject a)throws Exception{
+        String op=a.optString("op","start");
+        if(op.equals("stop")){runOnUiThread(()->ColorPicker.stopService(this));return new JSONObject().put("running",ColorPicker.isRunning());}
+        if(op.equals("status"))return new JSONObject().put("running",ColorPicker.isRunning());
+        if(op.equals("get")){
+            SharedPreferences p=getSharedPreferences(ColorPicker.PREFS,MODE_PRIVATE);
+            return new JSONObject()
+                    .put("magnifierSize",p.getString(ColorPicker.PREF_MAGNIFIER_SIZE,"small"))
+                    .put("captureSpeed",p.getString(ColorPicker.PREF_CAPTURE_SPEED,"normal"))
+                    .put("showGridLines",p.getBoolean(ColorPicker.PREF_SHOW_GRID_LINES,true))
+                    .put("captureRange",p.getString(ColorPicker.PREF_CAPTURE_RANGE,"small"));
+        }
+        if(op.equals("set")){
+            SharedPreferences.Editor e=getSharedPreferences(ColorPicker.PREFS,MODE_PRIVATE).edit();
+            String key=a.optString("key","");
+            if(key.equals("magnifierSize"))e.putString(ColorPicker.PREF_MAGNIFIER_SIZE,a.getString("value"));
+            else if(key.equals("captureSpeed"))e.putString(ColorPicker.PREF_CAPTURE_SPEED,a.getString("value"));
+            else if(key.equals("captureRange"))e.putString(ColorPicker.PREF_CAPTURE_RANGE,a.getString("value"));
+            else if(key.equals("showGridLines"))e.putBoolean(ColorPicker.PREF_SHOW_GRID_LINES,a.getBoolean("value"));
+            e.apply();
+            return new JSONObject().put("ok",true);
+        }
+        runOnUiThread(()->startColorPicker());
+        return new JSONObject().put("started",true).put("running",ColorPicker.isRunning());
+    }
+    @Override protected void onActivityResult(int req,int res,Intent data){
+        super.onActivityResult(req,res,data);
+        if(req==COLOR_PICK_REQ){
+            if(res==RESULT_OK&&data!=null){
+                try{
+                    Intent i=new Intent(this,ColorPickerService.class)
+                            .putExtra(ColorPickerService.EXTRA_RESULT_CODE,res)
+                            .putExtra(ColorPickerService.EXTRA_RESULT_DATA,data);
+                    startForegroundService(i);
+                    toast("屏幕取色已启动：拖动准星取样，轻点放大镜上的色值或坐标即复制");
+                }catch(Exception e){toast("取色启动失败："+(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage()));}
+            }else toast("未授权屏幕录制，取色已取消");
+        }else if(req==COLOR_PICK_NOTIF_REQ){
+            colorPickerNotifPending=false;
+            if(res==RESULT_OK&&data!=null){
+                int[] granted=data.getIntArrayExtra(PackageManager.EXTRA_PERMISSION_GRANT_RESULTS);
+                if(granted!=null&&granted.length>0&&granted[0]==PackageManager.PERMISSION_GRANTED)launchColorProjection();
+                else toast("未授予通知权限，取色已取消");
+            }else toast("未授予通知权限，取色已取消");
+        }
+    }
     @Override protected void onResume(){super.onResume();if(web!=null)web.evaluateJavascript("window.onNativeResume&&window.onNativeResume()",null);}
     @Override public void onBackPressed(){if(web!=null)web.evaluateJavascript("window.goBack&&window.goBack()",null);}
     @Override protected void onDestroy(){if(engine!=null)engine.close();worker.shutdownNow();thumbnails.shutdownNow();if(web!=null){web.removeJavascriptInterface("CyberNative");web.destroy();web=null;}super.onDestroy();}
