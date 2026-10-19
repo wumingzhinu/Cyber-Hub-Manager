@@ -9,4 +9,8 @@ android {
     compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
     packaging { resources { excludes += ['META-INF/DEPENDENCIES','META-INF/INDEX.LIST','META-INF/*.SF','META-INF/*.RSA','META-INF/*.DSA','META-INF/versions/**']; pickFirsts += ['META-INF/LICENSE*','META-INF/NOTICE*'] } }
 }
-dependencies { implementation fileTree(dir: 'libs', include: ['*.jar']) }
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation('dev.rikka.shizuku:api:13.1.5') { exclude group: 'androidx.annotation', module: 'annotation' }
+    implementation('dev.rikka.shizuku:provider:13.1.5') { exclude group: 'androidx.annotation', module: 'annotation' }
+}
