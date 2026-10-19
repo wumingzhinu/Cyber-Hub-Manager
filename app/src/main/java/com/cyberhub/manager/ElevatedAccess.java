@@ -5,6 +5,8 @@ import android.content.pm.PackageManager;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -99,6 +101,45 @@ public final class ElevatedAccess {
             shizukuLatch=null;
             return done&&shizukuResult.get()==PackageManager.PERMISSION_GRANTED;
         }catch(Throwable t){return false;}
+    }
+
+    private static java.lang.reflect.Method newProcessMethod;
+
+    /** 以当前最高提权身份（Root 优先，其次 Shizuku shell）执行命令并收集 stdout；无提权或失败返回 null。 */
+    private static String runElevated(Context c,String cmd){
+        boolean root=rootGranted(c);
+        if(!root&&!shizukuGranted())return null;
+        Process p=null;
+        try{
+            if(root){
+                p=new ProcessBuilder("su","-c",cmd).redirectErrorStream(true).start();
+            }else{
+                if(newProcessMethod==null){
+                    newProcessMethod=Shizuku.class.getDeclaredMethod("newProcess",String[].class,String[].class,String.class);
+                    newProcessMethod.setAccessible(true);
+                }
+                p=(Process)newProcessMethod.invoke(null,new Object[]{new String[]{"sh","-c",cmd},null,null});
+            }
+            if(!p.waitFor(15,TimeUnit.SECONDS))return null;
+            return readAll(p);
+        }catch(Throwable t){return null;}
+        finally{if(p!=null)p.destroy();}
+    }
+
+    /** 探测 dir 的直接子目录中当前档位仍列不出内容的目录名集合；无提权或探测失败返回 null。 */
+    public static Set<String> unlistableChildDirs(Context c,String dir){
+        if(!elevated(c))return null;
+        String base=dir.endsWith("/")?dir:dir+"/";
+        String out=runElevated(c,"for d in '"+base.replace("'","'\\''")+"'*/; do ls \"$d\" >/dev/null 2>&1 || echo \"$d\"; done");
+        if(out==null)return null;
+        Set<String> blocked=new HashSet<>();
+        for(String line:out.split("\n")){
+            String name=line.trim();
+            if(name.startsWith(base))name=name.substring(base.length());
+            if(name.endsWith("/"))name=name.substring(0,name.length()-1);
+            if(!name.isEmpty())blocked.add(name);
+        }
+        return blocked;
     }
 
     private static String readAll(Process p)throws Exception{
