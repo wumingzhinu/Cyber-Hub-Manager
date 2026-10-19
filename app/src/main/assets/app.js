@@ -280,8 +280,8 @@ function fileGesture(row,f,index){
     paneEl=row.closest('.pane');
     swiping=false;suppressClick=false;tx=0;
     startX=e.clientX;startY=e.clientY;
-    longTimer=setTimeout(()=>{ // 长按不动 → 弹出文件操作菜单（保留原行为）
-      if(!swiping){pane.selected.add(key);renderFiles();act(()=>fileActions(f));suppressClick=true;}
+    longTimer=setTimeout(()=>{ // 长按不动 → 弹出文件操作菜单（对齐 MP：长按只弹菜单，不选中该行）
+      if(!swiping){act(()=>fileActions(f));suppressClick=true;}
     },500);
   },{passive:true});
   row.addEventListener('pointermove',e=>{
@@ -305,9 +305,8 @@ function fileGesture(row,f,index){
   row.addEventListener('pointercancel',endGesture,{passive:true});
   row.addEventListener('click',()=>{
     if(suppressClick){suppressClick=false;return;} // 滑动手势后的合成 click，抑制一次
-    if(pane.appendMode)handleMultiSelect();        // 追加模式 → 单击 toggle
-    else if(pane.selected&&pane.selected.size)toggleFile(f,index);
-    else openFile(f,index);
+    if(pane.appendMode)handleMultiSelect();        // 多选模式 → 单击 toggle
+    else openFile(f,index);                       // 非多选模式 → 打开
   });
 }
 const navigationOptions={class:[['usages','查找用法'],['subclasses','查找子类'],['signature','复制类签名'],['frida','复制为 Frida 片段'],['xposed','复制为 Xposed 片段']],field:[['usages','查找用法'],['signature','复制字段签名'],['get','复制字段 get 代码'],['put','复制字段 put 代码'],['frida','复制为 Frida 片段'],['xposed','复制为 Xposed 片段']],method:[['usages','查找用法'],['overrides','查找重写方法'],['signature','复制方法签名'],['code','复制方法代码'],['frida','复制为 Frida 片段'],['xposed','复制为 Xposed 片段']]};
