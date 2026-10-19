@@ -162,13 +162,14 @@ public class MainActivity extends Activity {
                     toast("屏幕取色已启动：拖动准星取样，轻点放大镜上的色值或坐标即复制");
                 }catch(Exception e){toast("取色启动失败："+(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage()));}
             }else toast("未授权屏幕录制，取色已取消");
-        }else if(req==COLOR_PICK_NOTIF_REQ){
+        }
+    }
+    @Override public void onRequestPermissionsResult(int req,String[] perms,int[] results){
+        super.onRequestPermissionsResult(req,perms,results);
+        if(req==COLOR_PICK_NOTIF_REQ){
             colorPickerNotifPending=false;
-            if(res==RESULT_OK&&data!=null){
-                int[] granted=data.getIntArrayExtra(PackageManager.EXTRA_PERMISSION_GRANT_RESULTS);
-                if(granted!=null&&granted.length>0&&granted[0]==PackageManager.PERMISSION_GRANTED)launchColorProjection();
-                else toast("未授予通知权限，取色已取消");
-            }else toast("未授予通知权限，取色已取消");
+            if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)launchColorProjection();
+            else toast("未授予通知权限，取色已取消");
         }
     }
     @Override protected void onResume(){super.onResume();if(web!=null)web.evaluateJavascript("window.onNativeResume&&window.onNativeResume()",null);}
