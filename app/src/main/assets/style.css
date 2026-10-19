@@ -177,7 +177,7 @@ to{transform:translateX(0)}
 .dialog input[type=checkbox]:checked:after{content:"";display:block;position:absolute;width:6px;height:11px;border:solid #424242;border-width:0 2px 2px 0;transform:rotate(45deg);left:4px;top:0}
 .options .option>svg{margin-right:24px}
 .optionsGrid{display:grid;grid-template-columns:1fr 1fr;gap:0}
-.optionsGrid .option{display:flex;align-items:center;width:100%;min-height:56px;padding:6px 8px;font-size:15px;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.optionsGrid .option{display:block;width:100%;min-height:56px;padding:6px 8px;font-size:15px;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
 .optionsDialog .actions:empty{display:none}
 .drawer .brandMark{width:40px;height:40px;border-radius:50%;font-size:17px;flex:none}
 .drawer #themeToggle{width:36px}

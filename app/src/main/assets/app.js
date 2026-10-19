@@ -178,16 +178,6 @@ async function showApk(args){const info=await rpc('apkInfo',args);const d=dialog
    if(!destination)return;
    const out=await rpc('sign',{path:info.path,destination});await refresh();alertBox('已签名 APK',out);
  }},
- {icon:'dex',label:'DEX 编辑器',run:()=>chooseDex({path:info.path})},
- {icon:'export',label:'解压 APK',run:async()=>{
-   const folder=await ask('目标文件夹',state.info.permission?state.info.home+'/下载':state.info.workspace);
-   if(!folder)return;
-   const name=await ask('文件夹名称',info.package);
-   if(!name)return;
-   const out=await rpc('extract',{path:info.path,destination:folder,name});
-   toast('已解压 '+out);await refresh();
- }},
- {icon:'copy',label:'复制包名',run:()=>rpc('clipboard',{text:info.package})},
  {icon:'build',label:'APK 优化',run:()=>alertBox('正在开发','APK 优化功能正在开发中。')},
  {icon:'layers',label:'APK 共存',run:()=>alertBox('正在开发','APK 共存功能正在开发中。')},
  {icon:'layers',label:'RES 资源精简',run:()=>alertBox('正在开发','RES 资源精简功能正在开发中。')},
