@@ -49,7 +49,7 @@
   window.addEventListener('error', function (event) {
     var target = event.target;
     if (target && target.tagName === 'SCRIPT') report('未能加载 ' + target.getAttribute('src'));
-    else if (event.message) report(event.message + (event.lineno ? ' (line ' + event.lineno + ')' : ''));
+    else if (event.message) report(event.message + (event.lineno ? '（第 ' + event.lineno + ' 行）' : ''));
   }, true);
   window.addEventListener('unhandledrejection', function (event) {
     var reason = event.reason;

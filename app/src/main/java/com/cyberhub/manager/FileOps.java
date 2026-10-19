@@ -12,7 +12,7 @@ public final class FileOps {
     public static final long MAX_EXTRACT = 1024L * 1024 * 1024;
     private FileOps() {}
     public static byte[] read(File f, long limit) throws IOException {
-        if (f.length() > limit) throw new IOException("File is too large for this operation (limit " + limit / 1048576 + " MB)");
+        if (f.length() > limit) throw new IOException("文件过大，无法执行此操作（上限 " + limit / 1048576 + " MB)");
         try (InputStream in = new FileInputStream(f)) { return bytes(in, limit); }
     }
     public static byte[] bytes(InputStream in, long limit) throws IOException {
@@ -71,7 +71,7 @@ public final class FileOps {
         if (!f.delete() && f.exists()) throw new IOException("无法删除 " + f);
     }
     public static void extract(File archive, File dest) throws IOException {
-        if (dest.exists()) throw new IOException("Extraction folder already exists");
+        if (dest.exists()) throw new IOException("解压文件夹已存在");
         if (!dest.mkdirs()) throw new IOException("无法创建解压文件夹");
         long total = 0; int count = 0;
         try (ZipFile z = new ZipFile(archive)) {
@@ -128,7 +128,7 @@ public final class FileOps {
         } finally { temp.delete(); }
     }
     public static void zip(File src, File dst) throws IOException {
-        if (dst.exists()) throw new IOException("Destination already exists");
+        if (dst.exists()) throw new IOException("目标已存在");
         if (dst.getCanonicalFile().toPath().startsWith(src.getCanonicalFile().toPath())) throw new IOException("归档不能位于其源文件夹内部");
         try (ZipOutputStream out = new ZipOutputStream(new FileOutputStream(dst))) { zipTree(src, src.getName(), out); }
         catch (IOException e) { dst.delete(); throw e; }
@@ -148,7 +148,7 @@ public final class FileOps {
     }
     /** Swap a .bak and its original without discarding either version. */
     public static File restoreBackup(File backup) throws IOException {
-        if (!backup.getName().endsWith(".bak") || !backup.isFile()) throw new IOException("Choose a .bak file");
+        if (!backup.getName().endsWith(".bak") || !backup.isFile()) throw new IOException("请选择一个 .bak 备份文件");
         File original = new File(backup.getPath().substring(0, backup.getPath().length()-4));
         if (!original.exists()) { Files.move(backup.toPath(), original.toPath()); return original; }
         if (!original.isFile()) throw new IOException("原始路径是一个目录");

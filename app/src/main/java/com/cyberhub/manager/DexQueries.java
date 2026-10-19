@@ -29,29 +29,29 @@ public final class DexQueries {
   String op=a.optString("op","usages"),kind=a.getString("kind"),target=a.getString("signature"),owner=a.optString("owner",target);
   JSONArray rows=new JSONArray();Set<String>seen=new HashSet<>();boolean truncated=false;
   outer:for(ClassDef c:classes.values()){
-   if(op.equals("subclasses")){if(childOf(c.getType(),owner,classes,new HashSet<>()))add(rows,seen,c.getType(),"",c.getType(),"Subclass");}
+   if(op.equals("subclasses")){if(childOf(c.getType(),owner,classes,new HashSet<>()))add(rows,seen,c.getType(),"",c.getType(),"子类");}
    else if(op.equals("overrides")){
     if(!childOf(c.getType(),owner,classes,new HashSet<>()))continue;String tail=target.substring(target.indexOf("->")+2);
-    for(Method m:c.getMethods())if((m.getAccessFlags()&(2|8))==0&&method(m).endsWith("->"+tail))add(rows,seen,c.getType(),method(m),method(m),"Override");
+    for(Method m:c.getMethods())if((m.getAccessFlags()&(2|8))==0&&method(m).endsWith("->"+tail))add(rows,seen,c.getType(),method(m),method(m),"重写");
    }else{
     if(kind.equals("class")){
-     if(typeMatches(String.valueOf(c.getSuperclass()),target)||c.getInterfaces().contains(target))add(rows,seen,c.getType(),"",target,"Parent/interface");
-     for(Field f:c.getFields())if(typeMatches(f.getType(),target))add(rows,seen,c.getType(),"",field(f),"Field type");
+     if(typeMatches(String.valueOf(c.getSuperclass()),target)||c.getInterfaces().contains(target))add(rows,seen,c.getType(),"",target,"父类/接口");
+     for(Field f:c.getFields())if(typeMatches(f.getType(),target))add(rows,seen,c.getType(),"",field(f),"字段类型");
     }
     for(Method m:c.getMethods()){
      String ms=method(m);
-     if(kind.equals("class")){boolean sig=typeMatches(m.getReturnType(),target);for(CharSequence p:m.getParameterTypes())sig|=typeMatches(p.toString(),target);if(sig)add(rows,seen,c.getType(),ms,ms,"Method type");}
+     if(kind.equals("class")){boolean sig=typeMatches(m.getReturnType(),target);for(CharSequence p:m.getParameterTypes())sig|=typeMatches(p.toString(),target);if(sig)add(rows,seen,c.getType(),ms,ms,"方法类型");}
      MethodImplementation impl=m.getImplementation();if(impl==null)continue;
      for(Instruction ins:impl.getInstructions()){
-      if(ins instanceof ReferenceInstruction&&uses(((ReferenceInstruction)ins).getReference(),target,kind))add(rows,seen,c.getType(),ms,ref(((ReferenceInstruction)ins).getReference()),"Instruction");
-      if(ins instanceof DualReferenceInstruction&&uses(((DualReferenceInstruction)ins).getReference2(),target,kind))add(rows,seen,c.getType(),ms,ref(((DualReferenceInstruction)ins).getReference2()),"Instruction");
+      if(ins instanceof ReferenceInstruction&&uses(((ReferenceInstruction)ins).getReference(),target,kind))add(rows,seen,c.getType(),ms,ref(((ReferenceInstruction)ins).getReference()),"指令");
+      if(ins instanceof DualReferenceInstruction&&uses(((DualReferenceInstruction)ins).getReference2(),target,kind))add(rows,seen,c.getType(),ms,ref(((DualReferenceInstruction)ins).getReference2()),"指令");
       if(rows.length()>=1000){truncated=true;break outer;}
      }
     }
    }
    if(rows.length()>=1000){truncated=true;break;}
   }
-  return new JSONObject().put("rows",rows).put("truncated",truncated).put("scope","Selected DEX files; instructions and type declarations");
+  return new JSONObject().put("rows",rows).put("truncated",truncated).put("scope","所选 DEX 文件；指令与类型声明");
  }
  static void add(JSONArray out,Set<String>seen,String type,String method,String needle,String reason)throws Exception{String key=type+"|"+method+"|"+needle;if(seen.add(key))out.put(new JSONObject().put("class",type).put("method",method).put("needle",needle).put("reason",reason));}
 }

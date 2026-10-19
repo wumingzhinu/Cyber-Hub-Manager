@@ -54,12 +54,12 @@ public class MainActivity extends Activity {
             }
         }
         // No network fallback, arbitrary local files, or signing-key exposure through WebView.
-        return new WebResourceResponse("text/plain","UTF-8",404,"Not Found",Collections.emptyMap(),new ByteArrayInputStream("Not found".getBytes(StandardCharsets.UTF_8)));
+        return new WebResourceResponse("text/plain","UTF-8",404,"Not Found",Collections.emptyMap(),new ByteArrayInputStream("未找到".getBytes(StandardCharsets.UTF_8)));
     }
     private void showStartupError(String message){
         android.widget.LinearLayout box=new android.widget.LinearLayout(this);box.setOrientation(android.widget.LinearLayout.VERTICAL);box.setPadding(32,40,32,24);box.setBackgroundColor(0xff303030);
         android.content.pm.PackageInfo provider=WebView.getCurrentWebViewPackage();
-        String details="Cyber Hub Manager 0.1.6\n\n"+message+"\n\nAndroid "+Build.VERSION.RELEASE+"\nWebView: "+(provider==null?"unavailable":provider.packageName+" "+provider.versionName);
+        String details="赛博中枢管家 0.1.6\n\n"+message+"\n\nAndroid "+Build.VERSION.RELEASE+"\nWebView: "+(provider==null?"不可用":provider.packageName+" "+provider.versionName);
         android.widget.TextView text=new android.widget.TextView(this);text.setText(details);text.setTextColor(0xffdddddd);text.setTextSize(16);text.setTextIsSelectable(true);box.addView(text);
         android.widget.Button retry=new android.widget.Button(this);retry.setText("重试");retry.setOnClickListener(v->recreate());box.addView(retry);
         android.widget.Button copy=new android.widget.Button(this);copy.setText("复制错误详情");copy.setOnClickListener(v->{((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("启动错误",details));toast("错误详情已复制");});box.addView(copy);
@@ -76,10 +76,10 @@ public class MainActivity extends Activity {
                     case "apkIcon":result=engine.iconForPath(a.getString("path"));break;
                     case "exit":runOnUiThread(()->finish());result=true;break;
                     case "permission":runOnUiThread(()->storagePermission());result=true;break;
-                    case "install":{File f=new File(a.getString("path"));if(!f.isFile())throw new IOException("APK not found");File shared=shareCopy(f);runOnUiThread(()->install(shared));result=true;break;}
-                    case "shareMultiple":{ArrayList<Uri>uris=new ArrayList<>();JSONArray paths=a.getJSONArray("paths");for(int i=0;i<paths.length();i++)uris.add(shareUri(shareCopy(new File(paths.getString(i)))));if(uris.isEmpty())throw new IOException("No files selected");runOnUiThread(()->{try{Intent intent=new Intent(Intent.ACTION_SEND_MULTIPLE).setType("application/octet-stream").putParcelableArrayListExtra(Intent.EXTRA_STREAM,uris).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);ClipData clip=ClipData.newRawUri("Files",uris.get(0));for(int i=1;i<uris.size();i++)clip.addItem(new ClipData.Item(uris.get(i)));intent.setClipData(clip);startActivity(Intent.createChooser(intent,"分享文件"));}catch(Exception error){toast(error.getMessage());}});result=true;break;}
+                    case "install":{File f=new File(a.getString("path"));if(!f.isFile())throw new IOException("APK 未找到");File shared=shareCopy(f);runOnUiThread(()->install(shared));result=true;break;}
+                    case "shareMultiple":{ArrayList<Uri>uris=new ArrayList<>();JSONArray paths=a.getJSONArray("paths");for(int i=0;i<paths.length();i++)uris.add(shareUri(shareCopy(new File(paths.getString(i)))));if(uris.isEmpty())throw new IOException("未选择文件");runOnUiThread(()->{try{Intent intent=new Intent(Intent.ACTION_SEND_MULTIPLE).setType("application/octet-stream").putParcelableArrayListExtra(Intent.EXTRA_STREAM,uris).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);ClipData clip=ClipData.newRawUri("文件",uris.get(0));for(int i=1;i<uris.size();i++)clip.addItem(new ClipData.Item(uris.get(i)));intent.setClipData(clip);startActivity(Intent.createChooser(intent,"分享文件"));}catch(Exception error){toast(error.getMessage());}});result=true;break;}
                     case "share":{File shared=shareCopy(new File(a.getString("path")));runOnUiThread(()->share(shared));result=true;break;}
-                    case "clipboard":runOnUiThread(()->((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Cyber Hub Manager",a.optString("text"))));result=true;break;
+                    case "clipboard":runOnUiThread(()->((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("赛博中枢管家",a.optString("text"))));result=true;break;
                     default:result=engine.call(action,a);
                 }
                 response.put("id",id);response.put("ok",true);response.put("data",result==null?JSONObject.NULL:result);

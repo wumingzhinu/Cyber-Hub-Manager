@@ -19,16 +19,16 @@ public final class Axml {
     private final Map<String,Integer> attributeTypes=new HashMap<>();
     private static class Typed { int type,data; Typed(int t,int d){type=t;data=d;} }
     public static boolean isBinary(byte[] b){return b.length>=8 && (b[0]&255)==3 && b[1]==0 && b[2]==8;}
-    static int i(byte[] b,int p){if(p<0 || p+4>b.length)throw new IllegalArgumentException("Truncated Android resource");return (b[p]&255)|(b[p+1]&255)<<8|(b[p+2]&255)<<16|b[p+3]<<24;}
-    static int u(byte[] b,int p){if(p<0 || p+2>b.length)throw new IllegalArgumentException("Truncated Android resource");return (b[p]&255)|(b[p+1]&255)<<8;}
+    static int i(byte[] b,int p){if(p<0 || p+4>b.length)throw new IllegalArgumentException("Android 资源被截断");return (b[p]&255)|(b[p+1]&255)<<8|(b[p+2]&255)<<16|b[p+3]<<24;}
+    static int u(byte[] b,int p){if(p<0 || p+2>b.length)throw new IllegalArgumentException("Android 资源被截断");return (b[p]&255)|(b[p+1]&255)<<8;}
     public static List<String> strings(byte[] b,int base){
         int count=i(b,base+8), flags=i(b,base+16), start=i(b,base+20), header=u(b,base+2), size=i(b,base+4);
-        if(count<0 || count>1000000 || base+size>b.length || (long)base+header+(long)count*4>b.length)throw new IllegalArgumentException("Invalid string pool");
+        if(count<0 || count>1000000 || base+size>b.length || (long)base+header+(long)count*4>b.length)throw new IllegalArgumentException("无效的字符串池");
         List<String> ss=new ArrayList<>();
         for(int n=0;n<count;n++){
             int p=base+start+i(b,base+header+n*4),length;
-            if((flags&256)!=0){int a=b[p++]&255;if((a&128)!=0)p++;length=b[p++]&255;if((length&128)!=0)length=((length&127)<<8)|(b[p++]&255);if(p+length>b.length)throw new IllegalArgumentException("Truncated string");ss.add(new String(b,p,length,StandardCharsets.UTF_8));}
-            else {length=u(b,p);p+=2;if((length&32768)!=0){length=((length&32767)<<16)|u(b,p);p+=2;}if(length<0 || (long)p+length*2L>b.length)throw new IllegalArgumentException("Truncated string");ss.add(new String(b,p,length*2,StandardCharsets.UTF_16LE));}
+            if((flags&256)!=0){int a=b[p++]&255;if((a&128)!=0)p++;length=b[p++]&255;if((length&128)!=0)length=((length&127)<<8)|(b[p++]&255);if(p+length>b.length)throw new IllegalArgumentException("字符串被截断");ss.add(new String(b,p,length,StandardCharsets.UTF_8));}
+            else {length=u(b,p);p+=2;if((length&32768)!=0){length=((length&32767)<<16)|u(b,p);p+=2;}if(length<0 || (long)p+length*2L>b.length)throw new IllegalArgumentException("字符串被截断");ss.add(new String(b,p,length*2,StandardCharsets.UTF_16LE));}
         }return ss;
     }
     public static List<String> resourceStrings(byte[] b){int p=u(b,2);while(p+8<=b.length){int size=i(b,p+4);if(size<8 || (long)p+size>b.length)break;if(u(b,p)==1)return strings(b,p);p+=size;}return Collections.emptyList();}
@@ -41,14 +41,14 @@ public final class Axml {
         if(!isBinary(b))return new String(b,StandardCharsets.UTF_8);
         List<String> ss=Collections.emptyList();int[] ids=new int[0];Map<String,String> ns=new LinkedHashMap<>();
         StringBuilder out=new StringBuilder("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n");int depth=0;boolean root=true;
-        for(int p=8;p+8<=b.length;){int type=u(b,p),size=i(b,p+4);if(size<8 || (long)p+size>b.length)throw new IllegalArgumentException("Invalid binary XML chunk");
+        for(int p=8;p+8<=b.length;){int type=u(b,p),size=i(b,p+4);if(size<8 || (long)p+size>b.length)throw new IllegalArgumentException("无效的二进制 XML 块");
             if(type==1)ss=strings(b,p);
             else if(type==0x180){ids=new int[(size-8)/4];for(int n=0;n<ids.length;n++)ids[n]=i(b,p+8+n*4);}
             else if(type==0x100){ns.put(s(ss,i(b,p+20)),s(ss,i(b,p+16)));}
             else if(type==0x102){
                 String uri=s(ss,i(b,p+16)),name=s(ss,i(b,p+20));indent(out,depth);out.append('<').append(qname(uri,name,ns));
                 if(root){for(Map.Entry<String,String> e:ns.entrySet())out.append(" xmlns").append(e.getValue().isEmpty()?"":":"+e.getValue()).append("=\"").append(esc(e.getKey())).append('"');root=false;}
-                int start=u(b,p+24),stride=u(b,p+26),count=u(b,p+28);if(stride<20)throw new IllegalArgumentException("Invalid attributes");
+                int start=u(b,p+24),stride=u(b,p+26),count=u(b,p+28);if(stride<20)throw new IllegalArgumentException("无效的属性");
                 for(int n=0;n<count;n++){int a=p+16+start+n*stride;String au=s(ss,i(b,a)),an=s(ss,i(b,a+4));int raw=i(b,a+8),t=b[a+15]&255,d=i(b,a+16);String v=raw>=0?s(ss,raw):value(t,d,ss);int ix=i(b,a+4);if(ix<ids.length&&ids[ix]!=0)resourceIds.put(au+"|"+an,ids[ix]);typedValues.put(au+"|"+an+"|"+v,new Typed(t,d));attributeTypes.put(au+"|"+an,t);out.append("\n");indent(out,depth+1);out.append(qname(au,an,ns)).append("=\"").append(esc(v)).append('"');}
                 out.append(">\n");depth++;
             }else if(type==0x103){depth--;indent(out,depth);out.append("</").append(qname(s(ss,i(b,p+16)),s(ss,i(b,p+20)),ns)).append(">\n");}
@@ -67,7 +67,7 @@ public final class Axml {
     private Typed typed(Attr a){String v=a.getValue(),uri=a.getNamespaceURI()==null?"":a.getNamespaceURI();Typed t=typedValues.get(uri+"|"+nodeName(a)+"|"+v);if(t!=null)return t.type==3?new Typed(3,str(v)):t;
         if(v.equals("@null"))return new Typed(0,0);
         if(v.matches("[@?]0x[0-9a-fA-F]{1,8}"))return new Typed(v.charAt(0)=='@'?1:2,(int)Long.parseLong(v.substring(3),16));
-        if(v.startsWith("@")||v.startsWith("?"))throw new IllegalArgumentException("Use numeric resource IDs, e.g. @0x7f010001, for "+a.getName());
+        if(v.startsWith("@")||v.startsWith("?"))throw new IllegalArgumentException("请使用数字资源 ID（例如 @0x7f010001）："+a.getName());
         Integer hint=attributeTypes.get(uri+"|"+nodeName(a));
         if(hint!=null && (hint==3 || hint==1 || hint==2))return new Typed(3,str(v));
         if(v.equals("true")||v.equals("false"))return new Typed(18,v.equals("true")?-1:0);
@@ -75,7 +75,7 @@ public final class Axml {
         return new Typed(3,str(v));
     }
     private int attrId(Attr a){String uri=a.getNamespaceURI()==null?"":a.getNamespaceURI(),local=nodeName(a);Integer id=resourceIds.get(uri+"|"+local);if(id!=null)return id;
-        if(uri.equals(ANDROID)){try {int found=Class.forName("android.R$attr").getField(local).getInt(null);resourceIds.put(uri+"|"+local,found);return found;}catch(Exception ignored){throw new IllegalArgumentException("Unknown Android attribute: "+local);}}return 0;}
+        if(uri.equals(ANDROID)){try {int found=Class.forName("android.R$attr").getField(local).getInt(null);resourceIds.put(uri+"|"+local,found);return found;}catch(Exception ignored){throw new IllegalArgumentException("未知的 Android 属性："+local);}}return 0;}
     private void gather(Element e,Map<String,String>ns){str(e.getNamespaceURI());str(nodeName(e));NamedNodeMap at=e.getAttributes();for(int n=0;n<at.getLength();n++){Attr a=(Attr)at.item(n);if(a.getName().equals("xmlns")||a.getName().startsWith("xmlns:")){ns.put(a.getValue(),a.getName().equals("xmlns")?"":a.getLocalName());str(a.getValue());str(ns.get(a.getValue()));}else{str(a.getNamespaceURI());str(nodeName(a));str(a.getValue());attrId(a);typed(a);}}for(Node c=e.getFirstChild();c!=null;c=c.getNextSibling())if(c instanceof Element)gather((Element)c,ns);else if(c.getNodeType()==Node.TEXT_NODE&&!c.getNodeValue().trim().isEmpty())str(c.getNodeValue());}
     private void element(Element e,LE out){List<Attr>attrs=new ArrayList<>();NamedNodeMap map=e.getAttributes();for(int n=0;n<map.getLength();n++){Attr a=(Attr)map.item(n);if(!a.getName().equals("xmlns")&&!a.getName().startsWith("xmlns:"))attrs.add(a);}attrs.sort((a,b)->Integer.compareUnsigned(attrId(a),attrId(b)));
         LE body=new LE();body.w(str(e.getNamespaceURI()));body.w(str(nodeName(e)));body.h(20);body.h(20);body.h(attrs.size());int id=0,cl=0,st=0;for(int n=0;n<attrs.size();n++){String name=attrs.get(n).getName();if(name.equals("android:id"))id=n+1;if(name.equals("class"))cl=n+1;if(name.equals("style"))st=n+1;}body.h(id);body.h(cl);body.h(st);
@@ -84,7 +84,7 @@ public final class Axml {
         LE end=new LE();end.w(str(e.getNamespaceURI()));end.w(str(nodeName(e)));out.data(node(0x103,end));
     }
     public byte[] encode(String xml)throws Exception {
-        if(xml.contains("<!DOCTYPE")||xml.contains("<!ENTITY"))throw new IOException("XML document types/entities are not supported");
+        if(xml.contains("<!DOCTYPE")||xml.contains("<!ENTITY"))throw new IOException("不支持 XML 文档类型/实体");
         DocumentBuilderFactory f=DocumentBuilderFactory.newInstance();f.setNamespaceAware(true);f.setExpandEntityReferences(false);Document d=f.newDocumentBuilder().parse(new InputSource(new StringReader(xml)));pool.clear();indices.clear();Map<String,String>ns=new LinkedHashMap<>();gather(d.getDocumentElement(),ns);
         LE content=new LE();for(Map.Entry<String,String>e:ns.entrySet()){LE n=new LE();n.w(str(e.getValue()));n.w(str(e.getKey()));content.data(node(0x100,n));}element(d.getDocumentElement(),content);
         List<Map.Entry<String,String>> reversed=new ArrayList<>(ns.entrySet());Collections.reverse(reversed);for(Map.Entry<String,String>e:reversed){LE n=new LE();n.w(str(e.getValue()));n.w(str(e.getKey()));content.data(node(0x101,n));}

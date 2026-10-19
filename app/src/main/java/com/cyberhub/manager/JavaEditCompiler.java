@@ -21,7 +21,7 @@ public final class JavaEditCompiler {
    Map<String,ClassDef> project,File platform,File session)throws Exception {
   if(text.length()>MAX_SOURCE)throw new IOException("Java 源码超过 2 MB");
   if(!platform.isFile())throw new IOException("缺少编译器 API 库");
-  File work=new File(session,"java-"+UUID.randomUUID());if(!work.mkdirs())throw new IOException("无法创建 compiler workspace");
+  File work=new File(session,"java-"+UUID.randomUUID());if(!work.mkdirs())throw new IOException("无法创建编译器工作区");
   try {
    String binary=internal(type),simple=binary.substring(binary.lastIndexOf('/')+1);
    if(simple.indexOf('$')>=0)throw new IOException("请打开外层 Java 类以一起编译嵌套类");
@@ -31,13 +31,13 @@ public final class JavaEditCompiler {
    StringWriter log=new StringWriter();PrintWriter messages=new PrintWriter(log);
    boolean ok=BatchCompiler.compile(new String[]{"-1.8","-proc:none","-g","-nowarn","-encoding","UTF-8","-maxProblems","30","-bootclasspath",platform.getPath(),"-classpath",stubs.getPath(),"-d",output.getPath(),source.getPath()},messages,messages,null);
    messages.flush();
-   if(!ok)throw new IOException("Java compilation failed. Your edits are still open.\n"+cleanLog(log.toString(),work));
+   if(!ok)throw new IOException("Java 编译失败。您的编辑仍保持打开。\n"+cleanLog(log.toString(),work));
    File classJar=new File(work,"compiled.jar");List<File>compiled=new ArrayList<>();collectClasses(output,compiled);
    if(compiled.isEmpty())throw new IOException("编译器没有输出任何类");
    boolean main=false;
    try(ZipOutputStream zip=new ZipOutputStream(new FileOutputStream(classJar))){
     for(File f:compiled){String name=output.toPath().relativize(f.toPath()).toString().replace(File.separatorChar,'/'),descriptor="L"+name.substring(0,name.length()-6)+";";
-     if(!descriptor.equals(type)&&!descriptor.startsWith(type.substring(0,type.length()-1)+"$"))throw new IOException("Keep package and class name unchanged. Extra top-level class: "+descriptor);
+     if(!descriptor.equals(type)&&!descriptor.startsWith(type.substring(0,type.length()-1)+"$"))throw new IOException("请保持包名和类名不变。多余的顶层类："+descriptor);
      main|=descriptor.equals(type);byte[] bytecode=FileOps.read(f,8L*1024*1024);validateBytecode(bytecode);zip.putNextEntry(new ZipEntry(name));zip.write(bytecode);zip.closeEntry();
     }
    }
@@ -46,7 +46,7 @@ public final class JavaEditCompiler {
    com.android.dx.command.dexer.DxContext context=new com.android.dx.command.dexer.DxContext(dxOut,dxOut);
    File dex=new File(work,"compiled.dex");
    int result=com.android.dx.command.dexer.CyberCompiler.compile(context,classJar.getPath(),dex.getPath());
-   if(result!=0||!dex.isFile())throw new IOException("DEX compilation failed. Your edits are still open.\n"+dxLog.toString("UTF-8"));
+   if(result!=0||!dex.isFile())throw new IOException("DEX 编译失败。您的编辑仍保持打开。\n"+dxLog.toString("UTF-8"));
    DexBackedDexFile parsed=DexFileFactory.loadDexFile(dex,org.jf.dexlib2.Opcodes.getDefault());
    // Immutable copies detach the replacement from the temporary compiler files.
    List<ClassDef> replacements=new ArrayList<>();for(ClassDef c:parsed.getClasses())replacements.add(org.jf.dexlib2.immutable.ImmutableClassDef.of(c));

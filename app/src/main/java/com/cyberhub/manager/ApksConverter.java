@@ -61,7 +61,7 @@ public final class ApksConverter {
             for(int i=0;i<plan.paths.size();i++){
                 ZipEntry entry=catalog.entries.get(plan.paths.get(i));
                 if(entry==null||entry.isDirectory())throw new IOException("缺少 APK："+plan.paths.get(i));
-                p.stage("正在读取 APK "+(i+1)+" of "+plan.paths.size()+"…");
+                p.stage("正在读取 APK "+(i+1)+" / "+plan.paths.size()+"…");
                 File file=new File(work,"module-"+i+".apk");
                 try(InputStream in=zip.getInputStream(entry);OutputStream out=new FileOutputStream(file)){
                     total+=copyChecked(in,out,Math.min(MAX_APK,MAX_TOTAL-total),entry);
@@ -81,7 +81,7 @@ public final class ApksConverter {
                 if(!packageName.equals(m.getPackageName())||!version.equals(v))throw new IOException("这些 APK 属于不同的包或版本");
                 String split=m.getSplit();
                 if(split==null||split.isEmpty()){if(base!=null)throw new IOException("找到多个基座 APK。请选择一个 bundletool 变体，或使用单一分包集合。");base=module;}
-                else if(!splits.add(split))throw new IOException("Duplicate split ID: "+split);
+                else if(!splits.add(split))throw new IOException("重复的分包 ID："+split);
                 addTypes(types,attribute(m.getManifestElement(),"splitTypes"));
             }
             if(base==null)throw new IOException("缺少基座 APK；仅配置分包无法生成 APK");
@@ -91,7 +91,7 @@ public final class ApksConverter {
                 if(!parent.isEmpty()&&!parent.equals("base")&&!splits.contains(parent))throw new IOException("缺少功能分包："+parent);
                 for(Iterator<ResXmlElement> it=root.getElements();it.hasNext();){ResXmlElement child=it.next();if("uses-split".equals(child.getName())){String name=attribute(child,"name");if(!name.equals("base")&&!splits.contains(name))throw new IOException("缺少必需的分包："+name);}}
                 Set<String> required=new HashSet<>();addTypes(required,attribute(root,"requiredSplitTypes"));
-                if(!types.containsAll(required))throw new IOException("Missing required split types: "+required);
+                if(!types.containsAll(required))throw new IOException("缺少必需的分包类型："+required);
             }
             File ready;boolean preserved=false;
             if(modules.size()==1){
@@ -116,7 +116,7 @@ public final class ApksConverter {
             if(!verification.isVerified())throw new IOException("输出签名校验失败："+verification.getErrors());
             try(ApkModule check=ApkModule.loadApkFile(signed)){
                 check.setLoadDefaultFramework(false);AndroidManifestBlock m=check.getAndroidManifest();
-                if(m==null||m.isSplit()||!packageName.equals(m.getPackageName()))throw new IOException("Merged APK manifest validation failed");
+                if(m==null||m.isSplit()||!packageName.equals(m.getPackageName()))throw new IOException("合并后的 APK 清单校验失败");
                 if(check.hasTableBlock())check.getTableBlock().refresh();
             }
             // Copy to the destination filesystem first, then publish without replacing any existing file.
@@ -139,7 +139,7 @@ public final class ApksConverter {
         Catalog c=new Catalog();List<String> apks=new ArrayList<>();int count=0;
         for(Enumeration<? extends ZipEntry> e=zip.entries();e.hasMoreElements();){
             ZipEntry entry=e.nextElement();String name=entry.getName();validPath(name);
-            if(++count>MAX_ENTRIES)throw new IOException("Archive contains too many entries");
+            if(++count>MAX_ENTRIES)throw new IOException("归档条目过多");
             if(c.entries.put(name,entry)!=null)throw new IOException("重复的归档条目："+name);
             if(entry.isDirectory())continue;
             String lower=name.toLowerCase(Locale.ROOT);
@@ -149,38 +149,38 @@ public final class ApksConverter {
         if(apks.isEmpty())throw new IOException("此 APKS 归档内未找到 APK 文件");
         if(apks.size()>MAX_APKS)throw new IOException("此 bundle 中 APK 过多（上限 1024）");
         ZipEntry toc=c.entries.get("toc.pb");
-        if(toc==null){Plan plan=new Plan("split-set",apks.size()==1?"单个 APK":"基座 + "+(apks.size()-1)+" splits");plan.paths.addAll(apks);c.plans.add(plan);return c;}
+        if(toc==null){Plan plan=new Plan("split-set",apks.size()==1?"单个 APK":"基座 + "+(apks.size()-1)+" 个分包");plan.paths.addAll(apks);c.plans.add(plan);return c;}
         Proto result;try(InputStream in=zip.getInputStream(toc)){result=new Proto(FileOps.bytes(in,4*1024*1024));}
         if(result.has(3)||result.has(6))throw new IOException("Play Asset Delivery 资源包无法转换为自包含 APK");
         int vi=0;
         for(byte[] bytes:result.values(1)){
-            Proto variant=new Proto(bytes);String id="variant-"+(vi++);String label="Variant "+variant.number(3)+targetLabel(variant.first(1));
+            Proto variant=new Proto(bytes);String id="variant-"+(vi++);String label="变体 "+variant.number(3)+targetLabel(variant.first(1));
             Proto variantTarget=new Proto(variant.first(1));
-            if(variantTarget.has(5)||variantTarget.has(6)){c.skipped.add(label+": unsupported texture or SDK-runtime targeting");continue;}
-            Plan splits=new Plan(id,label+" · merge splits");List<Plan> standalone=new ArrayList<>();String unsupported=null;
+            if(variantTarget.has(5)||variantTarget.has(6)){c.skipped.add(label+"：不支持的纹理或 SDK 运行时定向");continue;}
+            Plan splits=new Plan(id,label+" · 合并分包");List<Plan> standalone=new ArrayList<>();String unsupported=null;
             for(byte[] set:variant.values(2)){
                 Proto apkSet=new Proto(set),metadata=new Proto(apkSet.first(1));
-                if(metadata.number(3)!=0||metadata.has(8)||(metadata.number(7)>1)){unsupported="instant or SDK modules";break;}
+                if(metadata.number(3)!=0||metadata.has(8)||(metadata.number(7)>1)){unsupported="即时或 SDK 模块";break;}
                 // Conditions requiring Play delivery cannot be faithfully represented by one ordinary APK.
-                if(metadata.has(5)&&!new Proto(metadata.first(5)).empty()){unsupported="conditional feature delivery";break;}
+                if(metadata.has(5)&&!new Proto(metadata.first(5)).empty()){unsupported="条件性功能分发";break;}
                 for(byte[] description:apkSet.values(2)){
                     Proto apk=new Proto(description);String path=apk.string(2);validPath(path);
-                    if(!c.entries.containsKey(path)||!path.toLowerCase(Locale.ROOT).endsWith(".apk"))throw new IOException("TOC references a missing APK: "+path);
+                    if(!c.entries.containsKey(path)||!path.toLowerCase(Locale.ROOT).endsWith(".apk"))throw new IOException("TOC 引用了缺失的 APK："+path);
                     if(apk.has(3)){
                         Proto targeting=new Proto(apk.first(1));
-                        if(targeting.has(5)||targeting.has(6)||targeting.has(8)||targeting.has(9)||targeting.has(10)||targeting.has(11)){unsupported="device-specific split targeting";break;}
-                        if(splits.paths.contains(path))throw new IOException("TOC repeats an APK: "+path);splits.paths.add(path);
+                        if(targeting.has(5)||targeting.has(6)||targeting.has(8)||targeting.has(9)||targeting.has(10)||targeting.has(11)){unsupported="针对特定设备的分包定向";break;}
+                        if(splits.paths.contains(path))throw new IOException("TOC 重复引用了 APK："+path);splits.paths.add(path);
                     }else if(apk.has(4)){
-                        if(!new Proto(apk.first(4)).string(3).isEmpty()){unsupported="standalone feature splits";break;}
+                        if(!new Proto(apk.first(4)).string(3).isEmpty()){unsupported="独立功能分包";break;}
                         Plan single=new Plan(id+"-apk-"+standalone.size(),label+" · "+new File(path).getName());single.paths.add(path);standalone.add(single);
-                    }else{unsupported="instant, system, asset, archived or APEX APKs";break;}
+                    }else{unsupported="即时、系统、资源、归档或 APEX 类型 APK";break;}
                 }
                 if(unsupported!=null)break;
             }
-            if(unsupported!=null){c.skipped.add(label+": unsupported "+unsupported);continue;}
+            if(unsupported!=null){c.skipped.add(label+"：不支持的 "+unsupported);continue;}
             if(!splits.paths.isEmpty())c.plans.add(splits);c.plans.addAll(standalone);
         }
-        if(c.plans.isEmpty())throw new IOException("No supported installable variant in this APKS. "+String.join("; ",c.skipped));
+        if(c.plans.isEmpty())throw new IOException("此 APKS 中没有受支持的可安装变体。 "+String.join("; ",c.skipped));
         return c;
     }
 
@@ -190,41 +190,41 @@ public final class ApksConverter {
             Set<String> names=new HashSet<>();boolean manifest=false;
             for(Enumeration<? extends ZipEntry> e=zip.entries();e.hasMoreElements();){
                 ZipEntry entry=e.nextElement();String name=entry.getName();validPath(name);
-                if(!names.add(name))throw new IOException("Duplicate APK entry: "+name);
-                if(++count>MAX_ENTRIES)throw new IOException("Too many entries across the selected APKs");
+                if(!names.add(name))throw new IOException("重复的 APK 条目："+name);
+                if(++count>MAX_ENTRIES)throw new IOException("所选 APK 的条目总数过多");
                 if(entry.isDirectory())continue;
-                if(entry.getSize()<0||entry.getSize()>MAX_APK||(expanded+=entry.getSize())>MAX_TOTAL)throw new IOException("Expanded APK contents exceed the 1 GB conversion limit");
-                if(name.equals("AndroidManifest.xml")){manifest=true;if(entry.getSize()>8*1024*1024)throw new IOException("Manifest is too large");}
-                if(name.equals("resources.arsc")&&entry.getSize()>64*1024*1024)throw new IOException("Resource table exceeds the 64 MB conversion limit");
+                if(entry.getSize()<0||entry.getSize()>MAX_APK||(expanded+=entry.getSize())>MAX_TOTAL)throw new IOException("解压后的 APK 内容超过 1 GB 转换上限");
+                if(name.equals("AndroidManifest.xml")){manifest=true;if(entry.getSize()>8*1024*1024)throw new IOException("清单文件过大");}
+                if(name.equals("resources.arsc")&&entry.getSize()>64*1024*1024)throw new IOException("资源表超过 64 MB 转换上限");
                 boolean dex=name.matches("classes([2-9]|[1-9][0-9]+)?\\.dex");
                 if(dex){
                     if(entry.getSize()>128*1024*1024)throw new IOException("DEX 超过 128 MB 的转换上限");
                     try(InputStream in=zip.getInputStream(entry)){
                         byte[] data=FileOps.bytes(in,128*1024*1024);CRC32 crc=new CRC32();crc.update(data);
-                        if(data.length!=entry.getSize()||crc.getValue()!=entry.getCrc())throw new IOException("Corrupt DEX entry: "+name);
+                        if(data.length!=entry.getSize()||crc.getValue()!=entry.getCrc())throw new IOException("损坏的 DEX 条目："+name);
                         DexBackedDexFile d=new DexBackedDexFile(Opcodes.getDefault(),data);
-                        for(ClassDef cls:d.getClasses())if(!classes.add(cls.getType()))throw new IOException("Conflicting DEX class: "+cls.getType());
+                        for(ClassDef cls:d.getClasses())if(!classes.add(cls.getType()))throw new IOException("冲突的 DEX 类："+cls.getType());
                     }
                 }
                 // ARSCLib merges resource tables and renumbers DEX. Other duplicate paths must be identical.
                 if(dex)continue;
                 MessageDigest digest=MessageDigest.getInstance("SHA-256");CRC32 crc=new CRC32();long size=0;
-                try(InputStream in=zip.getInputStream(entry)){byte[] buffer=new byte[65536];int n;while((n=in.read(buffer))!=-1){if((size+=n)>MAX_APK)throw new IOException("APK entry is too large");digest.update(buffer,0,n);crc.update(buffer,0,n);}}
-                if(size!=entry.getSize()||crc.getValue()!=entry.getCrc())throw new IOException("Corrupt APK entry: "+name);
+                try(InputStream in=zip.getInputStream(entry)){byte[] buffer=new byte[65536];int n;while((n=in.read(buffer))!=-1){if((size+=n)>MAX_APK)throw new IOException("APK 条目过大");digest.update(buffer,0,n);crc.update(buffer,0,n);}}
+                if(size!=entry.getSize()||crc.getValue()!=entry.getCrc())throw new IOException("损坏的 APK 条目："+name);
                 if(name.equals("AndroidManifest.xml")||name.equals("resources.arsc")||name.startsWith("META-INF/"))continue;
                 String hash=Base64.getEncoder().encodeToString(digest.digest()),prior=hashes.putIfAbsent(name,hash);
-                if(prior!=null&&!prior.equals(hash))throw new IOException("Conflicting split contents: "+name+". Select one compatible variant.");
+                if(prior!=null&&!prior.equals(hash))throw new IOException("分包内容冲突："+name+"。请选择一个兼容的变体。");
             }
-            if(!manifest)throw new IOException("An embedded APK has no AndroidManifest.xml");
+            if(!manifest)throw new IOException("嵌入的 APK 缺少 AndroidManifest.xml");
         }
     }
     private static long copyChecked(InputStream in,OutputStream out,long limit,ZipEntry entry)throws IOException {
         CRC32 crc=new CRC32();byte[] buffer=new byte[65536];long total=0;int n;
-        while((n=in.read(buffer))!=-1){if((total+=n)>limit)throw new IOException("Selected APKs exceed conversion size limits");crc.update(buffer,0,n);out.write(buffer,0,n);}
-        if(total!=entry.getSize()||crc.getValue()!=entry.getCrc())throw new IOException("Corrupt APKS entry: "+entry.getName());return total;
+        while((n=in.read(buffer))!=-1){if((total+=n)>limit)throw new IOException("所选 APK 超过转换大小上限");crc.update(buffer,0,n);out.write(buffer,0,n);}
+        if(total!=entry.getSize()||crc.getValue()!=entry.getCrc())throw new IOException("损坏的 APKS 条目："+entry.getName());return total;
     }
     private static void validPath(String path)throws IOException {
-        if(path.isEmpty()||path.startsWith("/")||path.indexOf('\\')>=0||path.indexOf('\0')>=0||path.indexOf(':')>=0)throw new IOException("Unsafe archive path");
+        if(path.isEmpty()||path.startsWith("/")||path.indexOf('\\')>=0||path.indexOf('\0')>=0||path.indexOf(':')>=0)throw new IOException("不安全的归档路径");
         for(String part:path.split("/"))if(part.equals("..")||part.equals("."))throw new IOException("不安全的归档路径："+path);
     }
     private static String attribute(ResXmlElement element,String name){
@@ -245,10 +245,10 @@ public final class ApksConverter {
         final Map<Integer,List<byte[]>> bytes=new HashMap<>();final Map<Integer,Long> numbers=new HashMap<>();
         Proto(byte[] data)throws IOException{
             CodedInputStream in=CodedInputStream.newInstance(data);int count=0,tag;
-            while((tag=in.readTag())!=0){if(++count>20000)throw new IOException("Oversized bundle TOC");int field=tag>>>3,wire=tag&7;
+            while((tag=in.readTag())!=0){if(++count>20000)throw new IOException("bundle TOC 过大");int field=tag>>>3,wire=tag&7;
                 if(wire==2)bytes.computeIfAbsent(field,k->new ArrayList<>()).add(in.readByteArray());
                 else if(wire==0)numbers.put(field,in.readInt64());
-                else if(wire==1||wire==5)in.skipField(tag);else throw new IOException("Invalid bundle TOC");
+                else if(wire==1||wire==5)in.skipField(tag);else throw new IOException("无效的 bundle TOC");
             }
         }
         boolean has(int field){return bytes.containsKey(field)||numbers.containsKey(field);}boolean empty(){return bytes.isEmpty()&&numbers.isEmpty();}

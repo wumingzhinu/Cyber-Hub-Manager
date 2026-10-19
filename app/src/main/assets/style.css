@@ -306,7 +306,7 @@ body.light .pane:not(.active){background:#f2f2f2}
 .compileError{font:12px/1.55 monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:52vh;overflow:auto;user-select:text}
 .compileDialog{width:calc(100vw - 40px);max-width:650px}
 .savingCode #toolbar button,.savingCode #bottom button,.savingCode .editorOverflow{pointer-events:none;opacity:.45}
-.savingCode #docName:after{content:' · Saving…';color:var(--blue)}
+.savingCode #docName:after{content:' · 保存中…';color:var(--blue)}
 .file,.treeRow{contain:layout style}
 @supports(content-visibility:auto){.file{content-visibility:auto;contain-intrinsic-size:auto 40px}}
 .overflowMenu{max-height:calc(100dvh - 16px);overflow-y:auto}
