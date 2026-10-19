@@ -3,8 +3,11 @@ package com.cyberhub.manager;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -96,6 +99,48 @@ public final class ElevatedAccess {
             shizukuLatch=null;
             return done&&shizukuResult.get()==PackageManager.PERMISSION_GRANTED;
         }catch(Throwable t){return false;}
+    }
+
+    private static java.lang.reflect.Method newProcessMethod;
+
+    /** 以当前最高提权身份（Root 优先，其次 Shizuku shell）执行命令；无通道或失败返回 null。 */
+    public static String elevatedCommand(Context c,String cmd){
+        if(rootGranted(c)){
+            Process p=null;
+            try{
+                p=new ProcessBuilder("su","-c",cmd).redirectErrorStream(true).start();
+                if(!p.waitFor(20,TimeUnit.SECONDS))return null;
+                return readAll(p);
+            }catch(Throwable t){return null;}
+            finally{if(p!=null)p.destroy();}
+        }
+        if(shizukuGranted()){
+            Process p=null;
+            try{
+                if(newProcessMethod==null){
+                    newProcessMethod=Shizuku.class.getDeclaredMethod("newProcess",String[].class,String[].class,String.class);
+                    newProcessMethod.setAccessible(true);
+                }
+                p=(Process)newProcessMethod.invoke(null,new Object[]{new String[]{"sh","-c",cmd},null,null});
+                if(!p.waitFor(20,TimeUnit.SECONDS))return null;
+                return readAll(p);
+            }catch(Throwable t){return null;}
+            finally{if(p!=null)p.destroy();}
+        }
+        return null;
+    }
+
+    /** 用提权通道枚举目录内容（含隐藏项）；失败返回 null。 */
+    public static File[] listFiles(Context c,File dir){
+        String q=dir.getAbsolutePath().replace("'","'\\''");
+        String out=elevatedCommand(c,"cd '"+q+"' 2>/dev/null && for f in * .[!.]*; do [ -e \"$f\" ] || continue; printf '%s\\n' \"$f\"; done");
+        if(out==null)return null;
+        List<File> list=new ArrayList<>();
+        for(String name:out.split("\n")){
+            if(name.isEmpty())continue;
+            list.add(new File(dir,name));
+        }
+        return list.toArray(new File[0]);
     }
 
     private static String readAll(Process p)throws Exception{
