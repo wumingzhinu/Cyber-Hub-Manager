@@ -405,7 +405,7 @@ function installDrawerGestures(){
 }
 
 // Font changes use the code position under the gesture as their scroll anchor.
-// Gesture previews use compositor transforms; the font is laid out once on release.
+// 捏合过程实时按目标字号排版（约 80ms 节流），文字始终清晰铺满；松手时持久化记忆。
 function setEditorFont(value,anchor=null,persist=true){
  const cm=state.cm;if(!cm)return;const n=Number(value);if(!Number.isFinite(n))return;
  const font=Math.round(Math.max(4,Math.min(32,n))*10)/10,key=fontKey();
@@ -417,12 +417,12 @@ function setEditorFont(value,anchor=null,persist=true){
 }
 function installEditorZoom(cm,editor){
  const wrapper=cm.getWrapperElement(),host=wrapper.parentElement,badge=document.createElement('div');badge.className='zoomBadge';badge.setAttribute('aria-live','polite');badge.hidden=true;host.append(badge);
- let pinch=null,consuming=false,frame=0,pendingFont=null,hideTimer=0,suppressClick=0,firstSelection=null,disposed=false;
+ let pinch=null,consuming=false,frame=0,pendingFont=null,hideTimer=0,suppressClick=0,firstSelection=null,disposed=false,lastApply=0;
  const listeners=[];function on(type,fn,options){wrapper.addEventListener(type,fn,options);listeners.push([type,fn,options]);}
  function block(e){if(e.cancelable)e.preventDefault();e.stopImmediatePropagation();}
  function show(font){badge.textContent=Number(font.toFixed(1))+' px';badge.hidden=false;clearTimeout(hideTimer);hideTimer=setTimeout(()=>badge.hidden=true,850);}
- function flush(){frame=0;if(disposed||state.cm!==cm||state.editor!==editor||pendingFont===null||!pinch)return;wrapper.style.transform='scale('+pendingFont/pinch.font+')';show(pendingFont);}
- function finish(){if(frame){window.cancelAnimationFrame(frame);frame=0;}wrapper.style.transform='';wrapper.style.transformOrigin='';wrapper.style.willChange='';if(pinch&&pendingFont!==null&&state.cm===cm&&!disposed)setEditorFont(pendingFont,pinch.anchor,true);pendingFont=null;pinch=null;wrapper.classList.remove('pinchZooming');}
+ function flush(){frame=0;if(disposed||state.cm!==cm||state.editor!==editor||pendingFont===null||!pinch)return;const now=Date.now();if(now-lastApply<80){frame=window.requestAnimationFrame(flush);return;}lastApply=now;setEditorFont(pendingFont,pinch.anchor,false);show(pendingFont);}
+ function finish(){if(frame){window.cancelAnimationFrame(frame);frame=0;}if(pinch&&pendingFont!==null&&state.cm===cm&&!disposed)setEditorFont(pendingFont,pinch.anchor,true);pendingFont=null;pinch=null;wrapper.classList.remove('pinchZooming');}
  on('touchstart',e=>{
   if(pref.pinchZoom===false||disposed)return;
   if(e.touches.length===1&&!consuming){firstSelection=cm.listSelections();return;}
@@ -431,7 +431,7 @@ function installEditorZoom(cm,editor){
   const a=e.touches[0],b=e.touches[1],x=(a.clientX+b.clientX)/2,y=(a.clientY+b.clientY)/2,distance=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
   if(distance<4)return;
   const pos=cm.coordsChar({left:x,top:y},'window'),coords=cm.charCoords(pos,'window');
-  pinch={distance,font:editorFont(),ids:[a.identifier,b.identifier],anchor:{pos,x:coords.left,y:coords.top}};const bounds=wrapper.getBoundingClientRect();wrapper.style.transformOrigin=(coords.left-bounds.left)+'px '+(coords.top-bounds.top)+'px';wrapper.style.willChange='transform';
+  pinch={distance,font:editorFont(),ids:[a.identifier,b.identifier],anchor:{pos,x:coords.left,y:coords.top}};lastApply=0;
   const cancel=new Event('touchcancel',{bubbles:false});cancel.zoomReset=true;cm.getScrollerElement().dispatchEvent(cancel);if(firstSelection)cm.setSelections(firstSelection);wrapper.classList.add('pinchZooming');
  },{capture:true,passive:false});
  on('touchmove',e=>{
