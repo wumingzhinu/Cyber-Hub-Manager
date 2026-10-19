@@ -261,8 +261,7 @@ function fileGesture(row,f,index){
     if(commit)applyRange(lo,hi);else pane.selected.clear();
     paneEl.classList.remove('dragging');
     paneEl.querySelectorAll('.file.dragAnchor,.file.dragRange').forEach(r=>r.classList.remove('dragAnchor','dragRange'));
-    const n=pane.selected.size;
-    banner(commit?(n?'已选 '+n+' 项 · 点击文件可继续追加/移除':'未选择'):'已取消选择',commit&&n>0);
+    banner('',false); // 隐藏规则一锚点提示横幅（不显示“已选 N 项”提示）
     if(commit)renderFileBottom();else renderFiles();
     drag=null;
   };
@@ -310,7 +309,7 @@ function fileGesture(row,f,index){
     if(menuFired){menuFired=false;return;}              // 长按弹菜单后的合成 click
     if(suppressClick){suppressClick=false;return;}      // 滑动手势松手后的合成 click，抑制一次
     // 规则三：已有选区 → 点击追加/移除；否则打开
-    if(pane.selected&&pane.selected.size){toggleFile(f,index);const n=pane.selected.size;banner(n?'已选 '+n+' 项 · 点击文件可继续追加/移除':'',n>0);}
+    if(pane.selected&&pane.selected.size)toggleFile(f,index);
     else openFile(f,index);
   });
 }
