@@ -113,7 +113,7 @@ function activePane(){return state.panes[state.active];}
 function displayPath(p){return p.archive?p.archive.split('/').pop()+'/'+p.entry:p.path.replace(/\/$/,'')+'/';}
 async function loadPane(i){const p=state.panes[i];try{p.items=await rpc('list',{...paneLocation(p),hidden:pref.hidden});if(p.selected)p.selected=new Set(p.items.filter(f=>p.selected.has(fileKey(f))).map(fileKey));p.error='';}catch(e){p.items=[];p.error=e.message;}}
 async function refresh(){await Promise.all(state.panes.map((_,i)=>loadPane(i)));if(state.screen==='files')renderFiles();}
-async function navigate(i,loc,save=true){const p=state.panes[i];if(save){p.history.push(paneLocation(p));p.future=[];}Object.assign(p,{scrollTop:0,selected:new Set()},loc);state.active=i;await loadPane(i);state.screen='files';renderFiles();animateContent($('.pane.active'));}
+async function navigate(i,loc,save=true){const p=state.panes[i];if(save){p.history.push(paneLocation(p));p.future=[];}Object.assign(p,{scrollTop:0,selected:new Set(),appendMode:false},loc);state.active=i;await loadPane(i);state.screen='files';renderFiles();animateContent($('.pane.active'));}
 async function up(){const p=activePane();if(p.archive){if(p.entry){let arr=p.entry.replace(/\/$/,'').split('/');arr.pop();await navigate(state.active,{...paneLocation(p),entry:arr.length?arr.join('/')+'/':''});}else await navigate(state.active,{path:p.archive.slice(0,p.archive.lastIndexOf('/'))||'/',archive:'',entry:''});}else{const path=p.path.replace(/\/$/,'');await navigate(state.active,{path:path.slice(0,path.lastIndexOf('/'))||'/',archive:'',entry:''});}}
 async function backPane(forward=false){const p=activePane(),from=forward?p.future:p.history,to=forward?p.history:p.future;if(!from.length)return;to.push(paneLocation(p));Object.assign(p,from.pop());await loadPane(state.active);renderFiles();animateContent($('.pane.active'),forward?1:-1);}
 function fileType(f){if(f.dir)return 'folder';const ext=f.name.split('.').pop().toLowerCase();return ['apk','apks','dex','xml','java','smali','arsc','zip'].includes(ext)?ext:'file';}
@@ -140,7 +140,7 @@ async function paste(){const c=state.clipboard;if(c.files)return transferFiles(c
 function fileKey(f){return f.archive?f.archive+'!/'+f.entry:f.path;}
 function selectedFiles(){const p=activePane();if(!p.selected)p.selected=new Set();return p.items.filter(f=>p.selected.has(fileKey(f)));}
 function toggleFile(f,index){state.active=index;const p=activePane();if(!p.selected)p.selected=new Set();const key=fileKey(f);p.selected.has(key)?p.selected.delete(key):p.selected.add(key);renderFiles();}
-function clearSelection(){activePane().selected=new Set();renderFiles();}
+function clearSelection(){const p=activePane();p.selected=new Set();p.appendMode=false;renderFiles();}
 function selectionBar(){const bottom=$('#bottom');bottom.replaceChildren(iconButton('check','全选',()=>{activePane().selected=new Set(activePane().items.map(fileKey));renderFiles();}),iconButton('switch','反选文件',()=>{const p=activePane();p.selected=new Set(p.items.filter(f=>!p.selected.has(fileKey(f))).map(fileKey));renderFiles();}),iconButton('close','清除选择',clearSelection),iconButton('more','选中文件操作',()=>fileActions(selectedFiles()[0])),iconButton('info','选择项属性',()=>fileProperties(selectedFiles())));}
 function fileActions(f){
  const selected=selectedFiles();const files=selected.length&&selected.some(x=>fileKey(x)===fileKey(f))?selected:[f];if(!files[0])return;const allLocal=files.every(x=>!x.archive),one=files.length===1,other=state.panes[1-state.active];
@@ -284,6 +284,7 @@ function fileGesture(row,f,index){
       if(Math.abs(dx)>10&&Math.abs(dx)>Math.abs(dy)){ // 规则一：横向滑动 → 选中锚点、进入多选
         slide=true;clearTimeout(timer);suppressClick=true;
         paneEl.classList.add('dragging');
+        pane.appendMode=true; // 进入追加多选模式（规则三）
         pane.selected.clear();pane.selected.add(key);
         drag={lo:listIndex,hi:listIndex,anchor:listIndex};
         applyRange(listIndex,listIndex);
@@ -308,7 +309,8 @@ function fileGesture(row,f,index){
   row.addEventListener('click',()=>{
     if(menuFired){menuFired=false;return;}              // 长按弹菜单后的合成 click
     if(suppressClick){suppressClick=false;return;}      // 滑动手势松手后的合成 click，抑制一次
-    // 规则三：已有选区 → 点击追加/移除；否则打开
+    // 规则三：追加多选模式（滑动选中锚点/区间后）→ 点击追加/移除；否则按普通行为
+    if(pane.appendMode){toggleFile(f,index);return;}
     if(pane.selected&&pane.selected.size)toggleFile(f,index);
     else openFile(f,index);
   });
