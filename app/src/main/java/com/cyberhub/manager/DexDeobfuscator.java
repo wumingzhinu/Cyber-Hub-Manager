@@ -32,11 +32,7 @@ public final class DexDeobfuscator {
 
  /** 默认匹配：单字母 / 干扰符号 / 非拉丁 / 超长名 */
  private static final Pattern DEFAULT_OBF = Pattern.compile(
-   "^[A-Za-z0-9_]{1,2}$" +                       // 单双字母
-   "|^oO0lI1_.*$"                                 // 干扰字符
-   "|.*[\\u0600-\\u06FF\\u0750-\\u077F].*"       // 阿拉伯/叙利亚符号
-   "|.{40,}"                                        // 超长名
-   );
+    "^[A-Za-z0-9_]{1,2}$|^oO0lI_.*$|.{40,}");
 
  /**
   * 主入口。target 为 APK 或 .dex。
