@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.json.JSONObject;
 import rikka.shizuku.Shizuku;
+import rikka.shizuku.ShizukuRemoteProcess;
 
 /** Root / Shizuku 提权授权的状态查询与申请。阻塞方法须在 worker 线程调用（Bridge 已保证）。 */
 public final class ElevatedAccess {
@@ -67,7 +68,7 @@ public final class ElevatedAccess {
             java.lang.reflect.Method m=Shizuku.class.getDeclaredMethod("newProcess",String[].class,String[].class,String.class);
             m.setAccessible(true);
             Process p=(Process)m.invoke(null,new Object[]{new String[]{"sh","-c","id"},null,null});
-            p.waitFor(10,TimeUnit.SECONDS);
+            waitExit(p,10);
             r.put("npId",readAll(p).trim());
         }catch(Throwable t){
             java.io.StringWriter sw=new java.io.StringWriter();
@@ -128,6 +129,15 @@ public final class ElevatedAccess {
         }catch(Throwable t){return false;}
     }
 
+        /** 等待进程退出（带超时）。Shizuku 远程进程的 exitValue 抛 IllegalArgumentException 而非
+     *  IllegalThreadStateException，通用 waitFor(timeout,unit) 轮询接不住，须用其 waitForTimeout。 */
+    private static boolean waitExit(Process p,long sec){
+        try{
+            if(p instanceof ShizukuRemoteProcess)return ((ShizukuRemoteProcess)p).waitForTimeout(sec,TimeUnit.SECONDS);
+            return p.waitFor(sec,TimeUnit.SECONDS);
+        }catch(Throwable t){return false;}
+    }
+
     private static java.lang.reflect.Method newProcessMethod;
 
     /** 以当前最高提权身份（Root 优先，其次 Shizuku shell）执行命令；无通道或失败返回 null。 */
@@ -136,7 +146,7 @@ public final class ElevatedAccess {
             Process p=null;
             try{
                 p=new ProcessBuilder("su","-c",cmd).redirectErrorStream(true).start();
-                if(!p.waitFor(20,TimeUnit.SECONDS))return null;
+                if(!waitExit(p,20))return null;
                 return readAll(p);
             }catch(Throwable t){return null;}
             finally{if(p!=null)p.destroy();}
@@ -149,7 +159,7 @@ public final class ElevatedAccess {
                     newProcessMethod.setAccessible(true);
                 }
                 p=(Process)newProcessMethod.invoke(null,new Object[]{new String[]{"sh","-c",cmd},null,null});
-                if(!p.waitFor(20,TimeUnit.SECONDS))return null;
+                if(!waitExit(p,20))return null;
                 return readAll(p);
             }catch(Throwable t){return null;}
             finally{if(p!=null)p.destroy();}
