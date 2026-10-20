@@ -333,6 +333,7 @@ body.light .pane:not(.active){background:#f2f2f2}
 /* APKS conversion uses the same compact dialogs and native worker as file tools. */
 .bundleSource{overflow-wrap:anywhere;color:var(--text)}
 .bundleHint{font-size:13px;line-height:1.45;color:var(--muted);overflow-wrap:anywhere;margin:10px 0}
+.signHint{font-size:12px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere;margin:2px 0 10px;white-space:pre-line}
 .bundleDialog label{display:block;margin-top:12px;margin-bottom:6px}
 .bundleDialog select{width:100%;min-width:0;background:var(--dialog);color:var(--text);border:1px solid var(--line);padding:10px;font:inherit}
 .bundleWorking{display:flex;align-items:center;gap:16px;min-height:64px}

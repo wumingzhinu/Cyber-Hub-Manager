@@ -172,12 +172,7 @@ function compressDialog(files){
 function extractDialog(f){const d=dialog('解压到…','<label>目标文件夹</label><input id="extractDestination" value="'+esc(state.panes[1-state.active].archive?state.info.workspace:state.panes[1-state.active].path)+'"><label>新文件夹名称</label><input id="extractName" value="'+esc(f.name.replace(/\.(tar\.(gz|xz|zst|bz2|lz4)|zip|apks|apk|7z|tar|gzip|gz)(\.001)?$/i,''))+'"><label>密码（如已加密）</label><input id="extractPassword" type="password" autocomplete="off">',[['取消',closeModal],['确定',async()=>{const args={...fileArgs(f),destination:$('#extractDestination').value,name:$('#extractName').value,password:$('#extractPassword').value};const out=await rpc('archiveExtract',args);closeModal();await refresh();toast('已解压到 '+out);}]]);}
 async function compareFiles(files,mode){const left=await rpc('resolve',fileArgs(files[0])),right=await rpc('resolve',fileArgs(files[1]));const r=await rpc('compare',{left,right,mode});const body=toolPage('对比 '+mode,files[0].name+' ↔ '+files[1].name);body.innerHTML='<p>'+r.added+' 新增 · '+r.removed+'删除 · '+r.changed+'修改 · '+r.same+'未变化'+(r.truncated?' · 前 2,000 处差异':'')+'</p><div id="compareRows"></div>';if(mode==='arsc')body.insertAdjacentHTML('afterbegin','<p>按索引比较资源块/头部校验和与字符串池。</p>');for(const row of r.rows){const b=document.createElement('button');b.className='listrow';b.innerHTML='<span class="main">'+esc(row.name)+'<small>'+row.status+'</small></span>';b.onclick=()=>dialog(row.name,'<h3>左侧</h3><pre class="diffText">'+esc(row.left)+'</pre><h3>右侧</h3><pre class="diffText">'+esc(row.right)+'</pre>',[['关闭',closeModal]]);$('#compareRows').append(b);}}
 async function showApk(args){const info=await rpc('apkInfo',args);const d=dialog('',`<div class="apkHead">${info.icon?`<img src="${esc(info.icon)}" width="48" height="48" alt="应用图标">`:'<div class="brandMark">CH</div>'}<div class="apkTitle"><h2>${esc(info.name)}</h2><div class="subtitle">${esc(info.version)}</div></div></div><div class="dataGrid">${[['包名',info.package],['版本代码',info.versionCode],['文件大小',size(info.size)],['签名',info.signature],['防护等级','未评估'],['目标 SDK',sdkLabel(info.targetSdk)],['最低 SDK',sdkLabel(info.minSdk)]].map(([k,v])=>`<div>${k}</div><button class="value" title="${esc(v)}" data-detail="${esc(k)}" data-value="${esc(v)}">${esc(v)}</button>`).join('')}</div>`,[['功能',()=>{closeModal();options('APK 功能',[
- {icon:'save',label:'APK 签名',run:async()=>{
-   if(!await confirmBox('签名 APK 副本','使用内置的开发证书。无法用于更新以其他密钥签名的应用。','签名'))return;
-   const destination=await ask('签名 APK 保存位置',state.info.permission?state.info.home+'/下载':state.info.workspace);
-   if(!destination)return;
-   const out=await rpc('sign',{path:info.path,destination});await refresh();alertBox('已签名 APK',out);
- }},
+ {icon:'save',label:'APK 签名',run:()=>apkSignDialog(info)},
  {icon:'build',label:'APK 优化',run:()=>alertBox('正在开发','APK 优化功能正在开发中。')},
  {icon:'layers',label:'APK 共存',run:()=>alertBox('正在开发','APK 共存功能正在开发中。')},
  {icon:'layers',label:'RES 资源精简',run:()=>alertBox('正在开发','RES 资源精简功能正在开发中。')},
@@ -194,6 +189,39 @@ async function showApk(args){const info=await rpc('apkInfo',args);const d=dialog
  {icon:'code',label:'DEX 重新划分',run:()=>alertBox('正在开发','DEX 重新划分功能正在开发中。')}
 ],true);}],['查看',async()=>{closeModal();await navigate(state.active,{path:activePane().path,archive:info.path,entry:''});}],['安装',async()=>{closeModal();await rpc('install',{path:info.path});}]]);d.querySelector('h2').remove();d.classList.add('apkDialog');d.querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>alertBox(b.dataset.detail,b.dataset.value));}
 function sdkLabel(api){const versions={21:'5',22:'5.1',23:'6',24:'7',25:'7.1',26:'8',27:'8.1',28:'9',29:'10',30:'11',31:'12',32:'12L',33:'13',34:'14',35:'15',36:'16'};return versions[api]?'Android '+versions[api]+' (API '+api+')':'API '+api;}
+function apkSignDialog(info){
+ const schemes=[
+  {id:'v1v2v3',label:'自定义 V1 + V2 + V3'},
+  {id:'v1v2',label:'V1 + V2'},
+  {id:'v1v3',label:'V1 + V3'},
+  {id:'v1',label:'V1'},
+  {id:'v2v3',label:'V2 + V3（Android 7.0+）'},
+  {id:'v2',label:'V2（Android 7.0+）'},
+  {id:'v3',label:'V3（Android 9.0+）'}
+ ];
+ const notes={
+  v1v2v3:'兼容性最好，支持 Android 1.0 及以上。',
+  v1v2:'同时生成 V1 与 V2。Android 7.0+ 使用 V2，旧系统使用 V1。',
+  v1v3:'同时生成 V1 与 V3。Android 9.0+ 使用 V3，旧系统使用 V1。',
+  v1:'仅生成 V1（JAR 签名）。支持全部版本，但校验较弱、易被篡改。',
+  v2v3:'仅生成 V2 + V3（Android 7.0+）。较少方案更安全，但 Android 7.0 以下无法安装。',
+  v2:'仅生成 V2（Android 7.0+）。Android 7.0 以下无法识别签名。',
+  v3:'仅生成 V3（Android 9.0+）。Android 9.0 以下无法识别签名。'
+ };
+ const isV=s=>info.signature&&info.signature.includes('V'+s);
+ const current=isV(1)&&isV(2)&&isV(3)?'v1v2v3':isV(1)&&isV(2)?'v1v2':isV(1)&&isV(3)?'v1v3':isV(2)&&isV(3)?'v2v3':isV(1)?'v1':isV(2)?'v2':'v1v2v3';
+ const d=dialog('APK 签名','<label for="apkSignKey">签名密钥</label><select id="apkSignKey"><option value="default">默认（内置开发证书）</option></select><label for="apkSignScheme">签名方案</label><select id="apkSignScheme">'+schemes.map(s=>'<option value="'+s.id+'"'+(s.id===current?' selected':'')+'>'+esc(s.label)+'</option>').join('')+'</select><p class="signHint" id="apkSignNote"></p><label for="apkSignDest">保存到文件夹</label><input id="apkSignDest" value="'+esc(state.info.permission?state.info.home+'/下载':state.info.workspace)+'">',[['取消',closeModal],['确定',async()=>{
+  const scheme=d.querySelector('#apkSignScheme').value,destination=d.querySelector('#apkSignDest').value.trim();
+  if(!destination)return toast('请填写保存位置。');
+  const buttons=d.querySelectorAll('.actions button');[].forEach.call(buttons,b=>b.disabled=true);
+  try{
+   closeModal();const out=await rpc('sign',{path:info.path,destination,scheme});await refresh();alertBox('已签名 APK',out);
+  }finally{[].forEach.call(buttons,b=>b.disabled=false);if(d.isConnected)closeModal(false);}
+ }]]);
+ d.classList.add('signDialog');
+ const note=()=>{const n=notes[d.querySelector('#apkSignScheme').value];const cur=info.signature&&(info.signature==='未签名 / 未校验'||info.signature.startsWith('签名无效')||info.signature.startsWith('无法校验'))?'（原签名：'+info.signature+'）':'（当前签名 '+info.signature+'）';d.querySelector('#apkSignNote').textContent=n+'\n'+cur;};
+ d.querySelector('#apkSignScheme').onchange=note;note();
+}
 function settleOpenProject(){return new Promise(resolve=>{dialog('未保存的 DEX 工程','<p>打开另一个 APK 或 DEX 之前，先保存当前工程？</p>',[['取消',()=>{modalCancel=null;closeModal();resolve(false);}],['放弃',()=>{state.dex.modified=false;modalCancel=null;closeModal();resolve(true);}],['保存',async()=>{await saveProject();modalCancel=null;closeModal();resolve(true);}]],()=>resolve(false));});}
 async function chooseDex(args,preferred=''){if(state.dex.modified&&!await settleOpenProject())return;const names=await rpc('dexFiles',args);if(!names.length)throw Error('未找到 classes.dex 文件。');const d=dialog('选择 DEX 文件',names.map((n,i)=>`<label class="checkrow"><input type="checkbox" data-dex="${esc(n)}" checked><span>${esc(n)}</span></label>`).join(''),[['确定',async()=>{const entries=Array.from(d.querySelectorAll('input:checked')).map(x=>x.dataset.dex);if(!entries.length)return toast('请至少选择一个 DEX');closeModal();const result=await rpc('dexOpen',{...args,entries});state.dex={prefix:'',tab:'explorer',history:[],source:args,mode:'auto',query:'',count:result.count,expanded:new Set(),treeCache:new Map(),scroll:0};state.screen='dex';await renderDex();}],['取消',closeModal],['反选',()=>d.querySelectorAll('input').forEach(x=>x.checked=!x.checked)]]);d.classList.add('multidexDialog');}
 async function dexRows(prefix){if(!state.dex.treeCache)state.dex.treeCache=new Map();if(!state.dex.treeCache.has(prefix))state.dex.treeCache.set(prefix,await rpc('dexTree',{prefix}));return state.dex.treeCache.get(prefix);}
