@@ -173,7 +173,7 @@ function extractDialog(f){const d=dialog('解压到…','<label>目标文件夹<
 async function compareFiles(files,mode){const left=await rpc('resolve',fileArgs(files[0])),right=await rpc('resolve',fileArgs(files[1]));const r=await rpc('compare',{left,right,mode});const body=toolPage('对比 '+mode,files[0].name+' ↔ '+files[1].name);body.innerHTML='<p>'+r.added+' 新增 · '+r.removed+'删除 · '+r.changed+'修改 · '+r.same+'未变化'+(r.truncated?' · 前 2,000 处差异':'')+'</p><div id="compareRows"></div>';if(mode==='arsc')body.insertAdjacentHTML('afterbegin','<p>按索引比较资源块/头部校验和与字符串池。</p>');for(const row of r.rows){const b=document.createElement('button');b.className='listrow';b.innerHTML='<span class="main">'+esc(row.name)+'<small>'+row.status+'</small></span>';b.onclick=()=>dialog(row.name,'<h3>左侧</h3><pre class="diffText">'+esc(row.left)+'</pre><h3>右侧</h3><pre class="diffText">'+esc(row.right)+'</pre>',[['关闭',closeModal]]);$('#compareRows').append(b);}}
 async function showApk(args){const info=await rpc('apkInfo',args);const d=dialog('',`<div class="apkHead">${info.icon?`<img src="${esc(info.icon)}" width="48" height="48" alt="应用图标">`:'<div class="brandMark">CH</div>'}<div class="apkTitle"><h2>${esc(info.name)}</h2><div class="subtitle">${esc(info.version)}</div></div></div><div class="dataGrid">${[['包名',info.package],['版本代码',info.versionCode],['文件大小',size(info.size)],['签名',info.signature],['防护等级','未评估'],['目标 SDK',sdkLabel(info.targetSdk)],['最低 SDK',sdkLabel(info.minSdk)]].map(([k,v])=>`<div>${k}</div><button class="value" title="${esc(v)}" data-detail="${esc(k)}" data-value="${esc(v)}">${esc(v)}</button>`).join('')}</div>`,[['功能',()=>{closeModal();options('APK 功能',[
  {icon:'save',label:'APK 签名',run:()=>apkSignDialog(info)},
- {icon:'build',label:'APK 优化',run:()=>alertBox('正在开发','APK 优化功能正在开发中。')},
+ {icon:'build',label:'APK 优化',run:()=>apkOptimizeDialog(info)},
  {icon:'layers',label:'APK 共存',run:()=>apkCloneDialog(info)},
  {icon:'layers',label:'RES 资源精简',run:()=>alertBox('正在开发','RES 资源精简功能正在开发中。')},
  {icon:'build',label:'去除签名校验',run:()=>alertBox('正在开发','去除签名校验功能正在开发中。')},
@@ -232,6 +232,27 @@ function apkCloneDialog(info){
   }finally{[].forEach.call(buttons,b=>b.disabled=false);if(d.isConnected)closeModal(false);}
  }]]);
  const input=d.querySelector('#apkClonePackage');setTimeout(()=>{if(input&&input.isConnected){input.focus();input.select();}},30);
+}
+function apkOptimizeDialog(info){
+ const d=dialog('APK 优化',
+  '<label class="toggleRow"><span>深度优化（dex 重写 + 资源清理）</span><input id="optDeep" type="checkbox"></label>'+
+  '<p class="signHint">深度模式会删除未使用的类/方法/字段并清理资源，显著减小体积，耗时较长，且无法完全保证兼容所有场景。基础模式仅重新压缩（清单/arsc 无压缩、res 图片无压缩、其余极限压缩）。优化完成后自动使用内置开发证书签名。</p>'+
+  '<label for="optUltra">压缩级别</label><select id="optUltra"><option value="9">极限（-9）</option><option value="5">高（-5）</option></select>'+
+  '<label for="optDelete">删除文件（每行一个后缀或正则，留空不删）</label><textarea id="optDelete" rows="2" placeholder="\\.png$" spellcheck="false"></textarea>',
+  [['取消',closeModal],['确定',async()=>{
+   const deep=$('#optDeep').checked,ultra=$('#optUltra').value==='9';
+   const delLines=$('#optDelete').value.split('\n').map(s=>s.trim()).filter(s=>s.length);
+   const buttons=d.querySelectorAll('.actions button');[].forEach.call(buttons,b=>b.disabled=true);
+   try{
+    closeModal();
+    const out=await rpc('optimize',{path:info.path,deep,ultra,deleteFiles:delLines});
+    await refresh();
+    let msg=out.path+(out.removedFiles!=null?' · 删除条目 '+out.removedFiles:'');
+    if(out.savedBytes>0)msg+=' · 节省 '+size(out.savedBytes);
+    msg+='\n已用内置开发证书签名';
+    alertBox('已优化 APK',msg);
+   }finally{[].forEach.call(buttons,b=>b.disabled=false);if(d.isConnected)closeModal(false);}
+  }]]);
 }
 function settleOpenProject(){return new Promise(resolve=>{dialog('未保存的 DEX 工程','<p>打开另一个 APK 或 DEX 之前，先保存当前工程？</p>',[['取消',()=>{modalCancel=null;closeModal();resolve(false);}],['放弃',()=>{state.dex.modified=false;modalCancel=null;closeModal();resolve(true);}],['保存',async()=>{await saveProject();modalCancel=null;closeModal();resolve(true);}]],()=>resolve(false));});}
 async function chooseDex(args,preferred=''){if(state.dex.modified&&!await settleOpenProject())return;const names=await rpc('dexFiles',args);if(!names.length)throw Error('未找到 classes.dex 文件。');const d=dialog('选择 DEX 文件',names.map((n,i)=>`<label class="checkrow"><input type="checkbox" data-dex="${esc(n)}" checked><span>${esc(n)}</span></label>`).join(''),[['确定',async()=>{const entries=Array.from(d.querySelectorAll('input:checked')).map(x=>x.dataset.dex);if(!entries.length)return toast('请至少选择一个 DEX');closeModal();const result=await rpc('dexOpen',{...args,entries});state.dex={prefix:'',tab:'explorer',history:[],source:args,mode:'auto',query:'',count:result.count,expanded:new Set(),treeCache:new Map(),scroll:0};state.screen='dex';await renderDex();}],['取消',closeModal],['反选',()=>d.querySelectorAll('input').forEach(x=>x.checked=!x.checked)]]);d.classList.add('multidexDialog');}
