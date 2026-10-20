@@ -240,12 +240,11 @@ function apkOptimizeDialog(info){
   '<label for="optUltra">压缩级别</label><select id="optUltra"><option value="9">极限（-9）</option><option value="5">高（-5）</option></select>'+
   '<label for="optDelete">删除文件（每行一个后缀或正则，留空不删）</label><textarea id="optDelete" rows="2" placeholder="\\.png$" spellcheck="false"></textarea>',
   [['取消',closeModal],['确定',async()=>{
-   const deep=$('#optDeep').checked,ultra=$('#optUltra').value==='9';
    const delLines=$('#optDelete').value.split('\n').map(s=>s.trim()).filter(s=>s.length);
    const buttons=d.querySelectorAll('.actions button');[].forEach.call(buttons,b=>b.disabled=true);
    try{
     closeModal();
-    const out=await rpc('optimize',{path:info.path,deep,ultra,deleteFiles:delLines});
+    const out=await rpc('optimize',{path:info.path,deep,ultraLevel:$('#optUltra').value=='9'?9:5,deleteFiles:delLines});
     await refresh();
     let msg=out.path+(out.removedFiles!=null?' · 删除条目 '+out.removedFiles:'');
     if(out.savedBytes>0)msg+=' · 节省 '+size(out.savedBytes);
