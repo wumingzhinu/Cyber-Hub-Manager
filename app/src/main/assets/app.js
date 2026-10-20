@@ -185,7 +185,7 @@ async function showApk(args){const info=await rpc('apkInfo',args);const d=dialog
  {icon:'layers',label:'RES 资源混淆',run:()=>alertBox('正在开发','RES 资源混淆功能正在开发中。')},
  {icon:'layers',label:'RES 反资源混淆',run:()=>alertBox('正在开发','RES 反资源混淆功能正在开发中。')},
  {icon:'code',label:'DEX 字符串解密',run:()=>apkDexDecryptDialog(info)},
- {icon:'code',label:'DEX 混淆对抗',run:()=>alertBox('正在开发','DEX 混淆对抗功能正在开发中。')},
+ {icon:'code',label:'DEX 混淆对抗',run:()=>apkDexDeobfuscateDialog(info)},
  {icon:'code',label:'DEX 重新划分',run:()=>alertBox('正在开发','DEX 重新划分功能正在开发中。')}
 ],true);}],['查看',async()=>{closeModal();await navigate(state.active,{path:activePane().path,archive:info.path,entry:''});}],['安装',async()=>{closeModal();await rpc('install',{path:info.path});}]]);d.querySelector('h2').remove();d.classList.add('apkDialog');d.querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>alertBox(b.dataset.detail,b.dataset.value));}
 function sdkLabel(api){const versions={21:'5',22:'5.1',23:'6',24:'7',25:'7.1',26:'8',27:'8.1',28:'9',29:'10',30:'11',31:'12',32:'12L',33:'13',34:'14',35:'15',36:'16'};return versions[api]?'Android '+versions[api]+' (API '+api+')':'API '+api;}
@@ -274,6 +274,27 @@ function apkDexDecryptDialog(info){
     if((r.errors||[]).length)msg+='\n错误：'+(r.errors||[]).slice(0,3).join(' | ');
     if((r.samples||[]).length)msg+='\n示例：\n'+(r.samples||[]).slice(0,5).join('\n');
     alertBox('DEX 字符串解密',msg);
+   }finally{[].forEach.call(buttons,b=>b.disabled=false);if(d.isConnected)closeModal(false);}
+  }]]);
+}
+function apkDexDeobfuscateDialog(info){
+ const d=dialog('DEX 混淆对抗',
+  '<p class="signHint">把干扰符号/单字母/超长名/非拉丁符号重命名为可读的 abc 顺序名，保留内部类关系。不改动方法体。</p>'+
+  '<label for="debPattern">自定义匹配规则（正则，留空用默认：单字母/干扰符号/非拉丁/超长名）</label>'+
+  '<input id="debPattern" placeholder="^(oO0|l1I).*" spellcheck="false" autocomplete="off">'+
+  '<label for="debClasses">需要处理的类（每行一个，留空全部；支持 包名.* / 包名.** / ! 排除）</label>'+
+  '<textarea id="debClasses" rows="3" placeholder="com.foo.*\n!com.foo.util.Bar" spellcheck="false"></textarea>',
+  [['取消',closeModal],['对抗',async()=>{
+   const custom=$('#debPattern').value.trim();
+   const lines=$('#debClasses').value.split('\n').map(s=>s.trim()).filter(s=>s.length);
+   const buttons=d.querySelectorAll('.actions button');[].forEach.call(buttons,b=>b.disabled=true);
+   try{
+    closeModal();
+    const r=await rpc('dexDeobfuscate',{path:info.path,custom,targetClasses:lines});
+    let msg='重命名：类 '+(r.classesRenamed||0)+'，方法 '+(r.methodsRenamed||0)+'，字段 '+(r.fieldsRenamed||0);
+    if((r.errors||[]).length)msg+='\n错误：'+(r.errors||[]).slice(0,3).join(' | ');
+    if((r.renamedClasses||[]).length)msg+='\n示例：'+(r.renamedClasses||[]).slice(0,5).join('、');
+    alertBox('DEX 混淆对抗',msg);
    }finally{[].forEach.call(buttons,b=>b.disabled=false);if(d.isConnected)closeModal(false);}
   }]]);
 }
