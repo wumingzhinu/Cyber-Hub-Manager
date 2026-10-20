@@ -60,6 +60,7 @@ public final class DataEngine {
    case "restoreBackup":{File f=FileOps.restoreBackup(new File(a.getString("path")));record("已还原备份 "+f);return f.getPath();}
    case "dexStrings":return dex.strings(a.optString("query"));
    case "dexSearch":return dex.search(a.optString("query"));
+    case "dexDecrypt":{File f=new File(a.getString("path"));DexStringDecryptor.Report r=DexStringDecryptor.run(f,a.optString("custom",""),null);record("DEX 字符串解密：候选 "+r.candidates+"，调用点 "+r.callSites+"，解出 "+r.decrypted);JSONObject o=new JSONObject();o.put("candidates",r.candidates);o.put("callSites",r.callSites);o.put("decrypted",r.decrypted);o.put("skipped",r.skipped);JSONArray s=new JSONArray();for(String x:r.samples)s.put(x);o.put("samples",s);JSONArray er=new JSONArray();for(String x:r.errors)er.put(x);o.put("errors",er);o.put("output",f.getName().replaceFirst("(\\.apk|\\.dex)$","_dec$1"));return o;}
    case "apps":return apps();
    case "log":return new JSONArray(activity.getPreferences(0).getString("log","[]"));
    case "terminal":return terminal(a.getString("command"),a.optString("path",workspace.getPath()));

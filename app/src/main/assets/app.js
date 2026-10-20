@@ -184,7 +184,7 @@ async function showApk(args){const info=await rpc('apkInfo',args);const d=dialog
  {icon:'edit',label:'XML 批量替换',run:()=>alertBox('正在开发','XML 批量替换功能正在开发中。')},
  {icon:'layers',label:'RES 资源混淆',run:()=>alertBox('正在开发','RES 资源混淆功能正在开发中。')},
  {icon:'layers',label:'RES 反资源混淆',run:()=>alertBox('正在开发','RES 反资源混淆功能正在开发中。')},
- {icon:'code',label:'DEX 字符串解密',run:()=>alertBox('正在开发','DEX 字符串解密功能正在开发中。')},
+ {icon:'code',label:'DEX 字符串解密',run:()=>apkDexDecryptDialog(info)},
  {icon:'code',label:'DEX 混淆对抗',run:()=>alertBox('正在开发','DEX 混淆对抗功能正在开发中。')},
  {icon:'code',label:'DEX 重新划分',run:()=>alertBox('正在开发','DEX 重新划分功能正在开发中。')}
 ],true);}],['查看',async()=>{closeModal();await navigate(state.active,{path:activePane().path,archive:info.path,entry:''});}],['安装',async()=>{closeModal();await rpc('install',{path:info.path});}]]);d.querySelector('h2').remove();d.classList.add('apkDialog');d.querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>alertBox(b.dataset.detail,b.dataset.value));}
@@ -240,6 +240,7 @@ function apkOptimizeDialog(info){
   '<label for="optUltra">压缩级别</label><select id="optUltra"><option value="9">极限（-9）</option><option value="5">高（-5）</option></select>'+
   '<label for="optDelete">删除文件（每行一个后缀或正则，留空不删）</label><textarea id="optDelete" rows="2" placeholder="\\.png$" spellcheck="false"></textarea>',
   [['取消',closeModal],['确定',async()=>{
+   const deep=$('#optDeep').checked;
    const delLines=$('#optDelete').value.split('\n').map(s=>s.trim()).filter(s=>s.length);
    const buttons=d.querySelectorAll('.actions button');[].forEach.call(buttons,b=>b.disabled=true);
    try{
@@ -250,6 +251,29 @@ function apkOptimizeDialog(info){
     if(out.savedBytes>0)msg+=' · 节省 '+size(out.savedBytes);
     msg+='\n已用内置开发证书签名';
     alertBox('已优化 APK',msg);
+   }finally{[].forEach.call(buttons,b=>b.disabled=false);if(d.isConnected)closeModal(false);}
+  }]]);
+}
+function apkDexDecryptDialog(info){
+ const d=dialog('DEX 字符串解密',
+  '<label for="dexCustom">自定义解密函数（smali 签名，* 通配，留空自动识别）</label>'+
+  '<input id="dexCustom" placeholder="Lcom/foo/Str;->a([B[B)Ljava/lang/String;" spellcheck="false" autocomplete="off">'+
+  '<label class="toggleRow"><span>加强版算法（加载 so，可能崩溃）</span><input id="dexAdvanced" type="checkbox"></label>'+
+  '<label for="dexClasses">需要解密的类（每行一个，留空全部）</label>'+
+  '<textarea id="dexClasses" rows="2" placeholder="com.foo.*\n!com.foo.util.Bar" spellcheck="false"></textarea>'+
+  '<p class="signHint">支持 JCE 块加密（AES/DES）与字节表 XOR。native JNI 解码无法纯静态处理，建议用 Frida 动态提取。</p>',
+  [['取消',closeModal],['解密',async()=>{
+   const custom=$('#dexCustom').value.trim();
+   const advanced=$('#dexAdvanced').checked;
+   const classes=$('#dexClasses').value.trim();
+   const buttons=d.querySelectorAll('.actions button');[].forEach.call(buttons,b=>b.disabled=true);
+   try{
+    closeModal();
+    const r=await rpc('dexDecrypt',{path:info.path,custom,advanced,classes});
+    let msg='扫描 dex：候选解密器 '+(r.candidates||0)+'，调用点 '+(r.callSites||0)+'，解出 '+(r.decrypted||0)+'，跳过 '+(r.skipped||0);
+    if((r.errors||[]).length)msg+='\n错误：'+(r.errors||[]).slice(0,3).join(' | ');
+    if((r.samples||[]).length)msg+='\n示例：\n'+(r.samples||[]).slice(0,5).join('\n');
+    alertBox('DEX 字符串解密',msg);
    }finally{[].forEach.call(buttons,b=>b.disabled=false);if(d.isConnected)closeModal(false);}
   }]]);
 }
