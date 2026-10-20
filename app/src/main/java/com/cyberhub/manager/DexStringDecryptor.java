@@ -101,7 +101,8 @@ public final class DexStringDecryptor {
    for (Method m : c.getMethods()) {
     MethodImplementation impl = m.getImplementation();
     if (impl == null) continue;
-    List<Instruction> insns = new ArrayList<>(impl.getInstructions());
+    List<Instruction> insns = new ArrayList<>();
+    for (Instruction x : impl.getInstructions()) insns.add(x);
     for (int i=0;i<insns.size();i++) {
      Instruction ins = insns.get(i);
      if (!(ins instanceof ReferenceInstruction)) continue;
@@ -137,11 +138,12 @@ public final class DexStringDecryptor {
   int xorEnd;
   boolean reverse;
 
-  String evaluate(String enc, Report out) {
+  String evaluate(String enc, Report rep) {
    try {
     if (kind.startsWith("JCE")) {
      Cipher c = Cipher.getInstance(transformation);
-     c.init(Cipher.DECRYPT_MODE, new SecretKeySpec(keyBytes, keyBytes.length));
+     String algo = (keyBytes.length==24 || keyBytes.length==8) ? "DES" : "AES";
+     c.init(Cipher.DECRYPT_MODE, new SecretKeySpec(keyBytes, algo));
      byte[] raw = enc.getBytes(StandardCharsets.ISO_8859_1);
      byte[] dec = c.doFinal(raw);
      return new String(dec, StandardCharsets.UTF_8);
@@ -149,17 +151,17 @@ public final class DexStringDecryptor {
     if (kind.equals("XOR")) {
      byte[] raw = enc.getBytes(StandardCharsets.ISO_8859_1);
      int n = raw.length;
-     byte[] out = new byte[n];
+     byte[] buf = new byte[n];
      for (int i=0;i<n;i++) {
       int idx = reverse ? (n-1-i) : i;
       int k = (xorKey != 0) ? (xorStart + idx) % (xorEnd - xorStart + 1) : 0;
-      out[i] = (byte)(raw[i] ^ ((k >= 0 && k <= 127) ? k : 0x27));
+      buf[i] = (byte)(raw[i] ^ ((k >= 0 && k <= 127) ? k : 0x27));
      }
-     return new String(out, StandardCharsets.UTF_8);
+     return new String(buf, StandardCharsets.UTF_8);
     }
-    out.errors.add("未知 kind: "+kind);
+    rep.errors.add("未知 kind: "+kind);
     return null;
-   } catch (Exception t) { out.errors.add(kind+" 失败: "+t.getMessage()); return null; }
+   } catch (Exception t) { rep.errors.add(kind+" 失败: "+t.getMessage()); return null; }
   }
  }
 
