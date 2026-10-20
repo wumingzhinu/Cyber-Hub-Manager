@@ -174,7 +174,7 @@ async function compareFiles(files,mode){const left=await rpc('resolve',fileArgs(
 async function showApk(args){const info=await rpc('apkInfo',args);const d=dialog('',`<div class="apkHead">${info.icon?`<img src="${esc(info.icon)}" width="48" height="48" alt="应用图标">`:'<div class="brandMark">CH</div>'}<div class="apkTitle"><h2>${esc(info.name)}</h2><div class="subtitle">${esc(info.version)}</div></div></div><div class="dataGrid">${[['包名',info.package],['版本代码',info.versionCode],['文件大小',size(info.size)],['签名',info.signature],['防护等级','未评估'],['目标 SDK',sdkLabel(info.targetSdk)],['最低 SDK',sdkLabel(info.minSdk)]].map(([k,v])=>`<div>${k}</div><button class="value" title="${esc(v)}" data-detail="${esc(k)}" data-value="${esc(v)}">${esc(v)}</button>`).join('')}</div>`,[['功能',()=>{closeModal();options('APK 功能',[
  {icon:'save',label:'APK 签名',run:()=>apkSignDialog(info)},
  {icon:'build',label:'APK 优化',run:()=>alertBox('正在开发','APK 优化功能正在开发中。')},
- {icon:'layers',label:'APK 共存',run:()=>alertBox('正在开发','APK 共存功能正在开发中。')},
+ {icon:'layers',label:'APK 共存',run:()=>apkCloneDialog(info)},
  {icon:'layers',label:'RES 资源精简',run:()=>alertBox('正在开发','RES 资源精简功能正在开发中。')},
  {icon:'build',label:'去除签名校验',run:()=>alertBox('正在开发','去除签名校验功能正在开发中。')},
  {icon:'build',label:'数据复用优化',run:()=>alertBox('正在开发','数据复用优化功能正在开发中。')},
@@ -220,6 +220,18 @@ function apkSignDialog(info){
  d.classList.add('signDialog');
  const note=()=>{const n=notes[d.querySelector('#apkSignScheme').value];const cur=info.signature&&(info.signature==='未签名 / 未校验'||info.signature.startsWith('签名无效')||info.signature.startsWith('无法校验'))?'（原签名：'+info.signature+'）':'（当前签名 '+info.signature+'）';d.querySelector('#apkSignNote').textContent=n+'\n'+cur;};
  d.querySelector('#apkSignScheme').onchange=note;note();
+}
+function apkCloneDialog(info){
+ const d=dialog('APK 共存','<label for="apkClonePackage">新包名</label><input id="apkClonePackage" value="'+esc(info.package+'')+'" spellcheck="false" autocomplete="off"><label class="toggleRow"><span>使用旧版共存方案</span><input id="apkCloneLegacy" type="checkbox"></label><p class="signHint">新包名需与当前（'+esc(info.package)+'）不同，例如在原包名后加 .clone。旧版方案仅修改清单，兼容性更好但不处理代码内包名字符串。</p>',[['取消',closeModal],['确定',async()=>{
+  const newPackage=$('#apkClonePackage').value.trim(),legacy=$('#apkCloneLegacy').checked;
+  if(!newPackage)return toast('请填写新包名。');
+  if(newPackage===info.package)return toast('新包名不能与当前包名相同。');
+  const buttons=d.querySelectorAll('.actions button');[].forEach.call(buttons,b=>b.disabled=true);
+  try{
+   closeModal();const out=await rpc('clone',{path:info.path,newPackage,legacy});await refresh();alertBox('共存 APK 已生成',out+'（保存于原文件同级目录）');
+  }finally{[].forEach.call(buttons,b=>b.disabled=false);if(d.isConnected)closeModal(false);}
+ }]]);
+ const input=d.querySelector('#apkClonePackage');setTimeout(()=>{if(input&&input.isConnected){input.focus();input.select();}},30);
 }
 function settleOpenProject(){return new Promise(resolve=>{dialog('未保存的 DEX 工程','<p>打开另一个 APK 或 DEX 之前，先保存当前工程？</p>',[['取消',()=>{modalCancel=null;closeModal();resolve(false);}],['放弃',()=>{state.dex.modified=false;modalCancel=null;closeModal();resolve(true);}],['保存',async()=>{await saveProject();modalCancel=null;closeModal();resolve(true);}]],()=>resolve(false));});}
 async function chooseDex(args,preferred=''){if(state.dex.modified&&!await settleOpenProject())return;const names=await rpc('dexFiles',args);if(!names.length)throw Error('未找到 classes.dex 文件。');const d=dialog('选择 DEX 文件',names.map((n,i)=>`<label class="checkrow"><input type="checkbox" data-dex="${esc(n)}" checked><span>${esc(n)}</span></label>`).join(''),[['确定',async()=>{const entries=Array.from(d.querySelectorAll('input:checked')).map(x=>x.dataset.dex);if(!entries.length)return toast('请至少选择一个 DEX');closeModal();const result=await rpc('dexOpen',{...args,entries});state.dex={prefix:'',tab:'explorer',history:[],source:args,mode:'auto',query:'',count:result.count,expanded:new Set(),treeCache:new Map(),scroll:0};state.screen='dex';await renderDex();}],['取消',closeModal],['反选',()=>d.querySelectorAll('input').forEach(x=>x.checked=!x.checked)]]);d.classList.add('multidexDialog');}
