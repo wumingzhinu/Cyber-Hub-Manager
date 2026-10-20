@@ -62,6 +62,18 @@ public final class ElevatedAccess {
         r.put("shizukuGranted",shizukuGranted());
         try{r.put("shizukuVersion",shizukuRunning()?Shizuku.getVersion():-1);}catch(Throwable t){r.put("shizukuVersion","err:"+t.getClass().getSimpleName());}
         try{String out=elevatedCommand(c,"id");r.put("elevatedId",out==null?JSONObject.NULL:out.trim());}catch(Throwable t){r.put("elevatedId","err:"+t);}
+        // 单独探测 Shizuku newProcess 反射路径，带完整堆栈
+        try{
+            java.lang.reflect.Method m=Shizuku.class.getDeclaredMethod("newProcess",String[].class,String[].class,String.class);
+            m.setAccessible(true);
+            Process p=(Process)m.invoke(null,new Object[]{new String[]{"sh","-c","id"},null,null});
+            p.waitFor(10,TimeUnit.SECONDS);
+            r.put("npId",readAll(p).trim());
+        }catch(Throwable t){
+            java.io.StringWriter sw=new java.io.StringWriter();
+            t.printStackTrace(new java.io.PrintWriter(sw));
+            String s=sw.toString();r.put("npErr",s.length()>700?s.substring(0,700):s);
+        }
         try{File[] fs=listFiles(c,new File("/"));r.put("rootListCount",fs==null?-1:fs.length);}catch(Throwable t){r.put("rootListCount","err:"+t);}
         return r;
     }
