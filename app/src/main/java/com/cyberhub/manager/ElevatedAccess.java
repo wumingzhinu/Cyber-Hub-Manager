@@ -48,7 +48,22 @@ public final class ElevatedAccess {
         String op=a.optString("op","status");
         if(op.equals("requestRoot"))return new JSONObject().put("granted",requestRoot(c));
         if(op.equals("requestShizuku"))return new JSONObject().put("granted",requestShizuku());
+        if(op.equals("diag"))return diag(c);
         return status(c);
+    }
+
+    /** 诊断提权链路各环节，结果直接展示给用户。 */
+    public static JSONObject diag(Context c)throws Exception{
+        JSONObject r=new JSONObject();
+        r.put("rootGranted",rootGranted(c));
+        r.put("rootAvailable",rootBinaryExists());
+        r.put("shizukuInstalled",shizukuInstalled(c));
+        r.put("shizukuRunning",shizukuRunning());
+        r.put("shizukuGranted",shizukuGranted());
+        try{r.put("shizukuVersion",shizukuRunning()?Shizuku.getVersion():-1);}catch(Throwable t){r.put("shizukuVersion","err:"+t.getClass().getSimpleName());}
+        try{String out=elevatedCommand(c,"id");r.put("elevatedId",out==null?JSONObject.NULL:out.trim());}catch(Throwable t){r.put("elevatedId","err:"+t);}
+        try{File[] fs=listFiles(c,new File("/"));r.put("rootListCount",fs==null?-1:fs.length);}catch(Throwable t){r.put("rootListCount","err:"+t);}
+        return r;
     }
 
     public static JSONObject status(Context c)throws Exception{

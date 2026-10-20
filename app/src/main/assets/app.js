@@ -579,6 +579,18 @@ async function elevatedTool(){
       toast(r.granted?'Shizuku 授权成功':'Shizuku 授权被拒绝或超时');
       elevatedTool();
     }},
+    {icon:'search',label:'诊断提权链路',run:async()=>{
+      const d=await rpc('elevated',{op:'diag'});
+      alertBox('提权诊断',
+        'rootGranted（已授权Root）: '+d.rootGranted+'\n'+
+        'rootAvailable（检测到su）: '+d.rootAvailable+'\n'+
+        'shizukuInstalled（已装Shizuku）: '+d.shizukuInstalled+'\n'+
+        'shizukuRunning（服务运行中）: '+d.shizukuRunning+'\n'+
+        'shizukuGranted（已授权）: '+d.shizukuGranted+'\n'+
+        'shizukuVersion: '+d.shizukuVersion+'\n'+
+        'elevatedId（提权执行id）: '+d.elevatedId+'\n'+
+        'rootListCount（根目录提权列出条数）: '+d.rootListCount+'\n\n把这一屏截图发给我');
+    }},
     {icon:'info',label:'说明',run:()=>alertBox('授权说明','Root 通过 su 授权弹窗申请；Shizuku 需先安装并启动 Shizuku 应用。\n\n授权后浏览根目录或受限目录（如 /data）时，Root 经 su、Shizuku 经 shell 特权实际枚举内容，可看到并进入更多文件夹，与 MT 管理器一致；未授权时只显示内置标准清单。\n\n撤销授权请在 Magisk / Shizuku 中操作。')}
   ]);
 }
