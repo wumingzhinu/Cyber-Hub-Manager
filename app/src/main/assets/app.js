@@ -210,12 +210,11 @@ function apkSignDialog(info){
  };
  const isV=s=>info.signature&&info.signature.includes('V'+s);
  const current=isV(1)&&isV(2)&&isV(3)?'v1v2v3':isV(1)&&isV(2)?'v1v2':isV(1)&&isV(3)?'v1v3':isV(2)&&isV(3)?'v2v3':isV(1)?'v1':isV(2)?'v2':'v1v2v3';
- const d=dialog('APK 签名','<label for="apkSignKey">签名密钥</label><select id="apkSignKey"><option value="default">默认（内置开发证书）</option></select><label for="apkSignScheme">签名方案</label><select id="apkSignScheme">'+schemes.map(s=>'<option value="'+s.id+'"'+(s.id===current?' selected':'')+'>'+esc(s.label)+'</option>').join('')+'</select><p class="signHint" id="apkSignNote"></p><label for="apkSignDest">保存到文件夹</label><input id="apkSignDest" value="'+esc(state.info.permission?state.info.home+'/下载':state.info.workspace)+'">',[['取消',closeModal],['确定',async()=>{
-  const scheme=d.querySelector('#apkSignScheme').value,destination=d.querySelector('#apkSignDest').value.trim();
-  if(!destination)return toast('请填写保存位置。');
+ const d=dialog('APK 签名','<label for="apkSignKey">签名密钥</label><select id="apkSignKey"><option value="default">默认（内置开发证书）</option></select><label for="apkSignScheme">签名方案</label><select id="apkSignScheme">'+schemes.map(s=>'<option value="'+s.id+'"'+(s.id===current?' selected':'')+'>'+esc(s.label)+'</option>').join('')+'</select><p class="signHint" id="apkSignNote"></p>',[['取消',closeModal],['确定',async()=>{
+  const scheme=d.querySelector('#apkSignScheme').value;
   const buttons=d.querySelectorAll('.actions button');[].forEach.call(buttons,b=>b.disabled=true);
   try{
-   closeModal();const out=await rpc('sign',{path:info.path,destination,scheme});await refresh();alertBox('已签名 APK',out);
+   closeModal();const out=await rpc('sign',{path:info.path,scheme});await refresh();alertBox('已签名 APK',out+'（保存于原文件同级目录）');
   }finally{[].forEach.call(buttons,b=>b.disabled=false);if(d.isConnected)closeModal(false);}
  }]]);
  d.classList.add('signDialog');
