@@ -317,7 +317,7 @@ async function dexBranch(container,prefix){
 }
 async function renderDex(){
  state.screen='dex';if(!state.dex.expanded)state.dex.expanded=new Set();
- header('DEX 编辑器','临时工程',[{icon:'build',label:'保存工程',run:closeDex},{icon:'more',label:'DEX 菜单',run:()=>menu([{icon:'save',label:'保存工程',run:saveProject},{icon:'check',label:'保存并签名 APK',run:saveAndSignProject},{icon:'export',label:'导出 DEX / APK',run:exportDex},{icon:'settings',label:'设置',run:preferences},{icon:'close',label:'关闭工程',run:closeDex}])}]);
+ header('DEX 编辑器','临时工程',[{icon:'build',label:'保存工程',run:closeDex},{icon:'more',label:'DEX 菜单',run:()=>menu([{icon:'save',label:'保存工程',run:saveProject},{icon:'check',label:'保存并签名 APK',run:saveAndSignProject},{icon:'export',label:'导出 DEX / APK',run:exportDex},{icon:'build',label:'修复 DEX',run:dexRepair},{icon:'info',label:'DEX 属性',run:dexProperties},{icon:'code',label:'DEX 转 Smali',run:dexToSmali},{icon:'zip',label:'DEX 转 JAR',run:dexToJar},{icon:'text',label:'翻译模式',run:dexTranslation},{icon:'settings',label:'设置',run:preferences},{icon:'close',label:'关闭工程',run:closeDex}])}]);
  const tabLabels={explorer:'浏览',history:'历史',search:'搜索',strings:'字符串'};
   $('#subbar').innerHTML='<div class="tabs" role="tablist">'+['explorer','history','search','strings'].map(t=>`<button role="tab" aria-selected="${state.dex.tab===t}" class="tab ${state.dex.tab===t?'active':''}" data-tab="${t}">${tabLabels[t]}</button>`).join('')+'</div>';
  document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>act(async()=>{const order=['explorer','history','search','strings'],direction=order.indexOf(b.dataset.tab)>order.indexOf(state.dex.tab)?1:-1;state.dex.tab=b.dataset.tab;await renderDex();animateContent($('.tree'),direction);}));$('#bottom').replaceChildren();$('#content').classList.remove('javaEditor');
@@ -325,9 +325,9 @@ async function renderDex(){
  if(state.dex.tab==='explorer'){tree.setAttribute('role','tree');tree.setAttribute('aria-label','DEX 包与类');await dexBranch(tree,'');tree.scrollTop=state.dex.scroll||0;tree.onscroll=()=>state.dex.scroll=tree.scrollTop;return;}
  let rows;
  if(state.dex.tab==='history')rows=state.dex.history.map(x=>({name:x.substring(1,x.length-1).replace(/\//g,'.'),class:x}));
- else{const form=document.createElement('div');form.className='searchline';form.innerHTML=`<input aria-label="${state.dex.tab==='strings'?'筛选字符串':'搜索类、方法或字段'}" placeholder="${state.dex.tab==='strings'?'筛选字符串…':'类、方法或字段…'}" value="${esc(state.dex.query)}"><button>搜索</button>`;const search=()=>act(async()=>{state.dex.query=form.querySelector('input').value;await renderDex();});form.querySelector('button').onclick=search;form.querySelector('input').onkeydown=e=>{if(e.key==='Enter')search();};tree.append(form);rows=await rpc(state.dex.tab==='strings'?'dexStrings':'dexSearch',{query:state.dex.query});}
+ else{const form=document.createElement('div');form.className='searchline';form.innerHTML=`<input aria-label="${state.dex.tab==='strings'?'筛选字符串':'搜索类、方法或字段'}" placeholder="${state.dex.tab==='strings'?'筛选字符串…':'类、方法或字段…'}" value="${esc(state.dex.query)}"><button>搜索</button>`;const search=()=>act(async()=>{state.dex.query=form.querySelector('input').value;await renderDex();});form.querySelector('button').onclick=search;form.querySelector('input').onkeydown=e=>{if(e.key==='Enter')search();};tree.append(form);if(state.dex.tab==='strings'){const hint=document.createElement('div');hint.className='bundleHint';hint.textContent='点击字符串即可翻译并写回 DEX；保存工程后生效。';tree.append(hint);}rows=await rpc(state.dex.tab==='strings'?'dexStrings':'dexSearch',{query:state.dex.query});}
  if(!tree.isConnected)return;if(!rows.length){tree.insertAdjacentHTML('beforeend','<div class="empty">'+(state.dex.tab==='history'?'已打开的类将显示在此处。':state.dex.query?'无结果':'在上方输入搜索内容。')+'</div>');return;}
- for(const row of rows){const b=document.createElement('button');b.className='treeRow classRow';if(typeof row==='string'){b.innerHTML='<span class="treename">'+esc(row)+'</span>';b.onclick=()=>act(async()=>{await rpc('clipboard',{text:row});toast('字符串已复制');});}else{b.innerHTML='<span class="classicon">C</span><span class="treename">'+esc(row.name)+'</span>';b.onclick=()=>act(()=>openClass(row.class,'smali'));}tree.append(b);}
+ for(const row of rows){const b=document.createElement('button');b.className='treeRow classRow';if(typeof row==='string'){b.innerHTML='<span class="treename">'+esc(row)+'</span>';b.onclick=()=>act(()=>dexEditString(row));}else{b.innerHTML='<span class="classicon">C</span><span class="treename">'+esc(row.name)+'</span>';b.onclick=()=>act(()=>openClass(row.class,'smali'));}tree.append(b);}
 }
 async function saveProject(){const result=await rpc('dexCommit');state.dex.modified=false;toast('工程已保存。备份：'+result.backup);return result;}
 async function saveAndSignProject(){
@@ -338,6 +338,32 @@ async function saveAndSignProject(){
 }
 async function closeDex(){if(!state.dex.modified){state.screen='files';await refresh();return;}const d=dialog('保存工程','<p>将编译的更改保存到原文件？会保留备份。</p>',[['保存并签名 APK',async()=>{if(await saveAndSignProject()){state.screen='files';await refresh();}}],['保存并退出',async()=>{d.querySelectorAll('button').forEach(b=>b.disabled=true);try{await saveProject();closeModal();state.screen='files';await refresh();}finally{if(d.isConnected)d.querySelectorAll('button').forEach(b=>b.disabled=false);}}],['取消',closeModal],['直接退出',async()=>{state.dex.modified=false;closeModal();state.screen='files';await refresh();}]]);d.classList.add('stackedActions');}
 async function exportDex(){const folder=await ask('导出到文件夹',state.info.permission?state.info.home+'/下载':state.info.workspace);if(!folder)return;const result=await rpc('dexExport',{destination:folder});alertBox('导出完成',result.path+(result.needsSigning?'\n安装前请先签名此 APK 副本。':''));}
+function dexFolder(){return state.info&&state.info.permission?state.info.home+'/下载':state.info.workspace;}
+async function dexRepair(){
+ if(!await confirmBox('修复 DEX','将用 dexlib2 重新生成并校验当前工程中的 DEX。更改先写入临时工程，保存工程后才写回原文件。','修复'))return;
+ const r=await rpc('dexRepair');state.dex.modified=true;
+ alertBox('DEX 已修复',r.message+'\n文件：'+r.count+'\n'+r.files.map(x=>x.name+' · '+x.classes+' 个类').join('\n'));
+}
+async function dexProperties(){
+ const r=await rpc('dexProperties');
+ const details=r.files.map(f=>f.name+' · DEX '+f.version+' · API '+(f.api>=0?f.api:'未知')+'\nchecksum '+f.checksum+'\nSHA-1 '+f.signature).join('\n\n');
+ alertBox('DEX 属性',r.path+'\n大小：'+size(r.size)+'\n字符串：'+r.strings+'\n类型：'+r.types+'\n类：'+r.classes+'\n方法：'+r.methods+'\n字段：'+r.fields+'\n\n'+details);
+}
+async function dexToSmali(){
+ const folder=await ask('DEX 转 Smali',dexFolder(),'输出文件夹（需已存在）');if(!folder)return;
+ const r=await rpc('dexToSmali',{destination:folder});
+ dialog('Smali 已导出','<p class="break">'+esc(r.path)+'</p><p>共 '+r.smali+' 个 .smali 文件。</p>',[['关闭',closeModal],['打开文件夹',async()=>{closeModal();await navigate(state.active,{path:folder,archive:'',entry:''});}]]);
+}
+async function dexToJar(){
+ const folder=await ask('DEX 转 JAR',dexFolder(),'输出文件夹（需已存在）');if(!folder)return;
+ const r=await rpc('dexToJar',{destination:folder});
+ dialog('JAR 已生成','<p class="break">'+esc(r.path)+'</p><p>'+r.classes+' 个 .class，可用 JD-GUI 等工具查看。</p>'+(r.dexDir?'<p class="break">APK 内的 DEX 已先解压到：'+esc(r.dexDir)+'</p>':'')+'<p class="bundleHint">先在本地目录解压 DEX，再转换；不会在 APK 内直接生成 JAR。</p>',[['关闭',closeModal],['打开文件夹',async()=>{closeModal();await navigate(state.active,{path:folder,archive:'',entry:''});}]]);
+}
+function dexTranslation(){state.dex.tab='strings';state.dex.query='';toast('点击字符串即可翻译并写回 DEX');renderDex();}
+function dexEditString(original){
+ const d=dialog('翻译字符串','<label>原始字符串</label><pre class="diffText">'+esc(original)+'</pre><label>修改后的字符串</label><textarea id="dexStringValue" rows="6" spellcheck="false">'+esc(original)+'</textarea><p class="bundleHint">将替换所有 DEX 中相同的字符串字面量；保存工程后写入原文件。</p>',[['取消',closeModal],['应用',async()=>{const now=d.querySelector('#dexStringValue').value;if(now===original){closeModal();return;}const r=await rpc('dexReplaceStrings',{replacements:{[original]:now}});state.dex.modified=true;closeModal();toast('已替换 '+r.replaced+' 处，涉及 '+r.classes+' 个方法');await renderDex();}]]);
+ setTimeout(()=>{const t=d.querySelector('textarea');if(t&&t.isConnected){t.focus();t.setSelectionRange(0,0);}},30);
+}
 const ARSC_TYPES=[[0,'字符串',3],[1,'引用',1],[2,'属性',2],[3,'颜色',28],[4,'整数',16],[5,'十六进制',17],[6,'布尔',18],[7,'浮点',4],[8,'尺寸',5],[9,'分数',6],[10,'动态引用',7]];
 function arscHex(v){return '0x'+((Number(v)||0)>>>0).toString(16).padStart(8,'0');}
 function arscTypeLabel(t){const x=ARSC_TYPES.find(a=>a[2]===t||(t>=28&&t<=31&&a[2]===28));return x?x[1]:'0x'+(Number(t)||0).toString(16);}

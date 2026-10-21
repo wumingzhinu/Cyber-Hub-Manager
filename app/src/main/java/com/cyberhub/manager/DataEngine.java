@@ -61,6 +61,11 @@ public final class DataEngine {
     record("已优化 "+dst.getName()+(deep?"（深度）":""));return r.put("path",dst.getPath()).put("size",dst.length()).put("deep",deep);}
    case "sign":{File src=new File(a.getString("path")),parent=src.getParentFile().canWrite()?src.getParentFile():workspace,dst=FileOps.child(parent,strip(src.getName())+"_sign.apk");int suffix=2;while(dst.exists())dst=FileOps.child(parent,strip(src.getName())+"_sign-"+(suffix++)+".apk");String scheme=a.optString("scheme","v1v2v3");boolean v1=scheme.contains("1"),v2=scheme.contains("2"),v3=scheme.contains("3");if(!v1&&!v2&&!v3){v1=true;v2=true;v3=true;}sign(src,dst,v1,v2,v3);record("已签名 "+dst.getName());return dst.getPath();}
    case "dexFiles":return dexFiles(resolve(a));
+   case "dexProperties":return dex.properties();
+   case "dexRepair":{JSONObject r=dex.repair();record("已修复 DEX："+r.getInt("count")+" 个");return r;}
+   case "dexToSmali":{File out=new File(a.getString("destination"));JSONObject r=dex.toSmali(out);record("已导出 Smali："+r.getString("path"));return r;}
+   case "dexToJar":{File out=new File(a.getString("destination"));JSONObject r=dex.toJar(out);record("已生成 JAR："+r.getString("path"));return r;}
+   case "dexReplaceStrings":{JSONObject r=dex.replaceStrings(a);record("已替换 DEX 字符串 "+r.getInt("replaced")+" 处");return r;}
    case "dexOpen":return dex.open(resolve(a),a.getJSONArray("entries"));
    case "dexTree":return dex.tree(a.optString("prefix"));
    case "dexCode":return dex.code(a.getString("class"),a.optString("mode","smali"),a.optString("decompiler","auto"));
