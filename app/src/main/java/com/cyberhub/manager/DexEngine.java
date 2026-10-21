@@ -149,6 +149,48 @@ public final class DexEngine {
   }catch(Exception e){jar.delete();throw e;}finally{FileOps.deleteTree(work);}
   return new JSONObject().put("path",jar.getPath()).put("classes",classes).put("dexDir",dexDir==null?"":dexDir.getPath()).put("inputs",inputs.size());
  }
+ public JSONObject mergeDex(JSONObject a,File folder)throws Exception{
+  if(folder==null||!folder.isDirectory())throw new IOException("请选择一个已存在的输出文件夹");
+  File src=new File(a.getString("path"));boolean standalone=src.getName().toLowerCase(Locale.ROOT).endsWith(".dex");
+  List<String> names=new ArrayList<>();List<File> local=new ArrayList<>();
+  if(standalone){
+   File parent=src.getAbsoluteFile().getParentFile();File[] fs=parent==null?null:parent.listFiles();
+   if(fs!=null)for(File f:fs)if(f.isFile()&&f.getName().matches("classes(\\d*)\\.dex"))local.add(f);
+   if(local.isEmpty())local.add(src);
+   local.sort(Comparator.comparingInt(f->dexNumber(f.getName())));
+   if(local.size()<2)throw new IOException("至少需要两个 classes*.dex 文件才能合并");
+   for(File f:local)names.add(f.getName());
+  }else{
+   try(ZipFile z=new ZipFile(src)){
+    Enumeration<? extends ZipEntry> en=z.entries();
+    while(en.hasMoreElements()){ZipEntry e=en.nextElement();if(!e.isDirectory()&&e.getName().matches("classes(\\d*)\\.dex"))names.add(e.getName());}
+   }
+   names.sort(Comparator.comparingInt(DexEngine::dexNumber));
+   if(names.size()<2)throw new IOException("APK 内至少需要两个 classes*.dex 文件才能合并");
+  }
+  File work=new File(root,"merge-"+UUID.randomUUID());work.mkdirs();int maxApi=0;List<File> inputs=new ArrayList<>();
+  try{
+   for(int i=0;i<names.size();i++){
+    byte[] bytes=standalone?FileOps.read(local.get(i),128L*1024*1024):FileOps.zipEntry(src,names.get(i),128L*1024*1024);
+    File in=new File(work,"in-"+i+".dex");FileOps.writeAtomic(in,bytes,false);inputs.add(in);maxApi=Math.max(maxApi,apiOf(in));
+   }
+   Opcodes opcodes=Opcodes.forApi(maxApi);List<ClassDef> all=new ArrayList<>();Set<String> seen=new HashSet<>();
+   for(File in:inputs){DexBackedDexFile d=DexFileFactory.loadDexFile(in,opcodes);for(ClassDef c:d.getClasses()){if(!seen.add(c.getType()))throw new IOException("DEX 之间存在重复类："+c.getType());all.add(c);}}
+   File out=unusedFile(folder,"classes-merged.dex");
+   try{
+    DexPool.writeTo(out.getPath(),new ImmutableDexFile(opcodes,all));
+    DexBackedDexFile check=DexFileFactory.loadDexFile(out,Opcodes.forApi(apiOf(out)));
+    return new JSONObject().put("path",out.getPath()).put("dexes",names.size()).put("classes",check.getClasses().size());
+   }catch(Exception failure){
+    out.delete();StringBuilder msg=new StringBuilder(failure.getMessage()==null?"":failure.getMessage());
+    for(Throwable c=failure.getCause();c!=null;c=c.getCause())msg.append(' ').append(c.getMessage()==null?"":c.getMessage());
+    String text=msg.toString();
+    if(text.contains("out of range")||text.contains("Unsigned short")||text.contains("too many"))throw new IOException("合并后的 DEX 超出单个 DEX 限制，请减少 DEX 数量。",failure);
+    throw new IOException("合并 DEX 失败："+text,failure);
+   }
+  }finally{FileOps.deleteTree(work);}
+ }
+ private static int dexNumber(String n){String s=n.substring(7,n.length()-4);return s.isEmpty()?1:Integer.parseInt(s);}
  public JSONObject replaceStrings(JSONObject a)throws Exception{
   Map<String,String> exact=null;String find=null,repl="";boolean matchCase=a.optBoolean("matchCase",true);
   if(a.has("replacements")){exact=new LinkedHashMap<>();JSONObject m=a.getJSONObject("replacements");for(Iterator<String>it=m.keys();it.hasNext();){String k=it.next();exact.put(k,m.optString(k,""));}}

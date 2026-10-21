@@ -65,6 +65,7 @@ public final class DataEngine {
    case "dexRepair":{JSONObject r=dex.repair();record("已修复 DEX："+r.getInt("count")+" 个");return r;}
    case "dexToSmali":{File out=new File(a.getString("destination"));JSONObject r=dex.toSmali(out);record("已导出 Smali："+r.getString("path"));return r;}
    case "dexToJar":{File out=new File(a.getString("destination"));JSONObject r=dex.toJar(out);record("已生成 JAR："+r.getString("path"));return r;}
+   case "dexMerge":{File out=new File(a.getString("destination"));JSONObject r=dex.mergeDex(a,out);record("已合并 DEX："+r.getInt("classes")+" 个类");return r;}
    case "dexReplaceStrings":{JSONObject r=dex.replaceStrings(a);record("已替换 DEX 字符串 "+r.getInt("replaced")+" 处");return r;}
    case "dexOpen":return dex.open(resolve(a),a.getJSONArray("entries"));
    case "dexTree":return dex.tree(a.optString("prefix"));
