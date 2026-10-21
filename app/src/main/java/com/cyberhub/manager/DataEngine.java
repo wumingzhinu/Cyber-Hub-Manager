@@ -5,9 +5,9 @@ import org.json.*;import java.io.*;import java.nio.charset.StandardCharsets;impo
 import com.android.apksig.*;
 
 public final class DataEngine {
- final MainActivity activity;final File workspace,cache,trash;final DexEngine dex;final Map<String,Doc> documents=new HashMap<>();final Map<String,Map<String,byte[]>> archiveEdits=new HashMap<>();final Map<String,File> archiveOutputs=new HashMap<>();final LocalService services;private long docCounter=0;
+ final MainActivity activity;final File workspace,cache,trash;final DexEngine dex;final ArscEngine arsc;final Map<String,Doc> documents=new HashMap<>();final Map<String,Map<String,byte[]>> archiveEdits=new HashMap<>();final Map<String,File> archiveOutputs=new HashMap<>();final LocalService services;private long docCounter=0;
  static class Doc {File file;String archive,entry;Axml axml;long modified;}
- DataEngine(MainActivity a){activity=a;workspace=new File(a.getFilesDir(),"工作区");workspace.mkdirs();cache=new File(a.getCacheDir(),"entries");cache.mkdirs();trash=new File(a.getFilesDir(),"recycle");trash.mkdirs();dex=new DexEngine(new File(a.getCacheDir(),"dex"));services=new LocalService(workspace);
+ DataEngine(MainActivity a){activity=a;workspace=new File(a.getFilesDir(),"工作区");workspace.mkdirs();cache=new File(a.getCacheDir(),"entries");cache.mkdirs();trash=new File(a.getFilesDir(),"recycle");trash.mkdirs();dex=new DexEngine(new File(a.getCacheDir(),"dex"));arsc=new ArscEngine(this);services=new LocalService(workspace);
   File welcome=new File(workspace,"欢迎.txt");if(!welcome.exists())try{FileOps.writeAtomic(welcome,("赛博中枢管家 0.1\n\n点「授予文件访问权限」即可浏览手机文件。\n轻点文件打开；长按进行复制、移动、重命名或移入回收站。\nAPK：查看内容、编辑清单、打开 DEX、查看 Java/Smali。\n编辑会创建备份或生成独立的已编辑归档。\nJava 和 Smali 均可编辑。保存会编译更改；「保存并签名 APK」会校验签名并保留备份。\n\n网络服务仅在本应用进程运行时可用。\n").getBytes(StandardCharsets.UTF_8),false);}catch(Exception ignored){}
  }
  boolean permission(){return Build.VERSION.SDK_INT>=30?Environment.isExternalStorageManager():activity.checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)==PackageManager.PERMISSION_GRANTED;}
@@ -20,6 +20,19 @@ public final class DataEngine {
    case "read":return read(a);
    case "save":return save(a);
    case "pool":{byte[] b=FileOps.read(resolve(a),32L*1024*1024);List<String>ss=Axml.isBinary(b)?Axml.resourceStrings(b):Axml.resourceStrings(b);return new JSONArray(ss);}
+   case "arscOpen":return arsc.open(resolve(a),a.optString("archive"),a.optString("entry"),a.optString("name"));
+   case "arscBrowse":return arsc.browse(a.getString("session"),a.optInt("packageId",-1),a.optInt("typeId",-1),a.has("config")?a.getString("config"):null,a.optInt("offset",0),a.optInt("limit",200));
+   case "arscEntry":return arsc.entry(a.getString("session"),a.getInt("id"),a.has("config")?a.getString("config"):null);
+   case "arscEdit":return arsc.edit(a.getString("session"),a);
+   case "arscSearch":return arsc.search(a.getString("session"),a.optString("mode","name"),a.optString("query",""),a.optInt("limit",200));
+   case "arscPool":return arsc.pool(a.getString("session"),a.optInt("offset",0),a.optInt("limit",200),a.optString("query",""));
+   case "arscSearchEx":return arsc.searchEx(a.getString("session"),a);
+   case "arscTranslate":return arsc.translate(a.getString("session"),a.optString("config",""),a.optInt("offset",0),a.optInt("limit",100),a.optString("query",""));
+   case "arscTranslateAdd":return arsc.translateAdd(a.getString("session"),a.getString("qualifiers"));
+   case "arscQuery":return arsc.query(a.getString("session"),a.getString("query"));
+   case "arscBackup":return arsc.backup(a.getString("session"));
+   case "arscSave":{JSONObject r=arsc.save(a.getString("session"));record("已保存资源表 "+r.optString("path"));return r;}
+   case "arscClose":arsc.close(a.getString("session"));return true;
    case "resolve":return resolve(a).getPath();
    case "create":{File f=FileOps.child(new File(a.getString("path")),a.getString("name"));if(f.exists())throw new IOException("名称已存在");if(a.optBoolean("folder")){if(!f.mkdir())throw new IOException("无法创建文件夹");}else FileOps.writeAtomic(f,new byte[0],false);record("已创建 "+f);return f.getPath();}
    case "batchRename":{Object r=BatchFiles.rename(a.getJSONArray("files"));record("已重命名所选文件");return r;}
@@ -95,6 +108,11 @@ public final class DataEngine {
    if(output==null){File src=new File(d.archive);File parent=src.getParentFile().canWrite()?src.getParentFile():workspace;String ext=src.getName().endsWith(".apk")?".apk":".zip";output=new File(parent,strip(src.getName())+"-edited"+ext);int n=2;while(output.exists())output=new File(parent,strip(src.getName())+"-edited-"+(n++)+ext);archiveOutputs.put(d.archive,output);}
    FileOps.rewriteZip(new File(d.archive),output,edits);
   }record("已保存 "+output);return new JSONObject().put("path",output.getPath()).put("needsSigning",output.getName().endsWith(".apk"));
+ }
+ File archiveSave(String archive,String entry,byte[] bytes)throws Exception{
+  Map<String,byte[]>edits=archiveEdits.computeIfAbsent(archive,k->new HashMap<>());edits.put(entry,bytes);File output=archiveOutputs.get(archive);
+  if(output==null){File src=new File(archive);File parent=src.getParentFile().canWrite()?src.getParentFile():workspace;String ext=src.getName().endsWith(".apk")?".apk":".zip";output=new File(parent,strip(src.getName())+"-edited"+ext);int n=2;while(output.exists())output=new File(parent,strip(src.getName())+"-edited-"+(n++)+ext);archiveOutputs.put(archive,output);}
+  FileOps.rewriteZip(new File(archive),output,edits);return output;
  }
  String recycle(File f)throws Exception{
   if(!f.exists())throw new IOException("文件已不存在");String id=UUID.randomUUID().toString();File target=new File(trash,id);FileOps.copyTree(f,target);JSONObject meta=new JSONObject().put("path",f.getCanonicalPath()).put("name",f.getName()).put("time",System.currentTimeMillis()).put("id",id);FileOps.writeAtomic(new File(trash,id+".json"),meta.toString().getBytes(StandardCharsets.UTF_8),false);FileOps.deleteTree(f);record("已移入回收站 "+f.getName());return id;

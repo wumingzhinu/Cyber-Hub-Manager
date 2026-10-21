@@ -51,7 +51,7 @@ Java compilation requires valid, compilable source. Decompiled Java is not guara
 | Binary XML | Decode/edit/encode; preserve existing typed values and resource IDs. New symbolic resources need a separate resource compiler. |
 | DEX | MultiDex tree/history/search, string occurrences, member navigation, usages/subclasses/overrides, Smali/Java editing, compile/save/export/sign. |
 | Editors | Syntax colors, line tools, search/replace, go to line, wrap, undo/redo, export, text zoom. Smali register analysis/increase. |
-| Resources | ARSC/AXML string-pool viewing, filtering, copy and export. Full resource-table editing is not included. |
+| Resources | resources.arsc opens a four-way chooser: ArscEditor, ArscEditor++ (Browse/Recent/Search/Constants workspace), translation mode with per-language comparison and new-language cloning, and a resource query tool for `@`/`?` names, IDs, colors and base conversions. Editors support package/type/config/entry browsing, scalar and complex values, rename/add/delete, per-config import/delete, string-pool replace, and save with APK re-sign support. AXML string-pool viewing remains available separately. |
 | Installed apps | List/filter and inspect/extract base APKs. Installed-app export reads the base APK; use an APKS bundle for split conversion. |
 | Tools | Local profile/preferences, activity record, file comparisons, shell terminal, own-format `.sh` plugins. |
 | Network | FTP/explicit FTPS client; token-protected read-only local HTTP sharing; local MCP `list_files`/`read_text`. |
@@ -66,7 +66,7 @@ Selecting several files/folders in the two-pane file view supports three continu
 
 A plain long-press without sliding still opens the file action menu as before; a tap with no active selection still opens the file/folder as before.
 
-Remote/network tools run only while the app process lives and respect Android permissions. Terminal commands have a 20-second timeout. DEX searches are capped; usage search covers selected DEX instructions/type declarations, not reflection. Register analysis is a usage/count view, not liveness analysis. General resource-table editing, root escalation, cloud subscriptions, remote desktop control and proprietary plugins are not provided.
+Remote/network tools run only while the app process lives and respect Android permissions. Terminal commands have a 20-second timeout. DEX searches are capped; usage search covers selected DEX instructions/type declarations, not reflection. Register analysis is a usage/count view, not liveness analysis. Root escalation, cloud subscriptions, remote desktop control and proprietary plugins are not provided. ARSC editing handles compiled resource tables; building new resource IDs still requires a resource compiler.
 
 ## Validation and limits
 

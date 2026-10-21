@@ -132,7 +132,7 @@ function renderFiles(){iconObservers.forEach(o=>o.disconnect());iconObservers=[]
 function renderFileBottom(){const bottom=$('#bottom');bottom.replaceChildren(iconButton('back','返回',()=>backPane()),iconButton('forward','前进',()=>backPane(true)),iconButton('plus','新建或粘贴',createMenu),iconButton('swap','交换窗格',async()=>{[state.panes[0],state.panes[1]]=[state.panes[1],state.panes[0]];state.active=1-state.active;renderFiles();}),iconButton('up','上级目录',up));if(selectedFiles().length)selectionBar();}
 
 function fileArgs(f){return f.archive?{archive:f.archive,entry:f.entry,path:f.archive}:{path:f.path};}
-async function openFile(f,index=state.active){if(f.dir)return navigate(index,f.archive?{path:activePane().path,archive:f.archive,entry:f.entry}:{path:f.path,archive:'',entry:''});const type=fileType(f);if(type==='apks')return apksOptions(f,index);if(type==='apk')return showApk(fileArgs(f));if(type==='zip'){const path=await rpc('resolve',fileArgs(f));return navigate(index,{path:activePane().path,archive:path,entry:''});}if(/\.(7z|tar|tar\.(gz|xz|zst|bz2|lz4)|gz|gzip|001)$/i.test(f.name))return extractDialog(f);if(type==='dex')return chooseDex(f.archive?{path:f.archive}:fileArgs(f),f.name);if(type==='arsc')return showPool(fileArgs(f),f.name);if(type==='xml')return options('打开方式…',[{label:'反编译',run:()=>openText(fileArgs(f))},{label:'字符串池',run:()=>showPool(fileArgs(f),f.name)}]);return openText(fileArgs(f));}
+async function openFile(f,index=state.active){if(f.dir)return navigate(index,f.archive?{path:activePane().path,archive:f.archive,entry:f.entry}:{path:f.path,archive:'',entry:''});const type=fileType(f);if(type==='apks')return apksOptions(f,index);if(type==='apk')return showApk(fileArgs(f));if(type==='zip'){const path=await rpc('resolve',fileArgs(f));return navigate(index,{path:activePane().path,archive:path,entry:''});}if(/\.(7z|tar|tar\.(gz|xz|zst|bz2|lz4)|gz|gzip|001)$/i.test(f.name))return extractDialog(f);if(type==='dex')return chooseDex(f.archive?{path:f.archive}:fileArgs(f),f.name);if(type==='arsc')return arscOpenWith(fileArgs(f),f.name);if(type==='xml')return options('打开方式…',[{label:'反编译',run:()=>openText(fileArgs(f))},{label:'字符串池',run:()=>showPool(fileArgs(f),f.name)}]);return openText(fileArgs(f));}
 function fileMenu(){menu([{icon:'check',label:'全选',run:()=>{activePane().selected=new Set(activePane().items.map(fileKey));renderFiles();}},{icon:'copy',label:'书签',run:bookmarks},{icon:'refresh',label:'刷新',run:refresh},{icon:'search',label:'筛选当前文件夹',run:async()=>{const q=await ask('查找文件','','文件名包含');if(q===null)return;await loadPane(state.active);activePane().items=activePane().items.filter(f=>f.name.toLowerCase().includes(q.toLowerCase()));renderFiles();}},{icon:'compass',label:'跳转到路径',run:async()=>{const p=await ask('跳转到路径',activePane().path);if(p)await navigate(state.active,{path:p,archive:'',entry:''});}},{icon:'check',label:'显示隐藏文件',end:pref.hidden?'✓':'',run:async()=>{pref.hidden=!pref.hidden;savePref();await refresh();}},{icon:'settings',label:'设置',run:preferences},{icon:'info',label:'关于',run:about}]);}
 function createMenu(){const rows=[];if(!activePane().archive){rows.push({label:'新建文件夹',icon:'folder',run:()=>createFile(true)},{label:'新建文本文件',icon:'text',run:()=>createFile(false)});if(state.clipboard)rows.push({label:`粘贴 ${state.clipboard.name}`,icon:'copy',run:paste});}if(!rows.length)return toast('请先解压归档，才能在文件夹内创建文件。');options('新建 / 粘贴',rows);}
 async function createFile(folder){const name=await ask(folder?'新建文件夹':'新建文件',folder?'新建文件夹':'未命名.txt');if(!name)return;const path=await rpc('create',{path:activePane().path,name,folder});await refresh();if(!folder)await openText({path});}
@@ -338,6 +338,435 @@ async function saveAndSignProject(){
 }
 async function closeDex(){if(!state.dex.modified){state.screen='files';await refresh();return;}const d=dialog('保存工程','<p>将编译的更改保存到原文件？会保留备份。</p>',[['保存并签名 APK',async()=>{if(await saveAndSignProject()){state.screen='files';await refresh();}}],['保存并退出',async()=>{d.querySelectorAll('button').forEach(b=>b.disabled=true);try{await saveProject();closeModal();state.screen='files';await refresh();}finally{if(d.isConnected)d.querySelectorAll('button').forEach(b=>b.disabled=false);}}],['取消',closeModal],['直接退出',async()=>{state.dex.modified=false;closeModal();state.screen='files';await refresh();}]]);d.classList.add('stackedActions');}
 async function exportDex(){const folder=await ask('导出到文件夹',state.info.permission?state.info.home+'/下载':state.info.workspace);if(!folder)return;const result=await rpc('dexExport',{destination:folder});alertBox('导出完成',result.path+(result.needsSigning?'\n安装前请先签名此 APK 副本。':''));}
+const ARSC_TYPES=[[0,'字符串',3],[1,'引用',1],[2,'属性',2],[3,'颜色',28],[4,'整数',16],[5,'十六进制',17],[6,'布尔',18],[7,'浮点',4],[8,'尺寸',5],[9,'分数',6],[10,'动态引用',7]];
+function arscHex(v){return '0x'+((Number(v)||0)>>>0).toString(16).padStart(8,'0');}
+function arscTypeLabel(t){const x=ARSC_TYPES.find(a=>a[2]===t||(t>=28&&t<=31&&a[2]===28));return x?x[1]:'0x'+(Number(t)||0).toString(16);}
+function arscChoice(t){let i=ARSC_TYPES.findIndex(a=>a[2]===t);if(i<0&&t>=28&&t<=31)i=3;return i<0?0:i;}
+function arscOptions(selected){return ARSC_TYPES.map((a,i)=>`<option value="${i}" ${i===selected?'selected':''}>${a[1]}</option>`).join('');}
+function arscOpenWith(args,name){
+  const modes=[['plus','Arsc编辑器++'],['editor','Arsc编辑器'],['translate','翻译模式'],['query','资源查询']];
+  const body='<div class="arscChooser">'+modes.map((m,i)=>`<label><input type="radio" name="arscOpenMode" value="${m[0]}" ${i===0?'checked':''}><span>${m[1]}</span></label>`).join('')+'</div>';
+  dialog('打开方式…',body,[['取消',closeModal],['打开',()=>{
+    const mode=document.querySelector('input[name="arscOpenMode"]:checked').value;
+    closeModal();
+    if(mode==='query')return showArscQuery(args,name);
+    if(mode==='translate')return showArscTranslate(args,name);
+    if(mode==='plus')return showArsc(args,name,'plus');
+    return showArsc(args,name,'editor');
+  }]]);
+}
+async function showArsc(args,name,mode){
+  const s=await rpc('arscOpen',Object.assign({},args,{name:name||''}));
+  state.arsc={session:s.session,name:s.name||name||'resources.arsc',size:s.size||0,archive:s.archive||'',entry:s.entry||'',packages:s.packages||[],stringCount:s.stringCount||0,level:'root',pkgId:-1,typeId:-1,pkgName:'',typeName:'',config:'',configLabel:'',offset:0,limit:200,query:'',rows:[],entryData:null,dirty:false,mode:mode||'editor',tab:'explore',history:[],search:{query:'',type:'value',caseSensitive:false,regex:false,path:'/'},poolFilter:''};
+  state.previous=state.screen==='tool'?state.previous:'files';state.screen='tool';
+  await arscRender();
+}
+function arscHeader(){
+  const a=state.arsc;if(!a)return;
+  let title=a.mode==='plus'?'Arsc编辑器++':'Arsc编辑器',sub=a.name;
+  if(a.level==='package'){title=a.pkgName;sub='包 '+arscHex(a.pkgId)+' · '+a.name;}
+  else if(a.level==='type'){title=a.typeName;sub='类型 '+arscHex(a.typeId)+' · '+a.name;}
+  else if(a.level==='config'){title=a.configLabel||'默认配置';sub=a.typeName+' · '+a.name;}
+  else if(a.level==='entry'){title=a.entryData?a.entryData.name:'资源';sub=a.entryData?arscHex(a.entryData.id):a.name;}
+  else if(a.level==='pool'){title='字符常量池';sub=a.name+' · '+a.stringCount+' 项';}
+  else if(a.level==='search'){title='搜索结果';sub=a.query||'';}
+  const actions=[{icon:'back',label:a.level==='root'?'关闭资源表':'返回',run:arscBack},{icon:'search',label:'搜索资源',run:()=>a.mode==='plus'?(a.tab='search',a.level='root',arscRender()):options('搜索资源',[{icon:'search',label:'按资源名搜索',run:()=>arscSearchDialog('name')},{icon:'pin',label:'按资源 ID 搜索',run:()=>arscSearchDialog('id')},{icon:'text',label:'按值搜索',run:()=>arscSearchDialog('value')}])},{icon:'save',label:'保存资源表',run:arscSave},{icon:'more',label:'资源表菜单',run:a.mode==='plus'?arscPlusMenu:arscMenu}];
+  header(title,sub,actions,true);
+  $('#subbar').innerHTML=a.mode==='plus'?arscPlusTabs(a):'';
+  if(a.mode==='plus')document.querySelectorAll('[data-arsc-tab]').forEach(b=>b.onclick=()=>act(async()=>{a.tab=b.dataset.arscTab;a.level='root';a.entryData=null;a.offset=0;await arscRender();}));
+  $('#bottom').innerHTML='';
+  $('#content').innerHTML='<div class="toolpage" id="arscBody"></div>';
+}
+function arscPlusTabs(a){
+  const tabs=[['explore','浏览'],['history','最近'],['search','搜索'],['constants','常量']];
+  return '<div class="arscTabs">'+tabs.map(t=>`<button class="arscTab ${a.tab===t[0]?'on':''}" data-arsc-tab="${t[0]}">${t[1]}</button>`).join('')+'</div>';
+}
+async function arscRender(){
+  const a=state.arsc;if(!a)return;
+  arscHeader();
+  const body=$('#arscBody');if(!body)return;
+  try{
+    if(a.mode==='plus'&&a.level!=='entry'){
+      if(a.tab==='history'){
+        body.innerHTML='<div class="sectionLabel">最近打开</div>';
+        if(!a.history.length)body.insertAdjacentHTML('beforeend','<div class="empty">还没有打开过资源</div>');
+        for(const h of a.history){const b=document.createElement('button');b.className='listrow';b.innerHTML=`<span class="main">${esc(h.name||'(未命名)')}<small>${arscHex(h.id)} · ${esc(h.type||'')} · ${esc(h.config||'默认')}</small></span><span class="pill">${esc((h.value||'').slice(0,24))}</span>`;b.onclick=()=>act(()=>arscOpenEntry(h.id,h.config||''));body.append(b);}
+        return;
+      }
+      if(a.tab==='search'){
+        const s=a.search||{};
+        body.innerHTML=`<div class="sectionLabel">功能</div>
+          <div class="arscSearchCard">
+            <label>查找内容</label><input id="arscPlusQuery" value="${esc(s.query||'')}" autocomplete="off" spellcheck="false">
+            <label>路径</label><input id="arscPlusPath" value="${esc(s.path||'/')}" autocomplete="off" spellcheck="false">
+            <label>搜索类型</label><select id="arscPlusType"><option value="code">代码</option><option value="id">资源ID</option><option value="string">字符串</option><option value="int">整数</option><option value="color">颜色</option></select>
+            <label class="check"><input type="checkbox" id="arscPlusCase" ${s.caseSensitive?'checked':''}>区分大小写</label>
+            <label class="check"><input type="checkbox" id="arscPlusRegex" ${s.regex?'checked':''}>正则表达式</label>
+            <button class="primary" id="arscPlusSearchBtn">搜索</button>
+          </div>
+          <div id="arscPlusResults"></div>`;
+        $('#arscPlusType').value=s.type||'code';
+        const results=$('#arscPlusResults');
+        const rows=a.searchRows||[];
+        results.innerHTML='<div class="sectionLabel">结果 · '+rows.length+(rows.length>=200?'+':'')+'</div>';
+        for(const e of rows){const b=document.createElement('button');b.className='listrow';b.innerHTML=`<span class="main">${esc(e.name||'(未命名)')}<small>${arscHex(e.id)} · ${esc(e.package||'')}:${esc(e.type||'')} · ${esc(e.config||'默认')}</small></span><span class="pill">${esc((e.value||'').slice(0,28))}</span>`;b.onclick=()=>act(()=>arscOpenEntry(e.id,e.config||''));results.append(b);}
+        $('#arscPlusSearchBtn').onclick=()=>act(async()=>{
+          const q=$('#arscPlusQuery').value.trim();if(!q)return toast('请输入查找内容');
+          a.search={query:q,path:$('#arscPlusPath').value.trim()||'/',type:$('#arscPlusType').value,caseSensitive:$('#arscPlusCase').checked,regex:$('#arscPlusRegex').checked};
+          const r=await rpc('arscSearchEx',{session:a.session,mode:a.search.type,query:q,path:a.search.path,caseSensitive:a.search.caseSensitive,regex:a.search.regex,limit:200});
+          a.searchRows=r.rows||[];await arscRender();if(!a.searchRows.length)toast('没有匹配项');
+        });
+        return;
+      }
+      if(a.tab==='constants'){
+        const off=a.offset||0,lim=a.limit||200,r=await rpc('arscPool',{session:a.session,offset:off,limit:lim,query:a.poolFilter||''});
+        body.innerHTML=`<div class="sectionLabel">功能</div>
+          <button class="listrow" data-plus-reload><span class="main">重新加载<small>刷新字符常量池</small></span>${icon('refresh')}</button>
+          <button class="listrow" data-plus-filter><span class="main">过滤<small>${esc(a.poolFilter||'显示全部字符串')}</small></span>${icon('search')}</button>
+          <button class="listrow" data-plus-replace><span class="main">替换<small>批量替换字符串池</small></span>${icon('swap')}</button>
+          <div class="sectionLabel"><span>字符常量池</span><span class="pill">${r.total}</span></div><div id="arscPlusPool"></div>`;
+        const rows=$('#arscPlusPool');
+        for(const x of r.rows||[]){const b=document.createElement('button');b.className='listrow';b.innerHTML=`<small>${x.index}</small><span class="main">${esc(x.text)}</span>`;b.onclick=()=>act(()=>arscEditPool(x.index,x.text));rows.append(b);}
+        arscPager(rows,r.total,a);
+        body.querySelector('[data-plus-reload]').onclick=()=>act(async()=>{a.offset=0;await arscRender();});
+        body.querySelector('[data-plus-filter]').onclick=()=>act(async()=>{const v=await ask('过滤字符常量池',a.poolFilter||'','包含文本（留空显示全部）');if(v===null)return;a.poolFilter=v.trim();a.offset=0;await arscRender();});
+        body.querySelector('[data-plus-replace]').onclick=()=>act(arscBatchReplace);
+        return;
+      }
+    }
+    if(a.level==='root'){
+      const r=await rpc('arscBrowse',{session:a.session,packageId:-1,typeId:-1,offset:0,limit:1});
+      const pkgs=r.packages||[];
+      if(a.mode==='plus'){
+        body.innerHTML='<div class="sectionLabel">包</div>';
+      }else{
+        body.innerHTML=`<p>${pkgs.length} 个包 · 字符常量池 ${r.stringCount||a.stringCount} 项 · ${(a.size/1024).toFixed(1)} KB</p>
+        <button class="listrow" data-arsc-pool><span class="main">字符常量池<small>查看、筛选、编辑全局字符串</small></span><span class="pill">${r.stringCount||a.stringCount}</span></button>
+        <button class="listrow" data-arsc-search="value"><span class="main">搜索资源值<small>字符串值包含指定文本</small></span>${icon('search')}</button>
+        <button class="listrow" data-arsc-search="id"><span class="main">ID定位资源<small>0x7f010001</small></span>${icon('pin')}</button>
+        <div class="sectionLabel">包</div>`;
+      }
+      for(const p of pkgs){const b=document.createElement('button');b.className='listrow';b.innerHTML=`<span class="main">${esc(p.name)}<small>[${(p.id||0).toString(16).toUpperCase()}] · ${(p.types||[]).length} 个类型</small></span>${icon('arsc')}`;b.onclick=()=>act(async()=>{a.level='package';a.pkgId=p.id;a.pkgName=p.name;a.offset=0;await arscRender();});body.append(b);}
+      if(a.mode!=='plus'){
+        body.querySelector('[data-arsc-pool]').onclick=()=>act(async()=>{a.level='pool';a.offset=0;a.query='';await arscRender();});
+        body.querySelectorAll('[data-arsc-search]').forEach(b=>b.onclick=()=>act(()=>arscSearchDialog(b.dataset.arscSearch)));
+      }
+      return;
+    }
+    if(a.level==='package'){
+      const r=await rpc('arscBrowse',{session:a.session,packageId:a.pkgId,typeId:-1,offset:0,limit:1});
+      body.innerHTML='<div class="sectionLabel">类型</div>';
+      for(const t of r.types||[]){const b=document.createElement('button');b.className='listrow';b.innerHTML=`<span class="main">${esc(t.name)}<small>${arscHex(t.id)} · ${t.count} 个条目 · ${t.configs} 个配置</small></span>${icon('layers')}`;b.onclick=()=>act(async()=>{a.level='type';a.typeId=t.id;a.typeName=t.name;a.offset=0;await arscRender();});body.append(b);}
+      return;
+    }
+    if(a.level==='type'){
+      const r=await rpc('arscBrowse',{session:a.session,packageId:a.pkgId,typeId:a.typeId,offset:0,limit:1});
+      body.innerHTML='<div class="sectionLabel">配置</div>';
+      for(const c of r.configs||[]){const b=document.createElement('button');b.className='listrow';b.innerHTML=`<span class="main">${esc(c.label)}<small>${esc(c.qualifiers||'(默认)')} · ${c.count} 个条目</small></span>${icon('settings')}`;b.onclick=()=>act(async()=>{a.level='config';a.config=c.qualifiers;a.configLabel=c.label;a.offset=0;await arscRender();});body.append(b);}
+      return;
+    }
+    if(a.level==='config'){
+      const r=await rpc('arscBrowse',{session:a.session,packageId:a.pkgId,typeId:a.typeId,config:a.config,offset:a.offset,limit:a.limit});
+      body.innerHTML=`<div class="sectionLabel"><span>${esc(a.typeName)} · ${esc(a.configLabel||'默认')}</span><span class="pill">${r.total} 项</span></div>`;
+      for(const e of r.entries||[]){const b=document.createElement('button');b.className='listrow';b.innerHTML=`<span class="main">${esc(e.name||'(未命名)')}<small>${arscHex(e.id)} · ${e.complex?'集合值':esc(e.type||arscTypeLabel(e.type))}</small></span><span class="pill">${esc(e.complex?'complex':(e.value||'').slice(0,28))}</span>`;b.onclick=()=>act(()=>arscOpenEntry(e.id,e.config));body.append(b);}
+      arscPager(body,r.total,a);
+      return;
+    }
+    if(a.level==='entry'){
+      arscRenderEntry(body,a);
+      return;
+    }
+    if(a.level==='pool'){
+      const r=await rpc('arscPool',{session:a.session,offset:a.offset,limit:a.limit,query:a.query});
+      body.innerHTML=`<div class="searchline"><input id="arscPoolSearch" placeholder="筛选字符串…" value="${esc(a.query)}"><button id="arscPoolGo">搜索</button><button id="arscPoolReplace">批量替换</button></div><div id="arscPoolRows"></div>`;
+      const rows=$('#arscPoolRows');
+      for(const s of r.rows||[]){const b=document.createElement('button');b.className='listrow';b.innerHTML=`<small>${s.index}</small><span class="main">${esc(s.text)}</span>`;b.onclick=()=>act(()=>arscEditPool(s.index,s.text));rows.append(b);}
+      arscPager(rows,r.total,a);
+      const go=()=>act(async()=>{a.query=$('#arscPoolSearch').value.trim();a.offset=0;await arscRender();});
+      $('#arscPoolGo').onclick=go;$('#arscPoolSearch').onkeydown=e=>{if(e.key==='Enter')go();};
+      $('#arscPoolReplace').onclick=()=>act(arscBatchReplace);
+      return;
+    }
+    if(a.level==='search'){
+      body.innerHTML=`<div class="sectionLabel">结果 · ${a.rows.length}${a.rows.length>=200?'+':''}</div>`;
+      for(const e of a.rows){const b=document.createElement('button');b.className='listrow';b.innerHTML=`<span class="main">${esc(e.name||'(未命名)')}<small>${arscHex(e.id)} · ${esc(e.config||'默认')}</small></span><span class="pill">${esc((e.value||'').slice(0,28))}</span>`;b.onclick=()=>act(()=>arscOpenEntry(e.id,e.config));body.append(b);}
+      return;
+    }
+  }catch(e){body.innerHTML=`<div class="empty">${esc(e.message||e)}</div>`;}
+}
+function arscPager(container,total,a){
+  if(!total||total<=a.limit)return;
+  const bar=document.createElement('div');bar.className='searchline';
+  bar.innerHTML=`<button ${a.offset<=0?'disabled':''} data-page="prev">上一页</button><span class="muted" style="flex:1;text-align:center">${a.offset+1}–${Math.min(a.offset+a.limit,total)} / ${total}</span><button ${a.offset+a.limit>=total?'disabled':''} data-page="next">下一页</button>`;
+  const p=bar.querySelector('[data-page="prev"]'),n=bar.querySelector('[data-page="next"]');
+  if(p)p.onclick=()=>act(async()=>{a.offset=Math.max(0,a.offset-a.limit);await arscRender();});
+  if(n)n.onclick=()=>act(async()=>{a.offset+=a.limit;await arscRender();});
+  container.append(bar);
+}
+async function arscOpenEntry(id,config){
+  const a=state.arsc;
+  const e=await rpc('arscEntry',{session:a.session,id:id,config:config||''});
+  a.entryData=e;a.level='entry';
+  if(a.mode==='plus'){
+    const h={id:e.id,config:e.config||'',name:e.name||'',type:e.type||'',value:e.complex?'[集合值]':(e.value||'')};
+    a.history=(a.history||[]).filter(x=>!(x.id===h.id&&x.config===h.config));a.history.unshift(h);a.history=a.history.slice(0,50);
+  }
+  await arscRender();
+}
+function arscRenderEntry(body,a){
+  const e=a.entryData;if(!e){body.innerHTML='<div class="empty">资源已不存在</div>';return;}
+  body.innerHTML=`<div class="dataGrid"><span>资源名称</span><b>${esc(e.name||'')}</b><span>资源 ID</span><b>${arscHex(e.id)}</b><span>所属类型</span><b>${esc(e.package||'')}:${esc(e.type||'')}</b><span>配置</span><b>${esc(e.configLabel||e.config||'默认')}</b><span>值类型</span><b>${e.complex?'集合值':esc(e.typeName||arscTypeLabel(e.type))}</b><span>可见性</span><b>${e.public?'public':'private'}</b>${e.parentId?`<span>父样式</span><b>${arscHex(e.parentId)} ${esc(e.parent||'')}</b>`:''}</div>`;
+  if(e.complex){
+    body.insertAdjacentHTML('beforeend',`<div class="sectionLabel"><span>集合值</span><span class="pill">${(e.values||[]).length} 项</span></div>`);
+    for(const v of e.values||[]){const b=document.createElement('button');b.className='listrow';b.innerHTML=`<span class="main">${esc(v.name||arscHex(v.nameId))}<small>${esc(v.typeName)} · 名称 ID ${arscHex(v.nameId)}</small></span><span class="pill">${esc(v.value)}</span>`;b.onclick=()=>act(()=>arscValueEditor(a,e,v.index,false));body.append(b);}
+  }else{
+    body.insertAdjacentHTML('beforeend',`<div class="sectionLabel">值</div><button class="listrow" id="arscScalar"><span class="main">${esc(e.value||'(空)')}<small>${esc(e.typeName||arscTypeLabel(e.type))} · 0x${((Number(e.data)||0)>>>0).toString(16)}</small></span>${icon('edit')}</button>`);
+    body.querySelector('#arscScalar').onclick=()=>act(()=>arscValueEditor(a,e,-1,false));
+  }
+  body.insertAdjacentHTML('beforeend',`<div class="sectionLabel">操作</div><div class="actionGrid" id="arscActions"></div>`);
+  const acts=$('#arscActions');
+  const add=(label,ic,fn)=>{const b=document.createElement('button');b.className='listrow';b.innerHTML=icon(ic)+`<span class="main">${label}</span>`;b.onclick=()=>act(fn);acts.append(b);};
+  add('重命名资源','edit',()=>arscRename(e));
+  add('添加配置（复制当前值）','plus',()=>arscAddConfig(e));
+  if(e.complex)add('添加集合值','plus',()=>arscValueEditor(a,e,-1,true));
+  if(e.complex&&e.type==='style')add('编辑父样式','edit',()=>arscEditParent(e));
+  add('删除值','trash',()=>arscDeleteValue(e));
+  add('删除资源','trash',()=>arscDeleteEntry(e));
+  add('复制资源 ID','copy',async()=>{await rpc('clipboard',{text:arscHex(e.id)});toast('已复制资源 ID');});
+  add('复制资源名','copy',async()=>{await rpc('clipboard',{text:(e.package?e.package+':':'')+(e.type?e.type+'/':'')+e.name});toast('已复制资源名');});
+  if(!e.complex)add('复制值','copy',async()=>{await rpc('clipboard',{text:e.value||''});toast('已复制');});
+}
+async function arscValueEditor(a,e,index,add){
+  const value=(()=>{if(index>=0&&e.values&&e.values[index]){const v=e.values[index];return (v.type===1||v.type===2||v.type===7||v.type===8)?arscHex(v.data):String(v.value||'');}if(add)return '';if(e.type===1||e.type===2||e.type===7||e.type===8)return arscHex(e.data);if(e.type===5||e.type===6)return arscHex(e.data);return String(e.value||'');})();
+  const type=(index>=0&&e.values&&e.values[index])?e.values[index].type:(e.type||3);
+  const body=`<label>值类型</label><select id="arscValueType">${arscOptions(arscChoice(type))}</select><label>${add?'新值':'值'}</label><input id="arscValueText" value="${esc(value)}" autocomplete="off" spellcheck="false"><p class="muted">字符串直接输入；引用/属性填 0x7f010001、@string/name 或 ?attr/name；颜色填 #AARRGGBB；尺寸/分数填原始 32 位值（0x… 或十进制）。</p>${add?`<label>名称资源 ID</label><input id="arscNameId" value="0x01000000" autocomplete="off" spellcheck="false"><p class="muted">attr/array/style 等集合项的名称 ID。</p>`:''}`;
+  dialog(add?'添加集合值':'编辑资源值',body,[['取消',closeModal],['保存',()=>arscCommitValue(a,e,index,add)]]);
+}
+async function arscCommitValue(a,e,index,add){
+  const choice=Number($('#arscValueType').value),type=ARSC_TYPES[choice][2],value=$('#arscValueText').value;
+  const args={session:a.session,op:add?'addValue':'setValue',id:e.id,config:e.config||'',valueIndex:index,type:type,value:value};
+  if(add){const nid=$('#arscNameId').value.trim();args.nameId=nid||'0';}
+  await rpc('arscEdit',args);a.dirty=true;closeModal();toast('资源值已更新');
+  if(a.level==='entry'){await arscOpenEntry(e.id,e.config||'');}else{await arscRender();}
+}
+async function arscBatchReplace(){
+  const a=state.arsc;
+  const find=await ask('批量替换字符串','','查找文本（区分大小写）');if(find===null||!find)return;
+  const replace=await ask('批量替换字符串','','替换为（可留空）');if(replace===null)return;
+  if(!await confirmBox('批量替换',`将在全局字符串池中替换所有包含“${esc(find)}”的字符串。`,'替换'))return;
+  const r=await rpc('arscEdit',{session:a.session,op:'replacePool',find:find,replace:replace});a.dirty=!!r.count;
+  toast('已替换 '+r.count+' 条字符串');await arscRender();
+}
+async function arscEditPool(index,text){
+  const a=state.arsc,v=await ask('编辑字符串',text,'字符串 '+index);
+  if(v===null)return;
+  await rpc('arscEdit',{session:a.session,op:'setPool',index:index,text:v});a.dirty=true;toast('字符串已更新');await arscRender();
+}
+async function arscRename(e){
+  const a=state.arsc,v=await ask('重命名资源',e.name,'新名称');
+  if(v===null||!v.trim())return;
+  await rpc('arscEdit',{session:a.session,op:'rename',id:e.id,config:e.config||'',name:v.trim()});a.dirty=true;toast('已重命名');await arscOpenEntry(e.id,e.config||'');
+}
+async function arscAddConfig(e){
+  const a=state.arsc,v=await ask('添加配置','','配置限定符（如 en-rUS、zh-rCN、night；留空为默认）');
+  if(v===null)return;
+  await rpc('arscEdit',{session:a.session,op:'importConfig',id:e.id,config:e.config||'',from:e.config||'',qualifiers:v.trim()});a.dirty=true;toast('已添加配置');await arscOpenEntry(e.id,v.trim());
+}
+async function arscEditParent(e){
+  const a=state.arsc;
+  const v=await ask('编辑父样式',e.parent||arscHex(e.parentId||0),'父样式 ID 或 [包:]style/名称');
+  if(v===null)return;
+  await rpc('arscEdit',{session:a.session,op:'setParent',id:e.id,config:e.config||'',parentId:v.trim()});a.dirty=true;toast('父样式已更新');await arscOpenEntry(e.id,e.config||'');
+}
+async function arscDeleteValue(e){
+  const a=state.arsc;
+  if(!e.complex)return toast('标量值请直接编辑');
+  const v=await ask('删除集合值','','输入要删除的值序号（从 0 开始）');
+  if(v===null)return;
+  const index=Number(v);if(!Number.isInteger(index)||index<0)return toast('序号无效');
+  if(!await confirmBox('删除集合值','确定删除第 '+index+' 项？','删除'))return;
+  await rpc('arscEdit',{session:a.session,op:'removeValue',id:e.id,config:e.config||'',valueIndex:index});a.dirty=true;toast('已删除');await arscOpenEntry(e.id,e.config||'');
+}
+async function arscClose(){
+  const a=state.arsc;if(!a)return window.goBack();
+  if(a.dirty&&!await confirmBox('放弃修改？','资源表还有未保存的修改。','放弃并关闭'))return;
+  await rpc('arscClose',{session:a.session});state.arsc=null;state.screen='files';await refresh();
+}
+async function arscDeleteEntry(e){
+  const a=state.arsc;
+  const all=await new Promise(resolve=>{dialog('删除资源',`<p>选择删除范围。此操作会清空资源值，保存后生效。</p><p class="muted">${esc(e.name||'')}</p>`,[['取消',()=>{closeModal();resolve(null);}],['当前配置',()=>{closeModal();resolve(false);}],['所有配置',()=>{closeModal();resolve(true);}]]);});
+  if(all===null)return;
+  await rpc('arscEdit',{session:a.session,op:'deleteEntry',id:e.id,config:e.config||'',all:all});a.dirty=true;toast('已删除');a.level='config';a.entryData=null;await arscRender();
+}
+async function arscAddEntry(){
+  const a=state.arsc;
+  const body=`<label>资源名称</label><input id="arscEntryName" autocomplete="off" spellcheck="false"><label>条目 ID（留空自动）</label><input id="arscEntryId" placeholder="自动分配" autocomplete="off" spellcheck="false"><label>值类型</label><select id="arscValueType">${arscOptions(0)}</select><label>值</label><input id="arscValueText" autocomplete="off" spellcheck="false"><p class="muted">新资源将添加到 ${esc(a.typeName)} · ${esc(a.configLabel||'默认')}。</p>`;
+  dialog('添加资源',body,[['取消',closeModal],['添加',async()=>{
+    const name=$('#arscEntryName').value.trim(),raw=$('#arscEntryId').value.trim(),choice=Number($('#arscValueType').value);
+    if(!name)throw new Error('资源名不能为空');
+    const entryId=raw?(raw.startsWith('0x')?parseInt(raw,16):Number(raw)):null;
+    if(entryId!==null&&(!Number.isInteger(entryId)||entryId<0||entryId>65535))throw new Error('条目 ID 必须是 0–65535');
+    const args={session:a.session,op:'addEntry',packageId:a.pkgId,typeId:a.typeId,typeName:a.typeName,config:a.config||'',name:name,type:ARSC_TYPES[choice][2],value:$('#arscValueText').value};
+    if(entryId!==null)args.entryId=entryId;
+    await rpc('arscEdit',args);a.dirty=true;closeModal();toast('已添加资源');await arscRender();
+  }]]);
+}
+async function arscDeleteConfig(){
+  const a=state.arsc;
+  if(!await confirmBox('删除配置','将删除 '+a.typeName+' 的配置“'+(a.configLabel||'默认')+'”中的全部条目。','删除'))return;
+  await rpc('arscEdit',{session:a.session,op:'deleteConfig',packageId:a.pkgId,typeId:a.typeId,config:a.config||''});a.dirty=true;toast('配置已删除');a.level='type';await arscRender();
+}
+async function arscSearchDialog(mode){
+  const a=state.arsc;
+  const label=mode==='id'?'资源 ID（0x7f010001）':mode==='value'?'值包含文本':'资源名（名称或 包:类型/名称）';
+  const q=await ask('搜索资源','',label);if(q===null||!q.trim())return;
+  const r=await rpc('arscSearch',{session:a.session,mode:mode,query:q.trim(),limit:200});
+  if(!r.rows||!r.rows.length)return toast('没有匹配的资源');
+  if(mode==='id'&&r.rows.length===1){await arscOpenEntry(r.rows[0].id,r.rows[0].config||'');return;}
+  a.level='search';a.rows=r.rows;a.searchMode=mode;a.query=q.trim();a.offset=0;await arscRender();
+}
+async function arscSave(){
+  const a=state.arsc;const r=await rpc('arscSave',{session:a.session});a.dirty=false;
+  if(a.level==='pool')a.offset=0;
+  await arscRender();toast('资源表已保存');
+  const buttons=[['关闭',closeModal]];
+  if(r.needsSigning)buttons.unshift(['签名 APK',async()=>{closeModal();const s=await rpc('sign',{path:r.path});alertBox('签名完成',s.path||r.path);}]);
+  dialog('资源表已保存',`<p class="break">${esc(r.path)}</p><p>${r.size} 字节。${r.needsSigning?'APK 已修改，安装前需要重新签名。':'原文件已原子写回。'}</p>`,buttons);
+}
+function arscBack(){
+  const a=state.arsc;if(!a)return window.goBack();
+  if(a.mode==='plus'&&a.level==='entry'){a.level='root';a.entryData=null;return arscRender();}
+  if(a.level==='entry'){a.level='config';a.entryData=null;return arscRender();}
+  if(a.level==='config'){a.level='type';return arscRender();}
+  if(a.level==='type'){a.level='package';return arscRender();}
+  if(a.level==='package'||a.level==='pool'||a.level==='search'){a.level='root';a.offset=0;return arscRender();}
+  if(a.level==='root')return arscClose();
+  return window.goBack();
+}
+async function showArscTranslate(args,name,session){
+  let sid=session;
+  if(!sid){const s=await rpc('arscOpen',Object.assign({},args,{name:name||''}));sid=s.session;}
+  state.arscTranslate={session:sid,name:name||'resources.arsc',config:'',configs:[],rows:[],total:0,offset:0,limit:100,query:'',dirty:false,opened:!session};
+  state.previous=state.screen==='tool'?state.previous:'files';state.screen='tool';
+  const first=await rpc('arscTranslate',{session:sid,config:'',offset:0,limit:1,query:''});
+  const cfgs=first.configs||[];
+  const pick=cfgs.find(c=>c.qualifiers);
+  state.arscTranslate.configs=cfgs;state.arscTranslate.config=pick?pick.qualifiers:'';
+  await arscTranslateRender();
+}
+async function arscTranslateRender(){
+  const a=state.arscTranslate;if(!a)return;
+  const r=await rpc('arscTranslate',{session:a.session,config:a.config,offset:a.offset,limit:a.limit,query:a.query});
+  a.rows=r.rows||[];a.total=r.total||0;a.configs=r.configs||a.configs;
+  header('翻译模式',a.name,[{icon:'back',label:'退出翻译',run:arscTranslateBack},{icon:'save',label:'保存资源表',run:arscTranslateSave},{icon:'more',label:'更多',run:()=>menu([{icon:'refresh',label:'重新加载',run:()=>act(arscTranslateRender)},{icon:'close',label:'退出',run:arscTranslateBack}])}],true);
+  $('#subbar').innerHTML='';$('#bottom').innerHTML='';
+  $('#content').innerHTML=`<div class="toolpage">
+    <div class="sectionLabel">目标语言</div>
+    <div class="searchline"><select id="arscTransConfig" style="flex:1;background:transparent;color:var(--text);border:0;padding:10px 0">${a.configs.map(c=>`<option value="${esc(c.qualifiers)}" ${c.qualifiers===a.config?'selected':''}>${esc(c.label)}${c.qualifiers?' ('+esc(c.qualifiers)+')':'（源语言）'}</option>`).join('')}</select><button id="arscTransNew">新建语言</button></div>
+    <div class="searchline"><input id="arscTransSearch" placeholder="筛选资源名或文本…" value="${esc(a.query)}"><button id="arscTransGo">搜索</button></div>
+    <div id="arscTransRows"></div></div>`;
+  const rows=$('#arscTransRows');
+  rows.innerHTML=`<div class="sectionLabel"><span>字符串</span><span class="pill">${a.total}</span></div>`;
+  if(!a.rows.length)rows.insertAdjacentHTML('beforeend','<div class="empty">没有可翻译的字符串</div>');
+  for(const e of a.rows){
+    const b=document.createElement('button');b.className='listrow';
+    b.innerHTML=`<span class="main">${esc(e.name||'(未命名)')}<small>${arscHex(e.id)} · 源：${esc(e.source||'(空)')}</small><small>译：${esc(e.target||'（未翻译）')}</small></span><span class="pill">${e.hasTarget?'已译':'缺失'}</span>`;
+    b.onclick=()=>act(()=>arscTranslateEdit(e));rows.append(b);
+  }
+  arscPager(rows,a.total,a);
+  $('#arscTransConfig').onchange=e=>act(async()=>{a.config=e.target.value;a.offset=0;await arscTranslateRender();});
+  $('#arscTransNew').onclick=()=>act(arscTranslateNew);
+  const go=()=>act(async()=>{a.query=$('#arscTransSearch').value.trim();a.offset=0;await arscTranslateRender();});
+  $('#arscTransGo').onclick=go;$('#arscTransSearch').onkeydown=e=>{if(e.key==='Enter')go();};
+}
+async function arscTranslateEdit(e){
+  const a=state.arscTranslate;
+  const body=`<p class="break">${esc(e.name||'')} · ${arscHex(e.id)}</p><label>源文本</label><div class="arscSourceText">${esc(e.source||'')}</div><label>译文（${esc(a.config||'默认')}）</label><textarea id="arscTransText" class="toolinput" rows="4">${esc(e.target||'')}</textarea>`;
+  dialog('编辑翻译',body,[['取消',closeModal],['保存',async()=>{
+    const v=$('#arscTransText').value;
+    await rpc('arscEdit',{session:a.session,op:'setValue',id:e.id,config:a.config,valueIndex:-1,type:3,value:v});
+    a.dirty=true;closeModal();toast('译文已更新');await arscTranslateRender();
+  }]]);
+}
+async function arscTranslateNew(){
+  const a=state.arscTranslate;
+  const q=await ask('新建语言','','语言配置限定符，例如 en-rUS、zh-rCN、ja');if(q===null||!q.trim())return;
+  const r=await rpc('arscTranslateAdd',{session:a.session,qualifiers:q.trim()});
+  a.dirty=true;a.config=r.qualifiers;a.offset=0;toast('已复制 '+r.count+' 条源字符串');await arscTranslateRender();
+}
+async function arscTranslateSave(){
+  const a=state.arscTranslate;const r=await rpc('arscSave',{session:a.session});a.dirty=false;
+  const buttons=[['关闭',closeModal]];if(r.needsSigning)buttons.unshift(['签名 APK',async()=>{closeModal();const s=await rpc('sign',{path:r.path});alertBox('签名完成',s.path||r.path);}]);
+  dialog('资源表已保存',`<p class="break">${esc(r.path)}</p><p>${r.size} 字节。${r.needsSigning?'APK 已修改，安装前需要重新签名。':'原文件已原子写回。'}</p>`,buttons);
+}
+async function arscTranslateBack(){
+  const a=state.arscTranslate;if(!a)return;
+  if(a.dirty&&!await confirmBox('放弃修改？','翻译还有未保存的修改。','放弃并退出'))return;
+  if(a.opened)await rpc('arscClose',{session:a.session});
+  state.arscTranslate=null;state.screen=state.previous||'files';await refresh();
+}
+async function showArscQuery(args,name,session){
+  let sid=session;
+  if(!sid){const s=await rpc('arscOpen',Object.assign({},args,{name:name||''}));sid=s.session;}
+  state.arscQuery={session:sid,name:name||'resources.arsc',opened:!session,fromPlus:!!session,result:null,last:''};
+  state.previous=state.screen==='tool'?state.previous:'files';state.screen='tool';
+  header('资源查询',state.arscQuery.name,[{icon:'back',label:'退出查询',run:arscQueryBack}],true);
+  $('#subbar').innerHTML='';$('#bottom').innerHTML='';
+  $('#content').innerHTML=`<div class="toolpage">
+    <div class="searchline"><input id="arscQueryInput" placeholder="@string/app_name、0x7f120001、#FF2586D0、255" autocomplete="off"><button id="arscQueryGo">查询</button></div>
+    <p class="muted">支持 @类型/名称、?attr/名称、[包:]资源名、资源 ID、颜色和二/八/十/十六进制整数。</p>
+    <div id="arscQueryResult"></div></div>`;
+  const run=()=>act(async()=>{
+    const q=$('#arscQueryInput').value.trim();if(!q)return;
+    try{state.arscQuery.result=await rpc('arscQuery',{session:state.arscQuery.session,query:q});state.arscQuery.last=q;arscQueryRender();}
+    catch(e){$('#arscQueryResult').innerHTML='<div class="empty">'+esc(e.message||e)+'</div>';}
+  });
+  $('#arscQueryGo').onclick=run;$('#arscQueryInput').onkeydown=e=>{if(e.key==='Enter')run();};
+  $('#arscQueryInput').focus();arscQueryRender();
+}
+function arscQueryRender(){
+  const q=state.arscQuery;if(!q)return;
+  const box=$('#arscQueryResult');if(!box)return;
+  const r=q.result;
+  if(!r){box.innerHTML='';return;}
+  if(r.kind==='color'){
+    box.innerHTML=`<div class="arscColor" style="background:${esc(r.argb)}"></div><div class="dataGrid"><span>ARGB</span><b>${esc(r.argb)}</b><span>RGBA</span><b>${esc(r.rgba)}</b><span>整数</span><b>${r.value}</b><span>Hex</span><b>${esc(r.hex)}</b><span>A / R / G / B</span><b>${r.alpha} / ${r.red} / ${r.green} / ${r.blue}</b></div>`;
+    return;
+  }
+  if(r.kind==='number'){
+    box.innerHTML=`<div class="dataGrid"><span>十进制</span><b>${esc(r.dec)}</b><span>十六进制</span><b>${esc(r.hex)}</b><span>八进制</span><b>${esc(r.oct)}</b><span>二进制</span><b class="break">${esc(r.bin)}</b><span>有符号 32 位</span><b>${esc(r.signed32)}</b><span>无符号 32 位</span><b>${esc(r.unsigned32)}</b></div>`;
+    return;
+  }
+  if(r.kind==='resource'){
+    const e=r.resource||{};
+    box.innerHTML=`<div class="dataGrid"><span>资源名</span><b>${esc(e.name||r.name||'')}</b><span>资源 ID</span><b>${esc(r.hex||arscHex(r.id))}</b><span>类型</span><b>${esc(r.package||'')}:${esc(r.type||'')}</b><span>配置数</span><b>${r.configs}</b><span>当前值</span><b class="break">${esc(e.value||'')}</b></div><div class="sectionLabel">全部配置</div><div id="arscQueryValues"></div>`;
+    const vals=$('#arscQueryValues');
+    for(const v of r.values||[]){const b=document.createElement('button');b.className='listrow';b.innerHTML=`<span class="main">${esc(v.label||v.config||'默认')}<small>${esc(v.type||'')}</small></span><span class="pill">${esc((v.value||'').slice(0,32))}</span>`;vals.append(b);}
+    return;
+  }
+  box.innerHTML='<div class="empty">没有结果</div>';
+}
+async function arscQueryBack(){
+  const q=state.arscQuery;if(!q)return;
+  if(q.opened)await rpc('arscClose',{session:q.session});
+  state.arscQuery=null;
+  if(q.fromPlus&&state.arsc){state.screen='tool';await arscRender();return;}
+  state.screen=state.previous||'files';await refresh();
+}
+function arscPlusMenu(){
+  menu([{icon:'search',label:'资源查询',run:()=>showArscQuery(null,state.arsc.name,state.arsc.session)},{icon:'save',label:'备份',run:async()=>{const r=await rpc('arscBackup',{session:state.arsc.session});toast('已备份到 '+r.path);}},{icon:'save',label:'保存资源表',run:arscSave},{icon:'close',label:'退出',run:arscClose}]);
+}
+function arscMenu(){
+  const a=state.arsc,rows=[];
+  if(a.level==='config')rows.push({icon:'plus',label:'添加资源',run:arscAddEntry},{icon:'trash',label:'删除此配置',run:arscDeleteConfig});
+  if(a.level==='entry'&&a.entryData)rows.push({icon:'edit',label:'重命名资源',run:()=>arscRename(a.entryData)},{icon:'plus',label:'添加配置',run:()=>arscAddConfig(a.entryData)},{icon:'trash',label:'删除资源',run:()=>arscDeleteEntry(a.entryData)});
+  if(a.level==='root'||a.level==='pool'||a.level==='search')rows.push({icon:'search',label:'搜索资源',run:()=>arscSearchDialog('name')});
+  if(a.level==='pool')rows.push({icon:'swap',label:'批量替换字符串',run:arscBatchReplace});
+  rows.push({icon:'save',label:'保存资源表',run:arscSave});
+  rows.push({icon:'close',label:'关闭编辑器',run:arscClose});
+  menu(rows);
+}
+
 async function showPool(args,name){const strings=await rpc('pool',args);state.previous=state.screen;state.screen='tool';header('字符串池',name,[{icon:'more',label:'字符串池菜单',run:()=>menu([{icon:'export',label:'导出字符串',run:()=>exportText(strings.join('\n'),name+'.strings.txt')},{icon:'close',label:'关闭',run:window.goBack}])}]);$('#subbar').innerHTML='';$('#bottom').innerHTML='';$('#content').innerHTML='<div class="toolpage"><div class="searchline"><input aria-label="筛选字符串池" placeholder="筛选字符串…"></div><div id="poolRows"></div></div>';const render=q=>{$('#poolRows').innerHTML=strings.map((s,i)=>({s,i})).filter(x=>x.s.toLowerCase().includes(q.toLowerCase())).slice(0,2000).map(x=>`<button class="listrow" data-pool="${x.i}"><small>${x.i}</small><span class="main">${esc(x.s)}</span></button>`).join('');document.querySelectorAll('[data-pool]').forEach(b=>b.onclick=()=>act(async()=>{await rpc('clipboard',{text:strings[Number(b.dataset.pool)]});toast('已复制');}));};$('#content input').oninput=e=>render(e.target.value);render('');}
 // 导航 and editing operate on the live buffer, including unsaved text.
 function smaliOutline(text){

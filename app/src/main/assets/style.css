@@ -340,3 +340,19 @@ body.light .pane:not(.active){background:#f2f2f2}
 .bundleSpinner{flex:0 0 24px;width:24px;height:24px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:bundleSpin 1s linear infinite}
 @keyframes bundleSpin{to{transform:rotate(360deg)}}
 .reduceMotion .bundleSpinner{animation:none}
+
+/* ARSC 四入口与 ArscEditor++ 工作台 */
+.arscChooser{padding:4px 0}
+.arscChooser label{display:flex;align-items:center;gap:16px;padding:14px 4px;font-size:17px;color:var(--text);cursor:pointer}
+.arscChooser input{width:22px;height:22px;accent-color:var(--blue);flex:none}
+.arscTabs{display:flex;background:var(--bar);border-bottom:1px solid var(--line)}
+.arscTab{flex:1;padding:14px 4px;color:var(--muted);font-size:15px;border-bottom:2px solid transparent;text-align:center}
+.arscTab.on{color:var(--text);border-bottom-color:var(--blue)}
+.arscSearchCard{padding:4px 10px 6px}
+.arscSearchCard>label{display:block;margin:12px 0 2px;color:var(--muted);font-size:12px}
+.arscSearchCard input:not([type=checkbox]),.arscSearchCard select{width:100%;background:transparent;border:0;border-bottom:1px solid var(--line);color:var(--text);padding:10px 0;font:inherit;outline:none}
+.arscSearchCard label.check{display:flex;align-items:center;gap:10px;margin:12px 0;color:var(--text);font-size:15px}
+.arscSearchCard label.check input{width:20px;height:20px;accent-color:var(--blue)}
+.arscSearchCard .primary{display:block;width:100%;margin:8px 0;border-top:1px solid var(--line);padding:14px 0}
+.arscSourceText{border:1px solid var(--line);padding:10px;margin:4px 0 12px;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text);max-height:180px;overflow:auto}
+.arscColor{height:56px;border:1px solid var(--line);margin:8px 0}
