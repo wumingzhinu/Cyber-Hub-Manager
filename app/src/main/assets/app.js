@@ -357,20 +357,25 @@ function arscOpenWith(args,name){
 }
 async function showArsc(args,name,mode){
   const s=await rpc('arscOpen',Object.assign({},args,{name:name||''}));
-  state.arsc={session:s.session,name:s.name||name||'resources.arsc',size:s.size||0,archive:s.archive||'',entry:s.entry||'',packages:s.packages||[],stringCount:s.stringCount||0,level:'root',pkgId:-1,typeId:-1,pkgName:'',typeName:'',config:'',configLabel:'',offset:0,limit:200,query:'',rows:[],entryData:null,dirty:false,mode:mode||'editor',tab:'explore',history:[],search:{query:'',type:'value',caseSensitive:false,regex:false,path:'/'},poolFilter:''};
+  state.arsc={session:s.session,name:s.name||name||'resources.arsc',size:s.size||0,archive:s.archive||'',entry:s.entry||'',packages:s.packages||[],stringCount:s.stringCount||0,level:'root',pkgId:-1,typeId:-1,pkgName:'',typeName:'',config:'',configLabel:'',offset:0,limit:200,query:'',rows:[],entryData:null,dirty:false,mode:mode||'editor',tab:'explore',treeOpen:{},history:[],search:{query:'',type:'value',caseSensitive:false,regex:false,path:'/'},poolFilter:''};
   state.previous=state.screen==='tool'?state.previous:'files';state.screen='tool';
   await arscRender();
 }
 function arscHeader(){
   const a=state.arsc;if(!a)return;
-  let title=a.mode==='plus'?'Arsc编辑器++':'Arsc编辑器',sub=a.name;
-  if(a.level==='package'){title=a.pkgName;sub='包 '+arscHex(a.pkgId)+' · '+a.name;}
-  else if(a.level==='type'){title=a.typeName;sub='类型 '+arscHex(a.typeId)+' · '+a.name;}
-  else if(a.level==='config'){title=a.configLabel||'默认配置';sub=a.typeName+' · '+a.name;}
-  else if(a.level==='entry'){title=a.entryData?a.entryData.name:'资源';sub=a.entryData?arscHex(a.entryData.id):a.name;}
-  else if(a.level==='pool'){title='字符常量池';sub=a.name+' · '+a.stringCount+' 项';}
-  else if(a.level==='search'){title='搜索结果';sub=a.query||'';}
-  const actions=[{icon:'back',label:a.level==='root'?'关闭资源表':'返回',run:arscBack},{icon:'search',label:'搜索资源',run:()=>a.mode==='plus'?(a.tab='search',a.level='root',arscRender()):options('搜索资源',[{icon:'search',label:'按资源名搜索',run:()=>arscSearchDialog('name')},{icon:'pin',label:'按资源 ID 搜索',run:()=>arscSearchDialog('id')},{icon:'text',label:'按值搜索',run:()=>arscSearchDialog('value')}])},{icon:'save',label:'保存资源表',run:arscSave},{icon:'more',label:'资源表菜单',run:a.mode==='plus'?arscPlusMenu:arscMenu}];
+  const plus=a.mode==='plus';
+  let title=plus?'Arsc编辑器++':'Arsc编辑器',sub=a.name;
+  if(!plus){
+    if(a.level==='package'){title=a.pkgName;sub='包 '+arscHex(a.pkgId)+' · '+a.name;}
+    else if(a.level==='type'){title=a.typeName;sub='类型 '+arscHex(a.typeId)+' · '+a.name;}
+    else if(a.level==='config'){title=a.configLabel||'默认配置';sub=a.typeName+' · '+a.name;}
+    else if(a.level==='entry'){title=a.entryData?a.entryData.name:'资源';sub=a.entryData?arscHex(a.entryData.id):a.name;}
+    else if(a.level==='pool'){title='字符常量池';sub=a.name+' · '+a.stringCount+' 项';}
+    else if(a.level==='search'){title='搜索结果';sub=a.query||'';}
+  }
+  const actions=plus
+    ?[{icon:'build',label:'保存资源表',run:arscSave},{icon:'more',label:'更多',run:arscPlusMenu}]
+    :[{icon:'back',label:a.level==='root'?'关闭资源表':'返回',run:arscBack},{icon:'search',label:'搜索资源',run:()=>options('搜索资源',[{icon:'search',label:'按资源名搜索',run:()=>arscSearchDialog('name')},{icon:'pin',label:'按资源 ID 搜索',run:()=>arscSearchDialog('id')},{icon:'text',label:'按值搜索',run:()=>arscSearchDialog('value')}])},{icon:'save',label:'保存资源表',run:arscSave},{icon:'more',label:'资源表菜单',run:arscMenu}];
   header(title,sub,actions,true);
   $('#subbar').innerHTML=a.mode==='plus'?arscPlusTabs(a):'';
   if(a.mode==='plus')document.querySelectorAll('[data-arsc-tab]').forEach(b=>b.onclick=()=>act(async()=>{a.tab=b.dataset.arscTab;a.level='root';a.entryData=null;a.offset=0;await arscRender();}));
@@ -381,11 +386,48 @@ function arscPlusTabs(a){
   const tabs=[['explore','浏览'],['history','最近'],['search','搜索'],['constants','常量']];
   return '<div class="arscTabs">'+tabs.map(t=>`<button class="arscTab ${a.tab===t[0]?'on':''}" data-arsc-tab="${t[0]}">${t[1]}</button>`).join('')+'</div>';
 }
+function arscTag(id){return '['+((Number(id)||0)>>>0).toString(16).toUpperCase().padStart(2,'0')+']';}
+function arscTreeOpen(a,key){return !a.treeOpen||a.treeOpen[key]!==false;}
+function arscTreeRow(level,kind,name,badge,onclick){
+  const b=document.createElement('button');
+  b.className='arscNode lv'+level;
+  b.style.paddingLeft=(22+level*46)+'px';
+  let h='';
+  if(level>0)h+='<span class="arscElbow"></span>';
+  h+=kind==='folder'?'<span class="arscFolderIcon">'+icon('folder')+'</span>':'<span class="arscCodeIcon">'+icon('code')+'</span>';
+  h+='<span class="arscNodeName">'+esc(name)+'</span>';
+  if(badge)h+='<span class="arscNodeBadge">'+esc(badge)+'</span>';
+  b.innerHTML=h;b.onclick=()=>act(onclick);return b;
+}
+async function arscRenderPlusTree(body){
+  const a=state.arsc;
+  const r=await rpc('arscBrowse',{session:a.session,packageId:-1,typeId:-1,offset:0,limit:1});
+  const pkgs=r.packages||[];a.packages=pkgs;a.treeOpen=a.treeOpen||{};
+  body.className='toolpage arscTreePage';
+  const tree=document.createElement('div');tree.className='arscTree';
+  for(const p of pkgs){
+    const pk='p'+p.id;
+    tree.append(arscTreeRow(0,'folder',p.name,arscTag(p.id),()=>{a.treeOpen[pk]=!arscTreeOpen(a,pk);return arscRender();}));
+    if(!arscTreeOpen(a,pk))continue;
+    for(const t of p.types||[]){
+      const tk=pk+'t'+t.id;
+      tree.append(arscTreeRow(1,'folder',t.name,arscTag(t.id),()=>{a.treeOpen[tk]=!arscTreeOpen(a,tk);return arscRender();}));
+      if(!arscTreeOpen(a,tk))continue;
+      const openType=()=>{a.pkgId=p.id;a.pkgName=p.name;a.typeId=t.id;a.typeName=t.name;a.offset=0;a.level='type';return arscRender();};
+      const openEntries=async()=>{a.pkgId=p.id;a.pkgName=p.name;a.typeId=t.id;a.typeName=t.name;a.offset=0;const r=await rpc('arscBrowse',{session:a.session,packageId:p.id,typeId:t.id,offset:0,limit:1});const c=(r.configs||[])[0];a.level='config';a.config=c?c.qualifiers:'';a.configLabel=c?c.label:'默认';return arscRender();};
+      tree.append(arscTreeRow(2,'code','type-info','',openType));
+      tree.append(arscTreeRow(2,'code',t.name,'',openEntries));
+    }
+    tree.append(arscTreeRow(2,'code','package-info','',()=>{a.pkgId=p.id;a.pkgName=p.name;a.offset=0;a.level='package';return arscRender();}));
+  }
+  body.replaceChildren(tree);
+}
 async function arscRender(){
   const a=state.arsc;if(!a)return;
   arscHeader();
   const body=$('#arscBody');if(!body)return;
   try{
+    if(a.mode==='plus'&&a.tab==='explore'&&a.level==='root'){await arscRenderPlusTree(body);return;}
     if(a.mode==='plus'&&a.level!=='entry'){
       if(a.tab==='history'){
         body.innerHTML='<div class="sectionLabel">最近打开</div>';
@@ -754,7 +796,10 @@ async function arscQueryBack(){
   state.screen=state.previous||'files';await refresh();
 }
 function arscPlusMenu(){
-  menu([{icon:'search',label:'资源查询',run:()=>showArscQuery(null,state.arsc.name,state.arsc.session)},{icon:'save',label:'备份',run:async()=>{const r=await rpc('arscBackup',{session:state.arsc.session});toast('已备份到 '+r.path);}},{icon:'save',label:'保存资源表',run:arscSave},{icon:'close',label:'退出',run:arscClose}]);
+  const a=state.arsc,rows=[];
+  if(a.level!=='root')rows.push({icon:'back',label:'返回上一级',run:arscBack});
+  rows.push({icon:'search',label:'资源查询',run:()=>showArscQuery(null,a.name,a.session)},{icon:'save',label:'备份',run:async()=>{const r=await rpc('arscBackup',{session:a.session});toast('已备份到 '+r.path);}},{icon:'save',label:'保存资源表',run:arscSave},{icon:'close',label:'退出',run:arscClose});
+  menu(rows);
 }
 function arscMenu(){
   const a=state.arsc,rows=[];
