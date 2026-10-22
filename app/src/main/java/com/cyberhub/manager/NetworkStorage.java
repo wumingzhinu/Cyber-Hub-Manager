@@ -12,6 +12,12 @@ import jcifs.smb.SmbFileOutputStream;
 import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
 import org.apache.commons.net.ftp.FTPFile;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 import org.apache.commons.net.ftp.FTPSClient;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -50,6 +56,7 @@ import java.util.Properties;
 import java.util.TimeZone;
 import java.util.TreeMap;
 import java.util.Vector;
+import java.util.concurrent.TimeUnit;
 
 /** Remote file access for the saved network storage entries. */
 public final class NetworkStorage {
@@ -238,16 +245,30 @@ public final class NetworkStorage {
         return url;
     }
 
-    private static HttpURLConnection davConnection(JSONObject c,String method,String url,Map<String,String> headers)throws Exception{
-        HttpURLConnection conn=(HttpURLConnection)new URL(url).openConnection();
-        conn.setConnectTimeout(20000);
-        conn.setReadTimeout(90000);
-        conn.setRequestMethod(method);
-        conn.setInstanceFollowRedirects(true);
+    private static final class DavHttp {
+        static final OkHttpClient CLIENT=new OkHttpClient.Builder()
+            .connectTimeout(20,TimeUnit.SECONDS)
+            .readTimeout(90,TimeUnit.SECONDS)
+            .writeTimeout(90,TimeUnit.SECONDS)
+            .build();
+    }
+
+    private static Request davRequest(JSONObject c,String method,String url,Map<String,String> headers,RequestBody body){
+        Request.Builder builder=new Request.Builder().url(url)
+            .header("User-Agent","CyberHubManager")
+            .header("Accept","*/*");
         String user=c.optString("user",""),pass=c.optString("password","");
-        if(!user.isEmpty()||!pass.isEmpty())conn.setRequestProperty("Authorization","Basic "+Base64.getEncoder().encodeToString((user+":"+pass).getBytes(StandardCharsets.UTF_8)));
-        if(headers!=null)for(Map.Entry<String,String> e:headers.entrySet())conn.setRequestProperty(e.getKey(),e.getValue());
-        return conn;
+        if(!user.isEmpty()||!pass.isEmpty())builder.header("Authorization","Basic "+Base64.getEncoder().encodeToString((user+":"+pass).getBytes(StandardCharsets.UTF_8)));
+        if(headers!=null)for(Map.Entry<String,String> e:headers.entrySet())builder.header(e.getKey(),e.getValue());
+        return builder.method(method,body).build();
+    }
+
+    private static Response davExecute(JSONObject c,String method,String url,Map<String,String> headers,RequestBody body)throws IOException{
+        return DavHttp.CLIENT.newCall(davRequest(c,method,url,headers,body)).execute();
+    }
+
+    private static RequestBody davXml(String xml){
+        return RequestBody.create(MediaType.parse("application/xml; charset=utf-8"),xml);
     }
 
     private static Object webdav(JSONObject c,JSONObject a,String op)throws Exception{
@@ -257,30 +278,26 @@ public final class NetworkStorage {
                 String url=davUrl(c,path,true);
                 Map<String,String> headers=new TreeMap<>();
                 headers.put("Depth","0");
-                headers.put("Content-Type","application/xml; charset=utf-8");
-                HttpURLConnection conn=davConnection(c,"PROPFIND",url,headers);
-                byte[] body="<?xml version=\"1.0\" encoding=\"utf-8\"?><d:propfind xmlns:d=\"DAV:\"><d:prop><d:resourcetype/></d:prop></d:propfind>".getBytes(StandardCharsets.UTF_8);
-                conn.setDoOutput(true);conn.setFixedLengthStreamingMode(body.length);
-                try(OutputStream out=conn.getOutputStream()){out.write(body);}
-                int code=conn.getResponseCode();
-                if(code!=207&&code!=200)throw new IOException("WebDAV 返回 "+code+"："+readSnippet(conn));
-                conn.disconnect();
+                String body="<?xml version=\"1.0\" encoding=\"utf-8\"?><d:propfind xmlns:d=\"DAV:\"><d:prop><d:resourcetype/></d:prop></d:propfind>";
+                try(Response response=davExecute(c,"PROPFIND",url,headers,davXml(body))){
+                    int code=response.code();
+                    if(code!=207&&code!=200)throw new IOException("WebDAV 返回 "+code+"："+readSnippet(response));
+                }
                 return true;
             }
             case "list":{
                 String url=davUrl(c,path,true);
                 Map<String,String> headers=new TreeMap<>();
                 headers.put("Depth","1");
-                headers.put("Content-Type","application/xml; charset=utf-8");
-                HttpURLConnection conn=davConnection(c,"PROPFIND",url,headers);
-                byte[] body=("<?xml version=\"1.0\" encoding=\"utf-8\"?><d:propfind xmlns:d=\"DAV:\"><d:prop><d:resourcetype/><d:getcontentlength/><d:getlastmodified/></d:prop></d:propfind>").getBytes(StandardCharsets.UTF_8);
-                conn.setDoOutput(true);conn.setFixedLengthStreamingMode(body.length);
-                try(OutputStream out=conn.getOutputStream()){out.write(body);}
-                int code=conn.getResponseCode();
-                if(code!=207&&code!=200)throw new IOException("WebDAV 返回 "+code+"："+readSnippet(conn));
+                String body="<?xml version=\"1.0\" encoding=\"utf-8\"?><d:propfind xmlns:d=\"DAV:\"><d:prop><d:resourcetype/><d:getcontentlength/><d:getlastmodified/></d:prop></d:propfind>";
                 Document doc;
-                try(InputStream in=conn.getInputStream()){doc=parseXml(in);}
-                conn.disconnect();
+                try(Response response=davExecute(c,"PROPFIND",url,headers,davXml(body))){
+                    int code=response.code();
+                    if(code!=207&&code!=200)throw new IOException("WebDAV 返回 "+code+"："+readSnippet(response));
+                    ResponseBody responseBody=response.body();
+                    if(responseBody==null)throw new IOException("WebDAV 返回空响应");
+                    try(InputStream in=responseBody.byteStream()){doc=parseXml(in);}
+                }
                 URI baseUri=URI.create(url);
                 String basePath=baseUri.getPath();
                 if(!basePath.endsWith("/"))basePath+="/";
@@ -312,46 +329,45 @@ public final class NetworkStorage {
             }
             case "download":{
                 String url=davUrl(c,path,false);
-                HttpURLConnection conn=davConnection(c,"GET",url,null);
-                int code=conn.getResponseCode();
-                if(code<200||code>=300)throw new IOException("WebDAV 返回 "+code+"："+readSnippet(conn));
                 File dst=new File(a.getString("local"));
                 if(dst.exists())throw new IOException("本地文件已存在："+dst);
                 makeParent(dst);
-                try(InputStream in=conn.getInputStream();OutputStream out=new FileOutputStream(dst)){copy(in,out);}
-                catch(Exception e){dst.delete();throw e;}
-                conn.disconnect();
+                try{
+                    try(Response response=davExecute(c,"GET",url,null,null)){
+                        int code=response.code();
+                        if(code<200||code>=300)throw new IOException("WebDAV 返回 "+code+"："+readSnippet(response));
+                        ResponseBody responseBody=response.body();
+                        if(responseBody==null)throw new IOException("WebDAV 返回空响应");
+                        try(InputStream in=responseBody.byteStream();OutputStream out=new FileOutputStream(dst)){copy(in,out);}
+                    }
+                }catch(Exception e){dst.delete();throw e;}
                 return dst.getPath();
             }
             case "upload":{
                 File src=new File(a.getString("local"));
                 if(!src.isFile())throw new IOException("本地文件不存在："+src);
                 String url=davUrl(c,path,false);
-                Map<String,String> headers=new TreeMap<>();
-                headers.put("Content-Type","application/octet-stream");
-                HttpURLConnection conn=davConnection(c,"PUT",url,headers);
-                conn.setDoOutput(true);
-                conn.setFixedLengthStreamingMode(src.length());
-                try(InputStream in=new FileInputStream(src);OutputStream out=conn.getOutputStream()){copy(in,out);}
-                int code=conn.getResponseCode();
-                if(code<200||code>=300)throw new IOException("WebDAV 返回 "+code+"："+readSnippet(conn));
-                conn.disconnect();
+                RequestBody body=RequestBody.create(MediaType.parse("application/octet-stream"),src);
+                try(Response response=davExecute(c,"PUT",url,null,body)){
+                    int code=response.code();
+                    if(code<200||code>=300)throw new IOException("WebDAV 返回 "+code+"："+readSnippet(response));
+                }
                 return true;
             }
             case "mkdir":{
                 String url=davUrl(c,path,true);
-                HttpURLConnection conn=davConnection(c,"MKCOL",url,null);
-                int code=conn.getResponseCode();
-                if(code!=201&&code!=200&&code!=204)throw new IOException("WebDAV 返回 "+code+"："+readSnippet(conn));
-                conn.disconnect();
+                try(Response response=davExecute(c,"MKCOL",url,null,null)){
+                    int code=response.code();
+                    if(code!=201&&code!=200&&code!=204)throw new IOException("WebDAV 返回 "+code+"："+readSnippet(response));
+                }
                 return true;
             }
             case "delete":{
                 String url=davUrl(c,path,a.optBoolean("dir",false));
-                HttpURLConnection conn=davConnection(c,"DELETE",url,null);
-                int code=conn.getResponseCode();
-                if(code<200||code>=300)throw new IOException("WebDAV 返回 "+code+"："+readSnippet(conn));
-                conn.disconnect();
+                try(Response response=davExecute(c,"DELETE",url,null,null)){
+                    int code=response.code();
+                    if(code<200||code>=300)throw new IOException("WebDAV 返回 "+code+"："+readSnippet(response));
+                }
                 return true;
             }
             case "rename":{
@@ -360,10 +376,10 @@ public final class NetworkStorage {
                 Map<String,String> headers=new TreeMap<>();
                 headers.put("Destination",to);
                 headers.put("Overwrite","F");
-                HttpURLConnection conn=davConnection(c,"MOVE",from,headers);
-                int code=conn.getResponseCode();
-                if(code!=201&&code!=204&&code!=200)throw new IOException("WebDAV 返回 "+code+"："+readSnippet(conn));
-                conn.disconnect();
+                try(Response response=davExecute(c,"MOVE",from,headers,null)){
+                    int code=response.code();
+                    if(code!=201&&code!=204&&code!=200)throw new IOException("WebDAV 返回 "+code+"："+readSnippet(response));
+                }
                 return true;
             }
             default:throw new IOException("未知的 WebDAV 操作："+op);
@@ -400,13 +416,16 @@ public final class NetworkStorage {
         }catch(Exception ignored){return 0;}
     }
 
-    private static String readSnippet(HttpURLConnection conn){
-        try(InputStream in=conn.getErrorStream()){
-            if(in==null)return "";
+    private static String readSnippet(Response response){
+        try{
+            ResponseBody body=response.body();
+            if(body==null)return "";
             ByteArrayOutputStream out=new ByteArrayOutputStream();
-            byte[] buffer=new byte[2048];
-            int read, total=0;
-            while(total<8192&&(read=in.read(buffer))>0){out.write(buffer,0,read);total+=read;}
+            try(InputStream in=body.byteStream()){
+                byte[] buffer=new byte[2048];
+                int read, total=0;
+                while(total<8192&&(read=in.read(buffer))>0){out.write(buffer,0,read);total+=read;}
+            }
             String text=new String(out.toByteArray(),StandardCharsets.UTF_8).replaceAll("\\s+"," ").trim();
             return text.length()>400?text.substring(0,400)+"…":text;
         }catch(Exception ignored){return "";}
