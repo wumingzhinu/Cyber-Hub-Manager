@@ -355,7 +355,9 @@ body.light .pane:not(.active){background:#f2f2f2}
 .arscSourceText{border:1px solid var(--line);padding:10px;margin:4px 0 12px;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text);max-height:180px;overflow:auto}
 .arscColor{height:56px;border:1px solid var(--line);margin:8px 0}
 .treeRow .arscNodeBadge{margin-left:6px;color:var(--muted);font-size:12px;flex:none}
-.toolpage.arscTreePage{padding:0;background:transparent;overflow:hidden;color:var(--text)}
+.toolpage.arscTreePage{padding:0;background:transparent;overflow:hidden;color:var(--text);display:flex;flex-direction:column}
+.toolpage.arscTreePage .searchline{flex:none}
+.toolpage.arscTreePage .tree{flex:1;height:auto;min-height:0}
 
 /* ==========================================================================
    Design refresh — Data terminal

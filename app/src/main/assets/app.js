@@ -25,6 +25,8 @@ function icon(name){
  return base+' fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="square" stroke-linejoin="miter"><path d="'+(paths[name]||paths.file)+'"/></svg>';
 }
 function brandLogo(){return '<svg class="brandLogo" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none"><rect x="3.5" y="4.5" width="17" height="15" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M12 4.5v15" stroke="currentColor" stroke-width="1" opacity=".35"/><path class="brandAccent" d="M6 15.5h3" stroke-width="1.6" stroke-linecap="round"/><path d="M15 8.5h2.5M15 11.5h2.5" stroke="currentColor" stroke-width="1" opacity=".45" stroke-linecap="round"/></svg>';}
+const EDITOR_SYMBOLS=['→','/','+','-','*','=','<'];
+function symbolBar(insert){const bottom=$('#bottom');bottom.replaceChildren();bottom.classList.add('editorBottom');for(const text of EDITOR_SYMBOLS){const b=document.createElement('button');b.className='bottom-key';b.textContent=text;b.onclick=()=>insert(text);bottom.append(b);}}
 function iconButton(name,label,fn){const b=document.createElement('button');b.className='iconbtn';b.setAttribute('aria-label',label);b.title=label;b.innerHTML=icon(name);b.onclick=()=>act(fn);return b;}
 const pending=new Map();let seq=0,busy=0,bundleJob=null;
 window.bundleProgress=(job,message)=>{if(bundleJob&&bundleJob.id===job){const label=document.querySelector('#bundleProgress');if(label)label.textContent=message;}};
@@ -451,20 +453,39 @@ function arscTreeRow(kind,name,badge,onclick,expandable,expanded,glyph){
 }
 async function arscTreeConfigs(a,pkgId,typeId){const r=await rpc('arscBrowse',{session:a.session,packageId:pkgId,typeId:typeId,offset:0,limit:1});return r.configs||[];}
 async function arscTreeEntries(a,pkgId,typeId,config){const r=await rpc('arscBrowse',{session:a.session,packageId:pkgId,typeId:typeId,config:config||'',offset:0,limit:500});return r.entries||[];}
+function arscFilterTree(container,filter){
+ const kids=[...container.children];let any=false;
+ for(let i=0;i<kids.length;i++){
+  const node=kids[i];
+  if(!node.classList.contains('treeRow'))continue;
+  const group=kids[i+1]&&kids[i+1].classList.contains('treeChildren')?kids[i+1]:null;
+  const name=((node.querySelector('.treename')||{}).textContent||'').toLowerCase();
+  const badge=((node.querySelector('.arscNodeBadge')||{}).textContent||'').toLowerCase();
+  let visible=!filter||name.includes(filter)||badge.includes(filter);
+  if(group&&arscFilterTree(group,filter))visible=true;
+  node.style.display=visible?'':'none';
+  if(group)group.style.display=visible?'':'none';
+  if(visible)any=true;
+ }
+ return any;
+}
 async function arscRenderPlusTree(body){
   const a=state.arsc;
   const r=await rpc('arscBrowse',{session:a.session,packageId:-1,typeId:-1,offset:0,limit:1});
   const pkgs=r.packages||[];a.packages=pkgs;a.treeOpen=a.treeOpen||{};a.treeConfigs=a.treeConfigs||{};a.treeEntries=a.treeEntries||{};
+  const filter=(a.treeFilter||'').trim().toLowerCase();
   body.className='toolpage arscTreePage';
+  const search=document.createElement('div');search.className='searchline';
+  search.innerHTML='<input id="arscTreeFilter" aria-label="筛选包 / 类型 / 资源" placeholder="筛选包 / 类型 / 资源…" value="'+esc(a.treeFilter||'')+'" autocomplete="off" spellcheck="false"><button>筛选</button>';
   const tree=document.createElement('div');tree.className='tree';tree.setAttribute('role','tree');tree.setAttribute('aria-label','ARSC 包、类型与资源');
   const message=t=>{const d=document.createElement('div');d.className='treeMessage';d.textContent=t;return d;};
   for(const p of pkgs){
-   const pk='p'+p.id,openP=arscTreeOpen(a,pk,true);
+   const pk='p'+p.id,openP=filter?true:arscTreeOpen(a,pk,true);
    tree.append(arscTreeRow('folder',p.name||'(未命名)',arscTag(p.id)+' · '+(p.count||0)+' 项',()=>{a.treeOpen[pk]=!openP;return arscRender();},true,openP));
    if(!openP)continue;
    const pKids=document.createElement('div');pKids.className='treeChildren';
    for(const t of p.types||[]){
-    const tk=pk+'t'+t.id,openT=arscTreeOpen(a,tk,false);
+    const tk=pk+'t'+t.id,openT=filter?true:arscTreeOpen(a,tk,false);
     pKids.append(arscTreeRow('folder',t.name||'(未命名)',arscTag(t.id)+' · '+(t.count||0)+' 项',()=>{a.treeOpen[tk]=!openT;return arscRender();},true,openT));
     if(!openT)continue;
      const tKids=document.createElement('div');tKids.className='treeChildren';
@@ -481,7 +502,7 @@ async function arscRenderPlusTree(body){
      }
      for(const c of configs){
       const qual=c.qualifiers||'';if(!qual)continue;
-      const ck=tk+'c'+qual,openC=arscTreeOpen(a,ck,false);
+      const ck=tk+'c'+qual,openC=filter?true:arscTreeOpen(a,ck,false);
       const glyph=(qual.replace(/[^A-Za-z]/g,'').charAt(0)||'C').toUpperCase();
       tKids.append(arscTreeRow('group',c.label&&c.label!==qual?c.label:qual,qual+' · '+(c.count||0)+' 项',()=>{a.treeOpen[ck]=!openC;return arscRender();},true,openC,glyph));
       if(!openC)continue;
@@ -496,7 +517,15 @@ async function arscRenderPlusTree(body){
    }
    tree.append(pKids);
   }
-  body.replaceChildren(tree);tree.scrollTop=a.treeScroll||0;tree.onscroll=()=>a.treeScroll=tree.scrollTop;
+  body.replaceChildren(search,tree);tree.scrollTop=a.treeScroll||0;tree.onscroll=()=>a.treeScroll=tree.scrollTop;
+  const input=search.querySelector('input'),go=search.querySelector('button');
+  if(filter)arscFilterTree(tree,filter);
+  let timer=null;
+  const commit=async()=>{clearTimeout(timer);const v=input.value;a.treeFilter=v;if(state.screen!=='tool'||!state.arsc)return;await arscRender();const n=$('#arscTreeFilter');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length);}};
+  input.oninput=()=>{clearTimeout(timer);timer=setTimeout(()=>act(commit),260);};
+  input.onkeydown=e=>{if(e.key==='Enter'){clearTimeout(timer);act(commit);}};
+  go.onclick=()=>act(commit);
+  symbolBar(text=>{input.value=input.value+text;commit();});
 }
 async function arscRender(){
   const a=state.arsc;if(!a)return;
@@ -628,25 +657,39 @@ function arscEntryXml(e,pkgName,typeName){
  const tag=/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(typeName||'')?typeName:'item';
  const head='<?xml version="1.0" encoding="UTF-8"?>\n\n';
  if(e.complex){
-  const kids=(e.values||[]).map(v=>'    <item index="'+v.index+'" type="'+arscXmlEscape(v.typeName||'')+'">'+arscXmlEscape(v.value)+'</item>').join('\n');
+  const kids=(e.values||[]).map(v=>'    <item index="'+v.index+'" type="'+((Number(v.type)||0))+'">'+arscXmlEscape(v.value)+'</item>').join('\n');
   return head+'<'+tag+' name="'+arscXmlEscape(name)+'" id="'+id+'" package="'+arscXmlEscape(pkg)+'" complex="true">\n'+(kids||'    <!-- 无集合值 -->')+'\n</'+tag+'>\n';
  }
  return head+'<'+tag+' name="'+arscXmlEscape(name)+'" id="'+id+'" package="'+arscXmlEscape(pkg)+'" type="'+arscXmlEscape(e.typeName||'')+'">'+arscXmlEscape(arscValueText(e))+'</'+tag+'>\n';
 }
-function arscParseEntryXml(text,name){
+function arscParseXml(text){
  const doc=new DOMParser().parseFromString(text,'application/xml');
  const bad=doc.getElementsByTagName('parsererror')[0];
  if(bad)throw Error('XML 格式错误：'+String(bad.textContent||'').replace(/\s+/g,' ').slice(0,140));
  const root=doc.documentElement;if(!root)throw Error('XML 内容为空');
+ return root;
+}
+function arscParseEntryXml(text,name){
+ const root=arscParseXml(text);
  let el=root;
- if(name){const all=doc.getElementsByTagName('*');for(const x of all)if(x.getAttribute('name')===name){el=x;break;}}
+ if(name){const all=root.getElementsByTagName('*');for(const x of all)if(x.getAttribute('name')===name){el=x;break;}}
  return el.textContent==null?'':el.textContent.trim();
+}
+function arscParseComplexXml(text){
+ const root=arscParseXml(text),out=[];
+ const items=root.getElementsByTagName('item');
+ for(const it of items){
+  const index=Number(it.getAttribute('index'));
+  if(!Number.isFinite(index)||index<0)continue;
+  out.push({index:index,type:Number(it.getAttribute('type'))||3,value:it.textContent==null?'':it.textContent.trim()});
+ }
+ return out;
 }
 async function arscOpenEntryXml(pkgName,typeName,entryId,config){
  const a=state.arsc;if(!a)return;
  const e=await rpc('arscEntry',{session:a.session,id:entryId,config:config||''});
  const ref=(e.package?e.package+':':'')+(typeName||'')+'/'+(e.name||'');
- state.editor={kind:'arsc',session:a.session,id:entryId,config:config||'',entry:e,ref:ref,name:(e.name||'resource')+'.xml',text:arscEntryXml(e,pkgName,typeName),dirty:false,readOnly:!!e.complex,returnScreen:'tool'};
+ state.editor={kind:'arsc',session:a.session,id:entryId,config:config||'',entry:e,ref:ref,name:(e.name||'resource')+'.xml',text:arscEntryXml(e,pkgName,typeName),dirty:false,readOnly:false,returnScreen:'tool'};
  renderEditor();
 }
 async function arscOpenEntry(id,config){  const a=state.arsc;
@@ -1167,12 +1210,12 @@ const defaultFonts={java:6,xml:7.5,smali:14,text:13};
 function editorFont(){const key=fontKey(),value=Number(pref.fonts&&pref.fonts[key]);return Number.isFinite(value)&&value>0?Math.min(32,Math.max(4,value)):defaultFonts[key];}
 function fontKey(){const e=state.editor,name=(e.name||'').toLowerCase();return e.mode==='java'||name.endsWith('.java')?'java':e.binaryXml||name.endsWith('.xml')?'xml':e.kind==='dex'||name.endsWith('.smali')?'smali':'text';}
 function renderEditor(){if(state.disposeEditor)state.disposeEditor();state.screen='editor';const e=state.editor,bar=$('#toolbar');bar.replaceChildren(iconButton('menu','打开导航',openDrawer));if(e.readOnly){const t=document.createElement('div');t.className='titleblock';t.innerHTML=`<h1 class="title editorTitle">${esc(e.name)}</h1>`;bar.append(t,...(e.kind==='arsc'?[]:[iconButton('compass','查看 Smali',toggleJava)]),iconButton('more','编辑器菜单',editorMenu));}else{const actions=document.createElement('div');actions.className='editorActions';actions.append(iconButton(e.kind==='dex'?'compass':'pin',e.kind==='dex'?(e.mode==='java'?'查看 Smali':'导航'):'复制路径',e.kind==='dex'?(e.mode==='java'?toggleJava:navigationDialog):()=>rpc('clipboard',{text:e.kind==='arsc'?(e.ref||''):(e.path||'')}).then(()=>toast(e.kind==='arsc'?'资源引用已复制':'路径已复制'))),iconButton('undo','撤销',()=>state.cm.undo()),iconButton('redo','重做',()=>state.cm.redo()),iconButton('save','保存',saveEditor),iconButton('edit','行工具',lineMenu));bar.append(actions,iconButton('more','编辑器菜单',editorMenu));}
- $('#subbar').innerHTML=`<div class="editorInfo"><span id="docName">${esc(e.kind==='dex'?e.name.replace(/\.(java|smali)$/,''):e.name)}</span><span id="cursorInfo">1:1</span><button class="editorOverflow" aria-label="编辑器选项">${icon('more')}</button></div>`;$('.editorOverflow').onclick=editorMenu;$('#content').innerHTML='<div id="codehost" style="height:100%"></div>';$('#content').classList.toggle('javaEditor',fontKey()==='java');const mode=e.binaryXml||e.name.endsWith('.xml')?'xml':e.name.endsWith('.smali')?'smali':'text/x-java';const cm=CodeMirror($('#codehost'),{value:e.text,mode,theme:'cyber',lineNumbers:pref.lines,lineWrapping:pref.wrap,readOnly:e.readOnly,tabSize:4,indentUnit:4,viewportMargin:8,workTime:20,workDelay:100,inputStyle:'contenteditable',spellcheck:false,autocorrect:false,autocapitalize:false,extraKeys:{'Ctrl-S':()=>act(saveEditor),'Ctrl-F':findText,'Cmd-S':()=>act(saveEditor),'Cmd-F':findText}});state.cm=cm;cm.getWrapperElement().style.fontSize=editorFont()+'px';e.cleanGeneration=cm.changeGeneration(true);if(e.kind==='dex'&&e.mode!=='java')e.outline=smaliOutline(e.text);cm.on('change',()=>{e.dirty=!cm.isClean(e.cleanGeneration);e.outline=null;updateEditorInfo();});cm.on('cursorActivity',updateEditorInfo);cm.refresh();installEditorZoom(cm,e);updateEditorInfo();markSmaliMethods();animateContent($('#codehost'));const bottom=$('#bottom');bottom.replaceChildren();bottom.classList.add('editorBottom');if(!e.readOnly)for(const text of ['→','/','+','-','*','=','<']){const b=document.createElement('button');b.className='bottom-key';b.textContent=text;b.onclick=()=>{cm.replaceSelection(text==='→'?'    ':text);cm.focus();};bottom.append(b);}}
+ $('#subbar').innerHTML=`<div class="editorInfo"><span id="docName">${esc(e.kind==='dex'?e.name.replace(/\.(java|smali)$/,''):e.name)}</span><span id="cursorInfo">1:1</span><button class="editorOverflow" aria-label="编辑器选项">${icon('more')}</button></div>`;$('.editorOverflow').onclick=editorMenu;$('#content').innerHTML='<div id="codehost" style="height:100%"></div>';$('#content').classList.toggle('javaEditor',fontKey()==='java');const mode=e.binaryXml||e.name.endsWith('.xml')?'xml':e.name.endsWith('.smali')?'smali':'text/x-java';const cm=CodeMirror($('#codehost'),{value:e.text,mode,theme:'cyber',lineNumbers:pref.lines,lineWrapping:pref.wrap,readOnly:e.readOnly,tabSize:4,indentUnit:4,viewportMargin:8,workTime:20,workDelay:100,inputStyle:'contenteditable',spellcheck:false,autocorrect:false,autocapitalize:false,extraKeys:{'Ctrl-S':()=>act(saveEditor),'Ctrl-F':findText,'Cmd-S':()=>act(saveEditor),'Cmd-F':findText}});state.cm=cm;cm.getWrapperElement().style.fontSize=editorFont()+'px';e.cleanGeneration=cm.changeGeneration(true);if(e.kind==='dex'&&e.mode!=='java')e.outline=smaliOutline(e.text);cm.on('change',()=>{e.dirty=!cm.isClean(e.cleanGeneration);e.outline=null;updateEditorInfo();});cm.on('cursorActivity',updateEditorInfo);cm.refresh();installEditorZoom(cm,e);updateEditorInfo();markSmaliMethods();animateContent($('#codehost'));const bottom=$('#bottom');bottom.replaceChildren();bottom.classList.add('editorBottom');if(!e.readOnly)symbolBar(text=>{cm.replaceSelection(text==='→'?'    ':text);cm.focus();});}
 async function saveEditor(){
  const e=state.editor,cm=state.cm;if(e.saving)return e.saving;if(e.readOnly)return false;if(!e.dirty)return true;
  const text=cm.getValue(),generation=cm.changeGeneration(true);cm.setOption('readOnly',true);document.body.classList.add('savingCode');
  e.saving=(async()=>{try{
-  if(e.kind==='arsc'){const value=arscParseEntryXml(text,e.entry&&e.entry.name);await rpc('arscEdit',{session:e.session,op:'setValue',id:e.id,config:e.config||'',valueIndex:-1,type:(e.entry&&e.entry.type)||3,value:value});if(state.arsc){state.arsc.dirty=true;arscTouch(state.arsc);}toast('资源值已更新');}
+  if(e.kind==='arsc'){const entry=e.entry||{};if(entry.complex){const items=arscParseComplexXml(text);if(!items.length)throw Error('XML 中没有可保存的集合项');for(const it of items)await rpc('arscEdit',{session:e.session,op:'setValue',id:e.id,config:e.config||'',valueIndex:it.index,type:it.type,value:it.value});toast('已更新 '+items.length+' 个集合值');}else{const value=arscParseEntryXml(text,entry.name);await rpc('arscEdit',{session:e.session,op:'setValue',id:e.id,config:e.config||'',valueIndex:-1,type:entry.type||3,value:value});toast('资源值已更新');}if(state.arsc){state.arsc.dirty=true;arscTouch(state.arsc);}}
   else if(e.kind==='dex'){const r=await rpc(e.mode==='java'?'dexJavaSave':'dexSave',{class:e.class,text});state.dex.modified=true;toast(r.message);}
   else{const result=await rpc('save',{id:e.id,text});toast('已保存：'+result.path);if(e.args.archive){e.args={archive:result.path,entry:e.args.entry,path:result.path};alertBox('已保存编辑后的归档',result.path+(result.needsSigning?'\n安装前请先签名此 APK 副本。':''));}}
   e.text=text;e.cleanGeneration=generation;e.dirty=!cm.isClean(generation);updateEditorInfo();return !e.dirty;
