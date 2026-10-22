@@ -28,7 +28,8 @@ Merged APKs cannot update an installed app signed with a different developer key
 - Java toolbar has undo, redo, save and line tools. **Find and replace** edits the live buffer and is undoable. Smali register tools are hidden in Java; comments use the correct language syntax.
 - Failed Java compilation keeps the buffer open and shows diagnostics with a jump-to-line action. Concurrent saves compile once. Buffer changes during an asynchronous save are not falsely marked clean.
 - **Save and sign APK** rewrites, signs and verifies V1/V2/V3 before committing to the source with an exact backup. Failed signing leaves the source unchanged. Exporting a copy no longer clears the unsaved-project flag. Opening another DEX asks how to handle unsaved work.
-- Tapping a DEX file opens the DEX tool menu: **Dex 编辑器 Plus**, repair, DEX properties, Smali export, JAR export, translation mode, string replacement and merging `classes*.dex`. JAR export first extracts the selected DEX files from an APK into a local `*_dex` folder, then emits a `.class` JAR that JD-GUI can inspect. Repair and string edits preserve the original DEX version/API level.
+- Tapping a DEX file opens the DEX tool menu: **Dex 编辑器 Plus**, repair, DEX properties, Smali export, JAR export, translation mode and string replacement. JAR export first extracts the selected DEX files from an APK into a local `*_dex` folder, then emits a `.class` JAR that JD-GUI can inspect. Repair and string edits preserve the original DEX version/API level.
+- Merging `classes*.dex` moved out of the single-file menu: select two or more DEX files, long-press to open the file action sheet, and pick **合并 DEX** next to **分享**. The entry only appears when every selected file is a DEX, and only the selected files are merged.
 
 ## Edit → save → sign
 
@@ -46,7 +47,7 @@ Java compilation requires valid, compilable source. Decompiled Java is not guara
 | Area | Working implementation |
 | --- | --- |
 | Files | Two side-by-side panes on phones and tablets. Folder/history navigation, selection, copy/move, batch rename, bookmarks, recycle/restore, backup restore, create, filter, properties/SHA-256, share. |
-| Archives | ZIP, 7z, TAR, TAR.GZ/XZ/ZST/BZ2/LZ4, GZIP; format-appropriate compression, ZIP/7z AES passwords, split archives, extraction. |
+| Archives | ZIP, 7z, TAR, TAR.GZ/XZ/ZST/BZ2/LZ4, GZIP; format-appropriate compression, ZIP/7z AES passwords, split archives, extraction. Entries inside an archive can be renamed: the archive is rewritten as an `-edited` copy with the new name, the original package is left untouched, and stale JAR signatures are dropped so the copy can be signed again. |
 | APK | Metadata/icon, signature verification, browse/extract, edited archive output, signing, Android install intent. Protection is not assessed. |
 | APKS | Convert base/config/feature split sets; select bundletool variants; preserve signed standalone APKs; sign and verify merged APKs; install output. |
 | Binary XML | Decode/edit/encode; preserve existing typed values and resource IDs. New symbolic resources need a separate resource compiler. |

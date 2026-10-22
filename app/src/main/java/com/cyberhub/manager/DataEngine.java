@@ -37,7 +37,7 @@ public final class DataEngine {
    case "create":{File f=FileOps.child(new File(a.getString("path")),a.getString("name"));if(f.exists())throw new IOException("名称已存在");if(a.optBoolean("folder")){if(!f.mkdir())throw new IOException("无法创建文件夹");}else FileOps.writeAtomic(f,new byte[0],false);record("已创建 "+f);return f.getPath();}
    case "batchRename":{Object r=BatchFiles.rename(a.getJSONArray("files"));record("已重命名所选文件");return r;}
    case "batchTransfer":{JSONArray fs=a.getJSONArray("files");List<File>sources=new ArrayList<>();List<String>names=new ArrayList<>();boolean move=a.optBoolean("move");for(int i=0;i<fs.length();i++){JSONObject f=fs.getJSONObject(i);if(move&&!f.optString("archive").isEmpty())throw new IOException("移动前请先解压归档条目");sources.add(resolve(f));names.add(f.getString("name"));}Object r=BatchFiles.transfer(sources,names,new File(a.getString("destination")),move);record((move?"已移动 ":"已复制 ")+sources.size()+" 个所选文件");return r;}
-   case "rename":{File old=new File(a.getString("path"));File dest=FileOps.child(old.getParentFile(),a.getString("name"));if(dest.exists())throw new IOException("名称已存在");Files.move(old.toPath(),dest.toPath());record("已重命名 "+old.getName()+" → "+dest.getName());return dest.getPath();}
+   case "rename":{String archive=a.optString("archive");if(!archive.isEmpty()){File out=renameArchiveEntry(archive,a.getString("entry"),a.getString("name"));record("已重命名 "+a.getString("entry")+" → "+a.getString("name"));return out.getPath();}File old=new File(a.getString("path"));File dest=FileOps.child(old.getParentFile(),a.getString("name"));if(dest.exists())throw new IOException("名称已存在");Files.move(old.toPath(),dest.toPath());record("已重命名 "+old.getName()+" → "+dest.getName());return dest.getPath();}
    case "copy":case "move":{File src=resolve(a),dst=FileOps.child(new File(a.getString("destination")),src.getName());FileOps.copyTree(src,dst);if(action.equals("move"))FileOps.deleteTree(src);record((action.equals("move")?"已移动":"已复制")+" "+src+" → "+dst);return dst.getPath();}
    case "trash":return recycle(new File(a.getString("path")));
    case "recycleList":return recycleList();
@@ -110,15 +110,40 @@ public final class DataEngine {
  JSONObject save(JSONObject a)throws Exception{
   Doc d=documents.get(a.getString("id"));if(d==null)throw new IOException("文档会话已过期");if(d.file.lastModified()!=d.modified)throw new IOException("文件已在外部被修改；保存前请重新加载");String text=a.getString("text");byte[] bytes=d.axml==null?text.getBytes(StandardCharsets.UTF_8):d.axml.encode(text);FileOps.writeAtomic(d.file,bytes,true);d.modified=d.file.lastModified();File output=d.file;
   if(!d.archive.isEmpty()){
-   Map<String,byte[]>edits=archiveEdits.computeIfAbsent(d.archive,k->new HashMap<>());edits.put(d.entry,bytes);output=archiveOutputs.get(d.archive);
-   if(output==null){File src=new File(d.archive);File parent=src.getParentFile().canWrite()?src.getParentFile():workspace;String ext=src.getName().endsWith(".apk")?".apk":".zip";output=new File(parent,strip(src.getName())+"-edited"+ext);int n=2;while(output.exists())output=new File(parent,strip(src.getName())+"-edited-"+(n++)+ext);archiveOutputs.put(d.archive,output);}
+   Map<String,byte[]>edits=archiveEdits.computeIfAbsent(d.archive,k->new HashMap<>());edits.put(d.entry,bytes);output=archiveOutput(d.archive);
    FileOps.rewriteZip(new File(d.archive),output,edits);
   }record("已保存 "+output);return new JSONObject().put("path",output.getPath()).put("needsSigning",output.getName().endsWith(".apk"));
  }
  File archiveSave(String archive,String entry,byte[] bytes)throws Exception{
-  Map<String,byte[]>edits=archiveEdits.computeIfAbsent(archive,k->new HashMap<>());edits.put(entry,bytes);File output=archiveOutputs.get(archive);
-  if(output==null){File src=new File(archive);File parent=src.getParentFile().canWrite()?src.getParentFile():workspace;String ext=src.getName().endsWith(".apk")?".apk":".zip";output=new File(parent,strip(src.getName())+"-edited"+ext);int n=2;while(output.exists())output=new File(parent,strip(src.getName())+"-edited-"+(n++)+ext);archiveOutputs.put(archive,output);}
+  Map<String,byte[]>edits=archiveEdits.computeIfAbsent(archive,k->new HashMap<>());edits.put(entry,bytes);File output=archiveOutput(archive);
   FileOps.rewriteZip(new File(archive),output,edits);return output;
+ }
+ /** Edited copy of an archive; every edit and rename of the same archive lands in one file. */
+ File archiveOutput(String archive){
+  File output=archiveOutputs.get(archive);
+  if(output==null){File src=new File(archive);File parent=src.getParentFile()!=null&&src.getParentFile().canWrite()?src.getParentFile():workspace;String ext=src.getName().endsWith(".apk")?".apk":".zip";output=new File(parent,strip(src.getName())+"-edited"+ext);int n=2;while(output.exists())output=new File(parent,strip(src.getName())+"-edited-"+(n++)+ext);archiveOutputs.put(archive,output);}
+  return output;
+ }
+ /** Renames one entry inside an archive; the original archive is kept and an edited copy is written. */
+ File renameArchiveEntry(String archive,String entry,String name)throws Exception{
+  File src=new File(archive);
+  if(!src.isFile())throw new IOException("找不到归档文件");
+  if(name==null||name.trim().isEmpty())throw new IOException("名称不能为空");
+  if(name.contains("/")||name.contains("\\"))throw new IOException("名称不能包含斜杠");
+  boolean isDir=entry.endsWith("/");
+  String parent=entry.contains("/")?entry.substring(0,entry.lastIndexOf('/')+1):"";
+  String newBase=parent+name+(isDir?"/":"");
+  Map<String,String> renames=new LinkedHashMap<>();
+  try(ZipFile z=new ZipFile(src)){
+   if(z.getEntry(newBase)!=null)throw new IOException("名称已存在");
+   Enumeration<?extends ZipEntry>en=z.entries();
+   while(en.hasMoreElements()){ZipEntry e=en.nextElement();String n=e.getName();if(n.equals(entry)||n.startsWith(entry))renames.put(n,newBase+n.substring(entry.length()));}
+  }
+  if(renames.isEmpty())throw new IOException("归档内未找到该条目");
+  File output=archiveOutput(archive);
+  Map<String,byte[]>edits=archiveEdits.computeIfAbsent(archive,k->new HashMap<>());
+  FileOps.rewriteZip(src,output,edits,renames);
+  return output;
  }
  String recycle(File f)throws Exception{
   if(!f.exists())throw new IOException("文件已不存在");String id=UUID.randomUUID().toString();File target=new File(trash,id);FileOps.copyTree(f,target);JSONObject meta=new JSONObject().put("path",f.getCanonicalPath()).put("name",f.getName()).put("time",System.currentTimeMillis()).put("id",id);FileOps.writeAtomic(new File(trash,id+".json"),meta.toString().getBytes(StandardCharsets.UTF_8),false);FileOps.deleteTree(f);record("已移入回收站 "+f.getName());return id;

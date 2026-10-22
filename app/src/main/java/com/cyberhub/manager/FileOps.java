@@ -94,24 +94,30 @@ public final class FileOps {
     }
     /** Writes a new archive and removes obsolete JAR signatures after an edit. Original is kept. */
     public static void rewriteZip(File src, File dst, Map<String, byte[]> replacements) throws IOException {
+        rewriteZip(src, dst, replacements, Collections.<String, String>emptyMap());
+    }
+    /** Same as above, but renames entries: old name -> new name inside the archive. */
+    public static void rewriteZip(File src, File dst, Map<String, byte[]> replacements, Map<String, String> renames) throws IOException {
         if (src.getCanonicalFile().equals(dst.getCanonicalFile())) throw new IOException("请使用单独的输出归档");
         File temp = File.createTempFile(".archive-", ".zip", dst.getAbsoluteFile().getParentFile());
-        Set<String> seen = new HashSet<>();
+        Set<String> seen = new HashSet<>(); Set<String> processed = new HashSet<>();
         try {
             try (ZipFile input = new ZipFile(src); CountedOutput counter = new CountedOutput(new FileOutputStream(temp)); ZipOutputStream out = new ZipOutputStream(counter)) {
                 Enumeration<? extends ZipEntry> en = input.entries();
                 while (en.hasMoreElements()) {
                     ZipEntry old = en.nextElement(); String name = old.getName();
-                    if (!seen.add(name)) throw new IOException("重复的归档条目：" + name);
+                    processed.add(name);
+                    String outName = renames.containsKey(name) ? renames.get(name) : name;
+                    if (!seen.add(outName)) throw new IOException("重复的归档条目：" + outName);
                     if (name.matches("(?i)META-INF/[^/]+\\.(SF|RSA|DSA|EC)") || name.equalsIgnoreCase("META-INF/MANIFEST.MF")) continue;
-                    ZipEntry next = new ZipEntry(name); next.setTime(Math.max(old.getTime(),315619200000L));
+                    ZipEntry next = new ZipEntry(outName); next.setTime(Math.max(old.getTime(),315619200000L));
                     if (old.getMethod() == ZipEntry.STORED) {
                         next.setMethod(ZipEntry.STORED);
                         byte[] replacement = replacements.get(name);
                         if (replacement != null) { CRC32 crc = new CRC32(); crc.update(replacement); next.setSize(replacement.length); next.setCompressedSize(replacement.length); next.setCrc(crc.getValue()); }
                         else { next.setSize(old.getSize()); next.setCompressedSize(old.getSize()); next.setCrc(old.getCrc()); }
-                        int alignment = name.startsWith("lib/") && name.endsWith(".so") ? 16384 : 4;
-                        long dataStart = counter.count + 30 + name.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+                        int alignment = outName.startsWith("lib/") && outName.endsWith(".so") ? 16384 : 4;
+                        long dataStart = counter.count + 30 + outName.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
                         int padding = (int)((alignment - (dataStart % alignment)) % alignment);
                         if (padding > 0) { if (padding < 4) padding += alignment; byte[] extra = new byte[padding]; extra[0] = 0x35; extra[1] = (byte)0xd9; extra[2] = (byte)(padding - 4); extra[3] = (byte)((padding - 4) >>> 8); next.setExtra(extra); }
                     }
@@ -120,7 +126,7 @@ public final class FileOps {
                     else if (!old.isDirectory()) try (InputStream in = input.getInputStream(old)) { copy(in, out, MAX_EXTRACT); }
                     out.closeEntry();
                 }
-                for (Map.Entry<String, byte[]> e : replacements.entrySet()) if (!seen.contains(e.getKey())) {
+                for (Map.Entry<String, byte[]> e : replacements.entrySet()) if (!processed.contains(e.getKey()) && !seen.contains(e.getKey())) {
                     out.putNextEntry(new ZipEntry(e.getKey())); out.write(e.getValue()); out.closeEntry();
                 }
             }
