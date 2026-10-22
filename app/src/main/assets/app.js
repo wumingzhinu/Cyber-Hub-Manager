@@ -467,20 +467,30 @@ async function arscRenderPlusTree(body){
     const tk=pk+'t'+t.id,openT=arscTreeOpen(a,tk,false);
     pKids.append(arscTreeRow('folder',t.name||'(未命名)',arscTag(t.id)+' · '+(t.count||0)+' 项',()=>{a.treeOpen[tk]=!openT;return arscRender();},true,openT));
     if(!openT)continue;
-    const tKids=document.createElement('div');tKids.className='treeChildren';
-    let configs=a.treeConfigs[tk];
-    if(!configs){configs=await arscTreeConfigs(a,p.id,t.id);a.treeConfigs[tk]=configs;}
-    if(!configs.length)tKids.append(message('此类型没有配置。'));
-    for(const c of configs){
-     const qual=c.qualifiers||'',ck=tk+'c'+qual,openC=arscTreeOpen(a,ck,false);
-     tKids.append(arscTreeRow('folder',c.label||qual||'默认',qual+' · '+(c.count||0)+' 项',()=>{a.treeOpen[ck]=!openC;return arscRender();},true,openC));
-     if(!openC)continue;
-     const cKids=document.createElement('div');cKids.className='treeChildren';
-     let entries=a.treeEntries[ck];
-     if(!entries){entries=await arscTreeEntries(a,p.id,t.id,qual);a.treeEntries[ck]=entries;}
-     if(!entries.length)cKids.append(message('此配置没有资源。'));
-     for(const e of entries)cKids.append(arscTreeRow('leaf',e.name||'(未命名)',arscHex(e.id),()=>arscOpenEntry(e.id,qual),false,false,'R'));
-     tKids.append(cKids);
+     const tKids=document.createElement('div');tKids.className='treeChildren';
+     let configs=a.treeConfigs[tk];
+     if(!configs){configs=await arscTreeConfigs(a,p.id,t.id);a.treeConfigs[tk]=configs;}
+     if(!configs.length)tKids.append(message('此类型没有资源。'));
+     const def=configs.find(c=>!c.qualifiers);
+     if(def){ // 默认配置不是文件夹：资源直接挂在类型下
+      const dk=tk+'@default';
+      let entries=a.treeEntries[dk];
+      if(!entries){entries=await arscTreeEntries(a,p.id,t.id,'');a.treeEntries[dk]=entries;}
+      if(!entries.length)tKids.append(message('此类型没有资源。'));
+      for(const e of entries)tKids.append(arscTreeRow('leaf',e.name||'(未命名)',arscHex(e.id),()=>arscOpenEntry(e.id,''),false,false,'R'));
+     }
+     for(const c of configs){
+      const qual=c.qualifiers||'';if(!qual)continue;
+      const ck=tk+'c'+qual,openC=arscTreeOpen(a,ck,false);
+      const glyph=(qual.replace(/[^A-Za-z]/g,'').charAt(0)||'C').toUpperCase();
+      tKids.append(arscTreeRow('group',c.label&&c.label!==qual?c.label:qual,qual+' · '+(c.count||0)+' 项',()=>{a.treeOpen[ck]=!openC;return arscRender();},true,openC,glyph));
+      if(!openC)continue;
+      const cKids=document.createElement('div');cKids.className='treeChildren';
+      let entries=a.treeEntries[ck];
+      if(!entries){entries=await arscTreeEntries(a,p.id,t.id,qual);a.treeEntries[ck]=entries;}
+      if(!entries.length)cKids.append(message('此配置没有资源。'));
+      for(const e of entries)cKids.append(arscTreeRow('leaf',e.name||'(未命名)',arscHex(e.id),()=>arscOpenEntry(e.id,qual),false,false,'R'));
+      tKids.append(cKids);
     }
     pKids.append(tKids);
    }
