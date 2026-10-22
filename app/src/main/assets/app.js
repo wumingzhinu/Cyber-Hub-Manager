@@ -1326,7 +1326,7 @@ async function openDrawer(drag=false){closeMenu();const layer=$('#drawerLayer');
  row('#storageRows','folder','应用工作区',()=>navigate(state.active,{path:state.info.workspace,archive:'',entry:''}));row('#networkRows','plus','添加远程存储',addNetworkStorage);
  for(const c of (Array.isArray(pref.networkStorages)?pref.networkStorages:[])){const b=document.createElement('button');b.className='drawerRow';b.innerHTML=`<span class="circleicon">${icon(networkIcon(c))}</span><span class="storage">${esc(c.name||networkProtocolLabel(c))}<div class="small">${esc(networkProtocolLabel(c)+' · '+networkTarget(c))}</div></span>`;hold(b,()=>networkStorageActions(c),()=>openRemoteStorage(c));layer.querySelector('#networkRows').append(b);}
  row('#backgroundRows','history',`${pending.size} 个当前操作`,backgroundPage);
- for(const [ic,label,fn]of [['trash','回收站',recyclePage],['plugin','插件管理器',pluginPage],['remote','远程管理',()=>servicePage('remote')],['layers','已安装应用',appsPage],['text','翻译服务',translatePage],['edit','文本编辑器',newText],['terminal','Termux 终端',terminalPage],['search','屏幕取色',colorPickerTool],['switch','Root / Shizuku 授权',elevatedTool],['network','MCP 服务',()=>servicePage('mcp')],['history','活动记录',logPage],['more','更多工具',moreTools]])row('#toolRows',ic,label,fn);
+ for(const [ic,label,fn]of [['trash','回收站',recyclePage],['plugin','插件管理器',pluginPage],['remote','远程管理',()=>servicePage('remote')],['layers','已安装应用',appsPage],['code','Smali 指令查询',smaliReferencePage],['text','翻译服务',translatePage],['edit','文本编辑器',newText],['terminal','Termux 终端',terminalPage],['search','屏幕取色',colorPickerTool],['switch','Root / Shizuku 授权',elevatedTool],['network','MCP 服务',()=>servicePage('mcp')],['history','活动记录',logPage],['more','更多工具',moreTools]])row('#toolRows',ic,label,fn);
  try{const disk=await rpc('disk',{path:state.info.home});if(!drawer.isConnected)return;storageRow.querySelector('.storage').innerHTML='存储目录<div class="meter"><span style="width:'+ (disk.total?(1-disk.free/disk.total)*100:0)+'%"></span></div><div class="small">'+size(disk.total-disk.free)+' 已用，'+size(disk.free)+' 可用</div>';}catch(error){if(drawer.isConnected)storageRow.querySelector('.small').textContent='无法获取存储信息';}
 }
 function drawerMenu(){menu([{icon:'plus',label:'添加远程存储',run:addNetworkStorage},{icon:'copy',label:'书签',run:()=>{closeDrawer();bookmarks();}},{icon:'refresh',label:'刷新',run:async()=>{closeDrawer();if(state.screen==='files')await refresh();}},{icon:'settings',label:'设置',run:()=>{closeDrawer();preferences();}},{icon:'info',label:'关于',run:()=>{closeDrawer();about();}}]);}
@@ -1561,6 +1561,1923 @@ function translateFields(provider){
   ['aiModel','模型','text','例如 gpt-4o-mini'],
   ['aiPrompt','提示词','textarea','{lang} 会被替换为目标语言']];
 }
+const SMALI_FORMAT_HELP='格式：v=寄存器，vAA=8 位寄存器，vAAAA=16 位寄存器，#=立即数，@=索引，+/-=分支偏移。';
+const SMALI_CATEGORIES=['全部','常用','数据/常量','运算/转换','比较/跳转','数组/字段','方法/对象','返回/异常','负载/旧版'];
+const SMALI_COMMON=new Set(["move","move-result","move-result-wide","move-result-object","move-exception","const/4","const/16","const","const-string","const-class","check-cast","instance-of","new-instance","new-array","filled-new-array","aget","aput","iget","iput","sget","sput","invoke-virtual","invoke-direct","invoke-static","invoke-interface","invoke-super","if-eq","if-eqz","if-ne","if-nez","goto","packed-switch","sparse-switch","return","return-void","return-object","cmp-long","cmpl-float","cmpg-float","add-int","sub-int","mul-int","div-int","rem-int","and-int","or-int","xor-int","shl-int","shr-int","ushr-int","add-int/lit8","int-to-long","int-to-byte","monitor-enter","monitor-exit","throw","array-length"]);
+const SMALI_OPS=[
+ {
+  "op": "move",
+  "fmt": "12x",
+  "cat": "数据/常量",
+  "desc": "将 vB 的值复制到 vA，vB 保持不变。",
+  "ex": "move v0, v1"
+ },
+ {
+  "op": "move/from16",
+  "fmt": "22x",
+  "cat": "数据/常量",
+  "desc": "从 16 位寄存器 vB 复制到 vA。",
+  "ex": "move/from16 v0, v16"
+ },
+ {
+  "op": "move/16",
+  "fmt": "32x",
+  "cat": "数据/常量",
+  "desc": "从 16 位寄存器编号复制到 vA，两个寄存器均使用 16 位编号。",
+  "ex": "move/16 v0, v256"
+ },
+ {
+  "op": "move-wide",
+  "fmt": "12x",
+  "cat": "数据/常量",
+  "desc": "复制 64 位值，占用 vA/vA+1 与 vB/vB+1。",
+  "ex": "move-wide v0, v2"
+ },
+ {
+  "op": "move-wide/from16",
+  "fmt": "22x",
+  "cat": "数据/常量",
+  "desc": "从 16 位寄存器复制 64 位值。",
+  "ex": "move-wide/from16 v0, v16"
+ },
+ {
+  "op": "move-wide/16",
+  "fmt": "32x",
+  "cat": "数据/常量",
+  "desc": "使用 16 位寄存器编号复制 64 位值。",
+  "ex": "move-wide/16 v0, v256"
+ },
+ {
+  "op": "move-object",
+  "fmt": "12x",
+  "cat": "数据/常量",
+  "desc": "复制对象引用。",
+  "ex": "move-object v0, v1"
+ },
+ {
+  "op": "move-object/from16",
+  "fmt": "22x",
+  "cat": "数据/常量",
+  "desc": "从 16 位寄存器复制对象引用。",
+  "ex": "move-object/from16 v0, v16"
+ },
+ {
+  "op": "move-object/16",
+  "fmt": "32x",
+  "cat": "数据/常量",
+  "desc": "使用 16 位寄存器编号复制对象引用。",
+  "ex": "move-object/16 v0, v256"
+ },
+ {
+  "op": "move-result",
+  "fmt": "11x",
+  "cat": "数据/常量",
+  "desc": "把上一条 invoke 的 32 位返回值写入 vAA；必须紧随调用。",
+  "ex": "move-result v0"
+ },
+ {
+  "op": "move-result-wide",
+  "fmt": "11x",
+  "cat": "数据/常量",
+  "desc": "把上一条 invoke 的 64 位返回值写入 vAA/vAA+1。",
+  "ex": "move-result-wide v0"
+ },
+ {
+  "op": "move-result-object",
+  "fmt": "11x",
+  "cat": "数据/常量",
+  "desc": "把上一条 invoke 返回的对象引用写入 vAA。",
+  "ex": "move-result-object v0"
+ },
+ {
+  "op": "move-exception",
+  "fmt": "11x",
+  "cat": "数据/常量",
+  "desc": "进入 catch 块时，把当前异常对象写入 vAA。",
+  "ex": "move-exception v0"
+ },
+ {
+  "op": "nop",
+  "fmt": "10x",
+  "cat": "数据/常量",
+  "desc": "空操作，常用于对齐、占位或补丁。",
+  "ex": "nop"
+ },
+ {
+  "op": "breakpoint",
+  "fmt": "10x",
+  "cat": "数据/常量",
+  "desc": "调试器断点指令，普通应用代码不应生成。",
+  "ex": "breakpoint"
+ },
+ {
+  "op": "const/4",
+  "fmt": "11n",
+  "cat": "数据/常量",
+  "desc": "把 4 位有符号立即数写入 vA，范围 -8 到 7。",
+  "ex": "const/4 v0, 0x1"
+ },
+ {
+  "op": "const/16",
+  "fmt": "21s",
+  "cat": "数据/常量",
+  "desc": "把 16 位有符号立即数写入 vAA。",
+  "ex": "const/16 v0, 0x100"
+ },
+ {
+  "op": "const",
+  "fmt": "31i",
+  "cat": "数据/常量",
+  "desc": "把 32 位立即数写入 vAA。",
+  "ex": "const v0, 0x12345678"
+ },
+ {
+  "op": "const-wide/16",
+  "fmt": "21s",
+  "cat": "数据/常量",
+  "desc": "把 16 位有符号立即数扩展到 64 位后写入 vAA。",
+  "ex": "const-wide/16 v0, 0x100"
+ },
+ {
+  "op": "const-wide/32",
+  "fmt": "31i",
+  "cat": "数据/常量",
+  "desc": "把 32 位有符号立即数扩展到 64 位后写入 vAA。",
+  "ex": "const-wide/32 v0, 0x12345678"
+ },
+ {
+  "op": "const-wide",
+  "fmt": "51l",
+  "cat": "数据/常量",
+  "desc": "把 64 位立即数写入 vAA/vAA+1。",
+  "ex": "const-wide v0, 0x123456789abcdef0L"
+ },
+ {
+  "op": "const/high16",
+  "fmt": "21h",
+  "cat": "数据/常量",
+  "desc": "把 16 位立即数左移 16 位后写入 vAA。",
+  "ex": "const/high16 v0, 0x4000"
+ },
+ {
+  "op": "const-wide/high16",
+  "fmt": "21h",
+  "cat": "数据/常量",
+  "desc": "把 16 位立即数左移 48 位后写入 vAA/vAA+1。",
+  "ex": "const-wide/high16 v0, 0x4000"
+ },
+ {
+  "op": "const-string",
+  "fmt": "21c",
+  "cat": "数据/常量",
+  "desc": "把字符串常量引用写入 vAA。",
+  "ex": "const-string v0, \"hello\""
+ },
+ {
+  "op": "const-string/jumbo",
+  "fmt": "31c",
+  "cat": "数据/常量",
+  "desc": "使用 32 位字符串索引写入常量，适用于超大 DEX。",
+  "ex": "const-string/jumbo v0, \"hello\""
+ },
+ {
+  "op": "const-class",
+  "fmt": "21c",
+  "cat": "数据/常量",
+  "desc": "把类型引用写入 vAA。",
+  "ex": "const-class v0, Ljava/lang/String;"
+ },
+ {
+  "op": "const-method-handle",
+  "fmt": "21c",
+  "cat": "数据/常量",
+  "desc": "把 MethodHandle 常量写入 vAA。",
+  "ex": "const-method-handle v0, invoke-static@Lcom/example/Foo;->bar()V"
+ },
+ {
+  "op": "const-method-type",
+  "fmt": "21c",
+  "cat": "数据/常量",
+  "desc": "把 MethodType 常量写入 vAA。",
+  "ex": "const-method-type v0, (I)V"
+ },
+ {
+  "op": "neg-int",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "对 int 取负。",
+  "ex": "neg-int v0, v1"
+ },
+ {
+  "op": "not-int",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "对 int 按位取反。",
+  "ex": "not-int v0, v1"
+ },
+ {
+  "op": "neg-long",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "对 long 取负。",
+  "ex": "neg-long v0, v1"
+ },
+ {
+  "op": "not-long",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "对 long 按位取反。",
+  "ex": "not-long v0, v1"
+ },
+ {
+  "op": "neg-float",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "对 float 取负。",
+  "ex": "neg-float v0, v1"
+ },
+ {
+  "op": "neg-double",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "对 double 取负。",
+  "ex": "neg-double v0, v1"
+ },
+ {
+  "op": "int-to-long",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "把 int 符号扩展到 long。",
+  "ex": "int-to-long v0, v1"
+ },
+ {
+  "op": "int-to-float",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "把 int 转换为 float。",
+  "ex": "int-to-float v0, v1"
+ },
+ {
+  "op": "int-to-double",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "把 int 转换为 double。",
+  "ex": "int-to-double v0, v1"
+ },
+ {
+  "op": "long-to-int",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "把 long 截断为 int。",
+  "ex": "long-to-int v0, v1"
+ },
+ {
+  "op": "long-to-float",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "把 long 转换为 float。",
+  "ex": "long-to-float v0, v1"
+ },
+ {
+  "op": "long-to-double",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "把 long 转换为 double。",
+  "ex": "long-to-double v0, v1"
+ },
+ {
+  "op": "float-to-int",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "把 float 转换为 int，向零截断。",
+  "ex": "float-to-int v0, v1"
+ },
+ {
+  "op": "float-to-long",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "把 float 转换为 long，向零截断。",
+  "ex": "float-to-long v0, v1"
+ },
+ {
+  "op": "float-to-double",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "把 float 扩展为 double。",
+  "ex": "float-to-double v0, v1"
+ },
+ {
+  "op": "double-to-int",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "把 double 转换为 int，向零截断。",
+  "ex": "double-to-int v0, v1"
+ },
+ {
+  "op": "double-to-long",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "把 double 转换为 long，向零截断。",
+  "ex": "double-to-long v0, v1"
+ },
+ {
+  "op": "double-to-float",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "把 double 收窄为 float。",
+  "ex": "double-to-float v0, v1"
+ },
+ {
+  "op": "int-to-byte",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "把 int 截断为 byte 并符号扩展。",
+  "ex": "int-to-byte v0, v1"
+ },
+ {
+  "op": "int-to-char",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "把 int 截断为 char 并零扩展。",
+  "ex": "int-to-char v0, v1"
+ },
+ {
+  "op": "int-to-short",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "把 int 截断为 short 并符号扩展。",
+  "ex": "int-to-short v0, v1"
+ },
+ {
+  "op": "add-int",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "int 加法。",
+  "ex": "add-int v0, v1, v2"
+ },
+ {
+  "op": "sub-int",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "int 减法。",
+  "ex": "sub-int v0, v1, v2"
+ },
+ {
+  "op": "mul-int",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "int 乘法。",
+  "ex": "mul-int v0, v1, v2"
+ },
+ {
+  "op": "div-int",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "int 除法，除零抛 ArithmeticException。",
+  "ex": "div-int v0, v1, v2"
+ },
+ {
+  "op": "rem-int",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "int 取余。",
+  "ex": "rem-int v0, v1, v2"
+ },
+ {
+  "op": "and-int",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "int 按位与。",
+  "ex": "and-int v0, v1, v2"
+ },
+ {
+  "op": "or-int",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "int 按位或。",
+  "ex": "or-int v0, v1, v2"
+ },
+ {
+  "op": "xor-int",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "int 按位异或。",
+  "ex": "xor-int v0, v1, v2"
+ },
+ {
+  "op": "shl-int",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "int 左移，移位量取低 5 位。",
+  "ex": "shl-int v0, v1, v2"
+ },
+ {
+  "op": "shr-int",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "int 算术右移，移位量取低 5 位。",
+  "ex": "shr-int v0, v1, v2"
+ },
+ {
+  "op": "ushr-int",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "int 逻辑右移，移位量取低 5 位。",
+  "ex": "ushr-int v0, v1, v2"
+ },
+ {
+  "op": "add-long",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "long 加法。",
+  "ex": "add-long v0, v1, v2"
+ },
+ {
+  "op": "sub-long",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "long 减法。",
+  "ex": "sub-long v0, v1, v2"
+ },
+ {
+  "op": "mul-long",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "long 乘法。",
+  "ex": "mul-long v0, v1, v2"
+ },
+ {
+  "op": "div-long",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "long 除法，除零抛 ArithmeticException。",
+  "ex": "div-long v0, v1, v2"
+ },
+ {
+  "op": "rem-long",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "long 取余。",
+  "ex": "rem-long v0, v1, v2"
+ },
+ {
+  "op": "and-long",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "long 按位与。",
+  "ex": "and-long v0, v1, v2"
+ },
+ {
+  "op": "or-long",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "long 按位或。",
+  "ex": "or-long v0, v1, v2"
+ },
+ {
+  "op": "xor-long",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "long 按位异或。",
+  "ex": "xor-long v0, v1, v2"
+ },
+ {
+  "op": "shl-long",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "long 左移，移位量取低 6 位。",
+  "ex": "shl-long v0, v1, v2"
+ },
+ {
+  "op": "shr-long",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "long 算术右移，移位量取低 6 位。",
+  "ex": "shr-long v0, v1, v2"
+ },
+ {
+  "op": "ushr-long",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "long 逻辑右移，移位量取低 6 位。",
+  "ex": "ushr-long v0, v1, v2"
+ },
+ {
+  "op": "add-float",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "float 加法。",
+  "ex": "add-float v0, v1, v2"
+ },
+ {
+  "op": "sub-float",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "float 减法。",
+  "ex": "sub-float v0, v1, v2"
+ },
+ {
+  "op": "mul-float",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "float 乘法。",
+  "ex": "mul-float v0, v1, v2"
+ },
+ {
+  "op": "div-float",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "float 除法。",
+  "ex": "div-float v0, v1, v2"
+ },
+ {
+  "op": "rem-float",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "float 取余。",
+  "ex": "rem-float v0, v1, v2"
+ },
+ {
+  "op": "add-double",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "double 加法。",
+  "ex": "add-double v0, v1, v2"
+ },
+ {
+  "op": "sub-double",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "double 减法。",
+  "ex": "sub-double v0, v1, v2"
+ },
+ {
+  "op": "mul-double",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "double 乘法。",
+  "ex": "mul-double v0, v1, v2"
+ },
+ {
+  "op": "div-double",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "double 除法。",
+  "ex": "div-double v0, v1, v2"
+ },
+ {
+  "op": "rem-double",
+  "fmt": "23x",
+  "cat": "运算/转换",
+  "desc": "double 取余。",
+  "ex": "rem-double v0, v1, v2"
+ },
+ {
+  "op": "add-int/lit16",
+  "fmt": "22s",
+  "cat": "运算/转换",
+  "desc": "vB 加 16 位有符号立即数。",
+  "ex": "add-int/lit16 v0, v1, 0x100"
+ },
+ {
+  "op": "rsub-int",
+  "fmt": "22s",
+  "cat": "运算/转换",
+  "desc": "计算 16 位有符号立即数减 vB。",
+  "ex": "rsub-int v0, v1, 0x100"
+ },
+ {
+  "op": "mul-int/lit16",
+  "fmt": "22s",
+  "cat": "运算/转换",
+  "desc": "vB 乘 16 位有符号立即数。",
+  "ex": "mul-int/lit16 v0, v1, 0x100"
+ },
+ {
+  "op": "div-int/lit16",
+  "fmt": "22s",
+  "cat": "运算/转换",
+  "desc": "vB 除以 16 位有符号立即数。",
+  "ex": "div-int/lit16 v0, v1, 0x100"
+ },
+ {
+  "op": "rem-int/lit16",
+  "fmt": "22s",
+  "cat": "运算/转换",
+  "desc": "vB 对 16 位有符号立即数取余。",
+  "ex": "rem-int/lit16 v0, v1, 0x100"
+ },
+ {
+  "op": "and-int/lit16",
+  "fmt": "22s",
+  "cat": "运算/转换",
+  "desc": "vB 与 16 位立即数按位与。",
+  "ex": "and-int/lit16 v0, v1, 0x100"
+ },
+ {
+  "op": "or-int/lit16",
+  "fmt": "22s",
+  "cat": "运算/转换",
+  "desc": "vB 与 16 位立即数按位或。",
+  "ex": "or-int/lit16 v0, v1, 0x100"
+ },
+ {
+  "op": "xor-int/lit16",
+  "fmt": "22s",
+  "cat": "运算/转换",
+  "desc": "vB 与 16 位立即数按位异或。",
+  "ex": "xor-int/lit16 v0, v1, 0x100"
+ },
+ {
+  "op": "add-int/lit8",
+  "fmt": "22b",
+  "cat": "运算/转换",
+  "desc": "vB 加 8 位有符号立即数。",
+  "ex": "add-int/lit8 v0, v1, 0x1"
+ },
+ {
+  "op": "rsub-int/lit8",
+  "fmt": "22b",
+  "cat": "运算/转换",
+  "desc": "计算 8 位有符号立即数减 vB。",
+  "ex": "rsub-int/lit8 v0, v1, 0x1"
+ },
+ {
+  "op": "mul-int/lit8",
+  "fmt": "22b",
+  "cat": "运算/转换",
+  "desc": "vB 乘 8 位有符号立即数。",
+  "ex": "mul-int/lit8 v0, v1, 0x2"
+ },
+ {
+  "op": "div-int/lit8",
+  "fmt": "22b",
+  "cat": "运算/转换",
+  "desc": "vB 除以 8 位有符号立即数。",
+  "ex": "div-int/lit8 v0, v1, 0x2"
+ },
+ {
+  "op": "rem-int/lit8",
+  "fmt": "22b",
+  "cat": "运算/转换",
+  "desc": "vB 对 8 位有符号立即数取余。",
+  "ex": "rem-int/lit8 v0, v1, 0x2"
+ },
+ {
+  "op": "and-int/lit8",
+  "fmt": "22b",
+  "cat": "运算/转换",
+  "desc": "vB 与 8 位立即数按位与。",
+  "ex": "and-int/lit8 v0, v1, 0x1"
+ },
+ {
+  "op": "or-int/lit8",
+  "fmt": "22b",
+  "cat": "运算/转换",
+  "desc": "vB 与 8 位立即数按位或。",
+  "ex": "or-int/lit8 v0, v1, 0x1"
+ },
+ {
+  "op": "xor-int/lit8",
+  "fmt": "22b",
+  "cat": "运算/转换",
+  "desc": "vB 与 8 位立即数按位异或。",
+  "ex": "xor-int/lit8 v0, v1, 0x1"
+ },
+ {
+  "op": "shl-int/lit8",
+  "fmt": "22b",
+  "cat": "运算/转换",
+  "desc": "vB 左移 8 位立即数指定的位数。",
+  "ex": "shl-int/lit8 v0, v1, 0x2"
+ },
+ {
+  "op": "shr-int/lit8",
+  "fmt": "22b",
+  "cat": "运算/转换",
+  "desc": "vB 算术右移 8 位立即数指定的位数。",
+  "ex": "shr-int/lit8 v0, v1, 0x2"
+ },
+ {
+  "op": "ushr-int/lit8",
+  "fmt": "22b",
+  "cat": "运算/转换",
+  "desc": "vB 逻辑右移 8 位立即数指定的位数。",
+  "ex": "ushr-int/lit8 v0, v1, 0x2"
+ },
+ {
+  "op": "cmpl-float",
+  "fmt": "23x",
+  "cat": "比较/跳转",
+  "desc": "比较两个 float；vB < vC 返回 -1，相等返回 0，大于返回 1，NaN 返回 -1。",
+  "ex": "cmpl-float v0, v1, v2"
+ },
+ {
+  "op": "cmpg-float",
+  "fmt": "23x",
+  "cat": "比较/跳转",
+  "desc": "比较两个 float；vB < vC 返回 -1，相等返回 0，大于返回 1，NaN 返回 1。",
+  "ex": "cmpg-float v0, v1, v2"
+ },
+ {
+  "op": "cmpl-double",
+  "fmt": "23x",
+  "cat": "比较/跳转",
+  "desc": "比较两个 double；NaN 返回 -1。",
+  "ex": "cmpl-double v0, v1, v2"
+ },
+ {
+  "op": "cmpg-double",
+  "fmt": "23x",
+  "cat": "比较/跳转",
+  "desc": "比较两个 double；NaN 返回 1。",
+  "ex": "cmpg-double v0, v1, v2"
+ },
+ {
+  "op": "cmp-long",
+  "fmt": "23x",
+  "cat": "比较/跳转",
+  "desc": "比较两个 long；结果 -1、0 或 1 写入 vA。",
+  "ex": "cmp-long v0, v1, v2"
+ },
+ {
+  "op": "if-eq",
+  "fmt": "22t",
+  "cat": "比较/跳转",
+  "desc": "按有符号整数或引用比较，若 vA == vB 则跳转到目标标签。",
+  "ex": "if-eq v0, v1, :cond_0"
+ },
+ {
+  "op": "if-ne",
+  "fmt": "22t",
+  "cat": "比较/跳转",
+  "desc": "按有符号整数或引用比较，若 vA != vB 则跳转到目标标签。",
+  "ex": "if-ne v0, v1, :cond_0"
+ },
+ {
+  "op": "if-lt",
+  "fmt": "22t",
+  "cat": "比较/跳转",
+  "desc": "按有符号整数或引用比较，若 vA < vB 则跳转到目标标签。",
+  "ex": "if-lt v0, v1, :cond_0"
+ },
+ {
+  "op": "if-ge",
+  "fmt": "22t",
+  "cat": "比较/跳转",
+  "desc": "按有符号整数或引用比较，若 vA >= vB 则跳转到目标标签。",
+  "ex": "if-ge v0, v1, :cond_0"
+ },
+ {
+  "op": "if-gt",
+  "fmt": "22t",
+  "cat": "比较/跳转",
+  "desc": "按有符号整数或引用比较，若 vA > vB 则跳转到目标标签。",
+  "ex": "if-gt v0, v1, :cond_0"
+ },
+ {
+  "op": "if-le",
+  "fmt": "22t",
+  "cat": "比较/跳转",
+  "desc": "按有符号整数或引用比较，若 vA <= vB 则跳转到目标标签。",
+  "ex": "if-le v0, v1, :cond_0"
+ },
+ {
+  "op": "if-eqz",
+  "fmt": "21t",
+  "cat": "比较/跳转",
+  "desc": "与零或 null 比较，若 vAA == 0 或 null 则跳转。",
+  "ex": "if-eqz v0, :cond_0"
+ },
+ {
+  "op": "if-nez",
+  "fmt": "21t",
+  "cat": "比较/跳转",
+  "desc": "与零或 null 比较，若 vAA != 0 或非 null 则跳转。",
+  "ex": "if-nez v0, :cond_0"
+ },
+ {
+  "op": "if-ltz",
+  "fmt": "21t",
+  "cat": "比较/跳转",
+  "desc": "与零或 null 比较，若 vAA < 0 则跳转。",
+  "ex": "if-ltz v0, :cond_0"
+ },
+ {
+  "op": "if-gez",
+  "fmt": "21t",
+  "cat": "比较/跳转",
+  "desc": "与零或 null 比较，若 vAA >= 0 则跳转。",
+  "ex": "if-gez v0, :cond_0"
+ },
+ {
+  "op": "if-gtz",
+  "fmt": "21t",
+  "cat": "比较/跳转",
+  "desc": "与零或 null 比较，若 vAA > 0 则跳转。",
+  "ex": "if-gtz v0, :cond_0"
+ },
+ {
+  "op": "if-lez",
+  "fmt": "21t",
+  "cat": "比较/跳转",
+  "desc": "与零或 null 比较，若 vAA <= 0 则跳转。",
+  "ex": "if-lez v0, :cond_0"
+ },
+ {
+  "op": "goto",
+  "fmt": "10t",
+  "cat": "比较/跳转",
+  "desc": "无条件跳转到标签，使用 8 位分支偏移。",
+  "ex": "goto :goto_0"
+ },
+ {
+  "op": "goto/16",
+  "fmt": "20t",
+  "cat": "比较/跳转",
+  "desc": "无条件跳转，使用 16 位分支偏移。",
+  "ex": "goto/16 :goto_0"
+ },
+ {
+  "op": "goto/32",
+  "fmt": "30t",
+  "cat": "比较/跳转",
+  "desc": "无条件跳转，使用 32 位分支偏移。",
+  "ex": "goto/32 :goto_0"
+ },
+ {
+  "op": "packed-switch",
+  "fmt": "31t",
+  "cat": "比较/跳转",
+  "desc": "按连续整数索引跳转，数据来自 packed-switch-data 负载。",
+  "ex": "packed-switch v0, :pswitch_data_0"
+ },
+ {
+  "op": "sparse-switch",
+  "fmt": "31t",
+  "cat": "比较/跳转",
+  "desc": "按稀疏整数键跳转，数据来自 sparse-switch-data 负载。",
+  "ex": "sparse-switch v0, :sswitch_data_0"
+ },
+ {
+  "op": "aget",
+  "fmt": "23x",
+  "cat": "数组/字段",
+  "desc": "从 vB 数组的 vC 索引读取，结果写入 vA；读取 int 数组元素。",
+  "ex": "aget v0, v1, v2"
+ },
+ {
+  "op": "aget-wide",
+  "fmt": "23x",
+  "cat": "数组/字段",
+  "desc": "从 vB 数组的 vC 索引读取，结果写入 vA；读取 long/double 数组元素，占用两个寄存器。",
+  "ex": "aget v0, v1, v2"
+ },
+ {
+  "op": "aget-object",
+  "fmt": "23x",
+  "cat": "数组/字段",
+  "desc": "从 vB 数组的 vC 索引读取，结果写入 vA；读取对象数组元素。",
+  "ex": "aget v0, v1, v2"
+ },
+ {
+  "op": "aget-boolean",
+  "fmt": "23x",
+  "cat": "数组/字段",
+  "desc": "从 vB 数组的 vC 索引读取，结果写入 vA；读取 boolean 数组元素。",
+  "ex": "aget v0, v1, v2"
+ },
+ {
+  "op": "aget-byte",
+  "fmt": "23x",
+  "cat": "数组/字段",
+  "desc": "从 vB 数组的 vC 索引读取，结果写入 vA；读取 byte 数组元素。",
+  "ex": "aget v0, v1, v2"
+ },
+ {
+  "op": "aget-char",
+  "fmt": "23x",
+  "cat": "数组/字段",
+  "desc": "从 vB 数组的 vC 索引读取，结果写入 vA；读取 char 数组元素。",
+  "ex": "aget v0, v1, v2"
+ },
+ {
+  "op": "aget-short",
+  "fmt": "23x",
+  "cat": "数组/字段",
+  "desc": "从 vB 数组的 vC 索引读取，结果写入 vA；读取 short 数组元素。",
+  "ex": "aget v0, v1, v2"
+ },
+ {
+  "op": "aput",
+  "fmt": "23x",
+  "cat": "数组/字段",
+  "desc": "把 vA 写入 vB 数组的 vC 索引；写入 int 数组元素。",
+  "ex": "aput v0, v1, v2"
+ },
+ {
+  "op": "aput-wide",
+  "fmt": "23x",
+  "cat": "数组/字段",
+  "desc": "把 vA 写入 vB 数组的 vC 索引；写入 long/double 数组元素，占用两个寄存器。",
+  "ex": "aput v0, v1, v2"
+ },
+ {
+  "op": "aput-object",
+  "fmt": "23x",
+  "cat": "数组/字段",
+  "desc": "把 vA 写入 vB 数组的 vC 索引；写入对象数组元素。",
+  "ex": "aput v0, v1, v2"
+ },
+ {
+  "op": "aput-boolean",
+  "fmt": "23x",
+  "cat": "数组/字段",
+  "desc": "把 vA 写入 vB 数组的 vC 索引；写入 boolean 数组元素。",
+  "ex": "aput v0, v1, v2"
+ },
+ {
+  "op": "aput-byte",
+  "fmt": "23x",
+  "cat": "数组/字段",
+  "desc": "把 vA 写入 vB 数组的 vC 索引；写入 byte 数组元素。",
+  "ex": "aput v0, v1, v2"
+ },
+ {
+  "op": "aput-char",
+  "fmt": "23x",
+  "cat": "数组/字段",
+  "desc": "把 vA 写入 vB 数组的 vC 索引；写入 char 数组元素。",
+  "ex": "aput v0, v1, v2"
+ },
+ {
+  "op": "aput-short",
+  "fmt": "23x",
+  "cat": "数组/字段",
+  "desc": "把 vA 写入 vB 数组的 vC 索引；写入 short 数组元素。",
+  "ex": "aput v0, v1, v2"
+ },
+ {
+  "op": "array-length",
+  "fmt": "12x",
+  "cat": "数组/字段",
+  "desc": "读取 vB 数组长度并写入 vA。",
+  "ex": "array-length v0, v1"
+ },
+ {
+  "op": "new-array",
+  "fmt": "22c",
+  "cat": "数组/字段",
+  "desc": "创建长度为 vB 的指定类型数组，引用写入 vA。",
+  "ex": "new-array v0, v1, [I"
+ },
+ {
+  "op": "filled-new-array",
+  "fmt": "35c",
+  "cat": "数组/字段",
+  "desc": "用寄存器列表创建数组，结果通过 move-result-object 获取。",
+  "ex": "filled-new-array {v0, v1}, [I"
+ },
+ {
+  "op": "filled-new-array/range",
+  "fmt": "3rc",
+  "cat": "数组/字段",
+  "desc": "用连续寄存器范围创建数组，结果通过 move-result-object 获取。",
+  "ex": "filled-new-array/range {v0 .. v5}, [I"
+ },
+ {
+  "op": "fill-array-data",
+  "fmt": "31t",
+  "cat": "数组/字段",
+  "desc": "用静态数据负载填充数组，数组引用在 vAA。",
+  "ex": "fill-array-data v0, :array_0"
+ },
+ {
+  "op": "iget",
+  "fmt": "22c",
+  "cat": "数组/字段",
+  "desc": "从 vB 对象读取实例字段到 vA；读取 int 实例字段。",
+  "ex": "iget v0, v1, Lcom/example/Foo;->value:I"
+ },
+ {
+  "op": "iget-wide",
+  "fmt": "22c",
+  "cat": "数组/字段",
+  "desc": "从 vB 对象读取实例字段到 vA；读取 long/double 实例字段，占用两个寄存器。",
+  "ex": "iget v0, v1, Lcom/example/Foo;->value:I"
+ },
+ {
+  "op": "iget-object",
+  "fmt": "22c",
+  "cat": "数组/字段",
+  "desc": "从 vB 对象读取实例字段到 vA；读取对象实例字段。",
+  "ex": "iget v0, v1, Lcom/example/Foo;->value:I"
+ },
+ {
+  "op": "iget-boolean",
+  "fmt": "22c",
+  "cat": "数组/字段",
+  "desc": "从 vB 对象读取实例字段到 vA；读取 boolean 实例字段。",
+  "ex": "iget v0, v1, Lcom/example/Foo;->value:I"
+ },
+ {
+  "op": "iget-byte",
+  "fmt": "22c",
+  "cat": "数组/字段",
+  "desc": "从 vB 对象读取实例字段到 vA；读取 byte 实例字段。",
+  "ex": "iget v0, v1, Lcom/example/Foo;->value:I"
+ },
+ {
+  "op": "iget-char",
+  "fmt": "22c",
+  "cat": "数组/字段",
+  "desc": "从 vB 对象读取实例字段到 vA；读取 char 实例字段。",
+  "ex": "iget v0, v1, Lcom/example/Foo;->value:I"
+ },
+ {
+  "op": "iget-short",
+  "fmt": "22c",
+  "cat": "数组/字段",
+  "desc": "从 vB 对象读取实例字段到 vA；读取 short 实例字段。",
+  "ex": "iget v0, v1, Lcom/example/Foo;->value:I"
+ },
+ {
+  "op": "iput",
+  "fmt": "22c",
+  "cat": "数组/字段",
+  "desc": "把 vA 写入 vB 对象的实例字段；写入 int 实例字段。",
+  "ex": "iput v0, v1, Lcom/example/Foo;->value:I"
+ },
+ {
+  "op": "iput-wide",
+  "fmt": "22c",
+  "cat": "数组/字段",
+  "desc": "把 vA 写入 vB 对象的实例字段；写入 long/double 实例字段，占用两个寄存器。",
+  "ex": "iput v0, v1, Lcom/example/Foo;->value:I"
+ },
+ {
+  "op": "iput-object",
+  "fmt": "22c",
+  "cat": "数组/字段",
+  "desc": "把 vA 写入 vB 对象的实例字段；写入对象实例字段。",
+  "ex": "iput v0, v1, Lcom/example/Foo;->value:I"
+ },
+ {
+  "op": "iput-boolean",
+  "fmt": "22c",
+  "cat": "数组/字段",
+  "desc": "把 vA 写入 vB 对象的实例字段；写入 boolean 实例字段。",
+  "ex": "iput v0, v1, Lcom/example/Foo;->value:I"
+ },
+ {
+  "op": "iput-byte",
+  "fmt": "22c",
+  "cat": "数组/字段",
+  "desc": "把 vA 写入 vB 对象的实例字段；写入 byte 实例字段。",
+  "ex": "iput v0, v1, Lcom/example/Foo;->value:I"
+ },
+ {
+  "op": "iput-char",
+  "fmt": "22c",
+  "cat": "数组/字段",
+  "desc": "把 vA 写入 vB 对象的实例字段；写入 char 实例字段。",
+  "ex": "iput v0, v1, Lcom/example/Foo;->value:I"
+ },
+ {
+  "op": "iput-short",
+  "fmt": "22c",
+  "cat": "数组/字段",
+  "desc": "把 vA 写入 vB 对象的实例字段；写入 short 实例字段。",
+  "ex": "iput v0, v1, Lcom/example/Foo;->value:I"
+ },
+ {
+  "op": "sget",
+  "fmt": "21c",
+  "cat": "数组/字段",
+  "desc": "读取指定静态字段到 vAA；读取 int 静态字段。",
+  "ex": "sget v0, Lcom/example/Foo;->count:I"
+ },
+ {
+  "op": "sget-wide",
+  "fmt": "21c",
+  "cat": "数组/字段",
+  "desc": "读取指定静态字段到 vAA；读取 long/double 静态字段，占用两个寄存器。",
+  "ex": "sget v0, Lcom/example/Foo;->count:I"
+ },
+ {
+  "op": "sget-object",
+  "fmt": "21c",
+  "cat": "数组/字段",
+  "desc": "读取指定静态字段到 vAA；读取对象静态字段。",
+  "ex": "sget v0, Lcom/example/Foo;->count:I"
+ },
+ {
+  "op": "sget-boolean",
+  "fmt": "21c",
+  "cat": "数组/字段",
+  "desc": "读取指定静态字段到 vAA；读取 boolean 静态字段。",
+  "ex": "sget v0, Lcom/example/Foo;->count:I"
+ },
+ {
+  "op": "sget-byte",
+  "fmt": "21c",
+  "cat": "数组/字段",
+  "desc": "读取指定静态字段到 vAA；读取 byte 静态字段。",
+  "ex": "sget v0, Lcom/example/Foo;->count:I"
+ },
+ {
+  "op": "sget-char",
+  "fmt": "21c",
+  "cat": "数组/字段",
+  "desc": "读取指定静态字段到 vAA；读取 char 静态字段。",
+  "ex": "sget v0, Lcom/example/Foo;->count:I"
+ },
+ {
+  "op": "sget-short",
+  "fmt": "21c",
+  "cat": "数组/字段",
+  "desc": "读取指定静态字段到 vAA；读取 short 静态字段。",
+  "ex": "sget v0, Lcom/example/Foo;->count:I"
+ },
+ {
+  "op": "sput",
+  "fmt": "21c",
+  "cat": "数组/字段",
+  "desc": "把 vAA 写入指定静态字段；写入 int 静态字段。",
+  "ex": "sput v0, Lcom/example/Foo;->count:I"
+ },
+ {
+  "op": "sput-wide",
+  "fmt": "21c",
+  "cat": "数组/字段",
+  "desc": "把 vAA 写入指定静态字段；写入 long/double 静态字段，占用两个寄存器。",
+  "ex": "sput v0, Lcom/example/Foo;->count:I"
+ },
+ {
+  "op": "sput-object",
+  "fmt": "21c",
+  "cat": "数组/字段",
+  "desc": "把 vAA 写入指定静态字段；写入对象静态字段。",
+  "ex": "sput v0, Lcom/example/Foo;->count:I"
+ },
+ {
+  "op": "sput-boolean",
+  "fmt": "21c",
+  "cat": "数组/字段",
+  "desc": "把 vAA 写入指定静态字段；写入 boolean 静态字段。",
+  "ex": "sput v0, Lcom/example/Foo;->count:I"
+ },
+ {
+  "op": "sput-byte",
+  "fmt": "21c",
+  "cat": "数组/字段",
+  "desc": "把 vAA 写入指定静态字段；写入 byte 静态字段。",
+  "ex": "sput v0, Lcom/example/Foo;->count:I"
+ },
+ {
+  "op": "sput-char",
+  "fmt": "21c",
+  "cat": "数组/字段",
+  "desc": "把 vAA 写入指定静态字段；写入 char 静态字段。",
+  "ex": "sput v0, Lcom/example/Foo;->count:I"
+ },
+ {
+  "op": "sput-short",
+  "fmt": "21c",
+  "cat": "数组/字段",
+  "desc": "把 vAA 写入指定静态字段；写入 short 静态字段。",
+  "ex": "sput v0, Lcom/example/Foo;->count:I"
+ },
+ {
+  "op": "new-instance",
+  "fmt": "21c",
+  "cat": "方法/对象",
+  "desc": "分配指定类型对象，引用写入 vAA；之后必须调用构造函数 <init>。",
+  "ex": "new-instance v0, Ljava/lang/StringBuilder;"
+ },
+ {
+  "op": "check-cast",
+  "fmt": "21c",
+  "cat": "方法/对象",
+  "desc": "检查 vAA 的对象能否转换为指定类型，失败抛 ClassCastException。",
+  "ex": "check-cast v0, Ljava/lang/String;"
+ },
+ {
+  "op": "instance-of",
+  "fmt": "22c",
+  "cat": "方法/对象",
+  "desc": "判断 vB 是否为指定类型，结果 0 或 1 写入 vA。",
+  "ex": "instance-of v0, v1, Ljava/lang/String;"
+ },
+ {
+  "op": "invoke-virtual",
+  "fmt": "35c",
+  "cat": "方法/对象",
+  "desc": "调用普通实例方法，支持虚分派。参数为寄存器列表，返回值用 move-result* 获取。",
+  "ex": "invoke-virtual {v0, v1}, Lcom/example/Foo;->bar(I)V"
+ },
+ {
+  "op": "invoke-virtual/range",
+  "fmt": "3rc",
+  "cat": "方法/对象",
+  "desc": "调用普通实例方法，支持虚分派。参数使用连续寄存器范围 vCCCC..vNNNN。",
+  "ex": "invoke-virtual/range {v0 .. v1}, Lcom/example/Foo;->bar(I)V"
+ },
+ {
+  "op": "invoke-super",
+  "fmt": "35c",
+  "cat": "方法/对象",
+  "desc": "调用父类的实例方法。参数为寄存器列表，返回值用 move-result* 获取。",
+  "ex": "invoke-super {v0, v1}, Lcom/example/Foo;->bar(I)V"
+ },
+ {
+  "op": "invoke-super/range",
+  "fmt": "3rc",
+  "cat": "方法/对象",
+  "desc": "调用父类的实例方法。参数使用连续寄存器范围 vCCCC..vNNNN。",
+  "ex": "invoke-super/range {v0 .. v1}, Lcom/example/Foo;->bar(I)V"
+ },
+ {
+  "op": "invoke-direct",
+  "fmt": "35c",
+  "cat": "方法/对象",
+  "desc": "调用构造函数或私有实例方法。参数为寄存器列表，返回值用 move-result* 获取。",
+  "ex": "invoke-direct {v0, v1}, Lcom/example/Foo;->bar(I)V"
+ },
+ {
+  "op": "invoke-direct/range",
+  "fmt": "3rc",
+  "cat": "方法/对象",
+  "desc": "调用构造函数或私有实例方法。参数使用连续寄存器范围 vCCCC..vNNNN。",
+  "ex": "invoke-direct/range {v0 .. v1}, Lcom/example/Foo;->bar(I)V"
+ },
+ {
+  "op": "invoke-static",
+  "fmt": "35c",
+  "cat": "方法/对象",
+  "desc": "调用静态方法。参数为寄存器列表，返回值用 move-result* 获取。",
+  "ex": "invoke-static {v0, v1}, Lcom/example/Foo;->bar(I)V"
+ },
+ {
+  "op": "invoke-static/range",
+  "fmt": "3rc",
+  "cat": "方法/对象",
+  "desc": "调用静态方法。参数使用连续寄存器范围 vCCCC..vNNNN。",
+  "ex": "invoke-static/range {v0 .. v1}, Lcom/example/Foo;->bar(I)V"
+ },
+ {
+  "op": "invoke-interface",
+  "fmt": "35c",
+  "cat": "方法/对象",
+  "desc": "通过接口调用实例方法。参数为寄存器列表，返回值用 move-result* 获取。",
+  "ex": "invoke-interface {v0, v1}, Lcom/example/Foo;->bar(I)V"
+ },
+ {
+  "op": "invoke-interface/range",
+  "fmt": "3rc",
+  "cat": "方法/对象",
+  "desc": "通过接口调用实例方法。参数使用连续寄存器范围 vCCCC..vNNNN。",
+  "ex": "invoke-interface/range {v0 .. v1}, Lcom/example/Foo;->bar(I)V"
+ },
+ {
+  "op": "invoke-custom",
+  "fmt": "35c",
+  "cat": "方法/对象",
+  "desc": "调用动态调用点（invokedynamic），参数为调用点及参数寄存器。",
+  "ex": "invoke-custom {v0}, Lcall_site_0(\"name\", (I)V)Ljava/lang/Object;"
+ },
+ {
+  "op": "invoke-custom/range",
+  "fmt": "3rc",
+  "cat": "方法/对象",
+  "desc": "使用连续寄存器范围调用动态调用点。",
+  "ex": "invoke-custom/range {v0 .. v2}, Lcall_site_0(\"name\", (I)V)Ljava/lang/Object;"
+ },
+ {
+  "op": "invoke-polymorphic",
+  "fmt": "45cc",
+  "cat": "方法/对象",
+  "desc": "调用 MethodHandle 的多态签名方法；示例末尾的 (I)V 是实际调用签名。",
+  "ex": "invoke-polymorphic {v0, v1}, Ljava/lang/invoke/MethodHandle;->invokeExact([Ljava/lang/Object;)Ljava/lang/Object;, (I)V"
+ },
+ {
+  "op": "invoke-polymorphic/range",
+  "fmt": "4rcc",
+  "cat": "方法/对象",
+  "desc": "使用连续寄存器范围调用 MethodHandle 多态签名方法。",
+  "ex": "invoke-polymorphic/range {v0 .. v1}, Ljava/lang/invoke/MethodHandle;->invokeExact([Ljava/lang/Object;)Ljava/lang/Object;, (I)V"
+ },
+ {
+  "op": "return-void",
+  "fmt": "10x",
+  "cat": "返回/异常",
+  "desc": "从 void 方法返回。",
+  "ex": "return-void"
+ },
+ {
+  "op": "return",
+  "fmt": "11x",
+  "cat": "返回/异常",
+  "desc": "返回 32 位整数或引用。",
+  "ex": "return v0"
+ },
+ {
+  "op": "return-wide",
+  "fmt": "11x",
+  "cat": "返回/异常",
+  "desc": "返回 64 位值，读取 vAA/vAA+1。",
+  "ex": "return-wide v0"
+ },
+ {
+  "op": "return-object",
+  "fmt": "11x",
+  "cat": "返回/异常",
+  "desc": "返回对象引用。",
+  "ex": "return-object v0"
+ },
+ {
+  "op": "monitor-enter",
+  "fmt": "11x",
+  "cat": "返回/异常",
+  "desc": "获取 vAA 对象监视器，必须与 monitor-exit 配对。",
+  "ex": "monitor-enter v0"
+ },
+ {
+  "op": "monitor-exit",
+  "fmt": "11x",
+  "cat": "返回/异常",
+  "desc": "释放 vAA 对象监视器，必须与 monitor-enter 配对。",
+  "ex": "monitor-exit v0"
+ },
+ {
+  "op": "throw",
+  "fmt": "11x",
+  "cat": "返回/异常",
+  "desc": "抛出 vAA 引用的异常对象。",
+  "ex": "throw v0"
+ },
+ {
+  "op": "add-int/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "加法（2addr 形式）：vA = vA + vB；结果写回目标寄存器。",
+  "ex": "add-int/2addr v0, v1"
+ },
+ {
+  "op": "sub-int/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "减法（2addr 形式）：vA = vA - vB；结果写回目标寄存器。",
+  "ex": "sub-int/2addr v0, v1"
+ },
+ {
+  "op": "mul-int/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "乘法（2addr 形式）：vA = vA * vB；结果写回目标寄存器。",
+  "ex": "mul-int/2addr v0, v1"
+ },
+ {
+  "op": "div-int/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "除法（2addr 形式）：vA = vA / vB；除数为零时抛出 ArithmeticException。",
+  "ex": "div-int/2addr v0, v1"
+ },
+ {
+  "op": "rem-int/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "取余（2addr 形式）：vA = vA % vB；除数为零时抛出 ArithmeticException。",
+  "ex": "rem-int/2addr v0, v1"
+ },
+ {
+  "op": "and-int/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "按位与（2addr 形式）：vA = vA & vB；结果写回目标寄存器。",
+  "ex": "and-int/2addr v0, v1"
+ },
+ {
+  "op": "or-int/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "按位或（2addr 形式）：vA = vA | vB；结果写回目标寄存器。",
+  "ex": "or-int/2addr v0, v1"
+ },
+ {
+  "op": "xor-int/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "按位异或（2addr 形式）：vA = vA ^ vB；结果写回目标寄存器。",
+  "ex": "xor-int/2addr v0, v1"
+ },
+ {
+  "op": "shl-int/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "左移（2addr 形式）：vA = vA << vB；移位量分别取低 5 位或 6 位。",
+  "ex": "shl-int/2addr v0, v1"
+ },
+ {
+  "op": "shr-int/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "算术右移（2addr 形式）：vA = vA >> vB；移位量分别取低 5 位或 6 位。",
+  "ex": "shr-int/2addr v0, v1"
+ },
+ {
+  "op": "ushr-int/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "逻辑右移（2addr 形式）：vA = vA >>> vB；移位量分别取低 5 位或 6 位。",
+  "ex": "ushr-int/2addr v0, v1"
+ },
+ {
+  "op": "add-long/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "加法（2addr 形式）：vA = vA + vB；结果写回目标寄存器。",
+  "ex": "add-long/2addr v0, v1"
+ },
+ {
+  "op": "sub-long/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "减法（2addr 形式）：vA = vA - vB；结果写回目标寄存器。",
+  "ex": "sub-long/2addr v0, v1"
+ },
+ {
+  "op": "mul-long/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "乘法（2addr 形式）：vA = vA * vB；结果写回目标寄存器。",
+  "ex": "mul-long/2addr v0, v1"
+ },
+ {
+  "op": "div-long/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "除法（2addr 形式）：vA = vA / vB；除数为零时抛出 ArithmeticException。",
+  "ex": "div-long/2addr v0, v1"
+ },
+ {
+  "op": "rem-long/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "取余（2addr 形式）：vA = vA % vB；除数为零时抛出 ArithmeticException。",
+  "ex": "rem-long/2addr v0, v1"
+ },
+ {
+  "op": "and-long/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "按位与（2addr 形式）：vA = vA & vB；结果写回目标寄存器。",
+  "ex": "and-long/2addr v0, v1"
+ },
+ {
+  "op": "or-long/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "按位或（2addr 形式）：vA = vA | vB；结果写回目标寄存器。",
+  "ex": "or-long/2addr v0, v1"
+ },
+ {
+  "op": "xor-long/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "按位异或（2addr 形式）：vA = vA ^ vB；结果写回目标寄存器。",
+  "ex": "xor-long/2addr v0, v1"
+ },
+ {
+  "op": "shl-long/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "左移（2addr 形式）：vA = vA << vB；移位量分别取低 5 位或 6 位。",
+  "ex": "shl-long/2addr v0, v1"
+ },
+ {
+  "op": "shr-long/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "算术右移（2addr 形式）：vA = vA >> vB；移位量分别取低 5 位或 6 位。",
+  "ex": "shr-long/2addr v0, v1"
+ },
+ {
+  "op": "ushr-long/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "逻辑右移（2addr 形式）：vA = vA >>> vB；移位量分别取低 5 位或 6 位。",
+  "ex": "ushr-long/2addr v0, v1"
+ },
+ {
+  "op": "add-float/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "加法（2addr 形式）：vA = vA + vB；结果写回目标寄存器。",
+  "ex": "add-float/2addr v0, v1"
+ },
+ {
+  "op": "sub-float/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "减法（2addr 形式）：vA = vA - vB；结果写回目标寄存器。",
+  "ex": "sub-float/2addr v0, v1"
+ },
+ {
+  "op": "mul-float/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "乘法（2addr 形式）：vA = vA * vB；结果写回目标寄存器。",
+  "ex": "mul-float/2addr v0, v1"
+ },
+ {
+  "op": "div-float/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "除法（2addr 形式）：vA = vA / vB；除数为零时抛出 ArithmeticException。",
+  "ex": "div-float/2addr v0, v1"
+ },
+ {
+  "op": "rem-float/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "取余（2addr 形式）：vA = vA % vB；除数为零时抛出 ArithmeticException。",
+  "ex": "rem-float/2addr v0, v1"
+ },
+ {
+  "op": "add-double/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "加法（2addr 形式）：vA = vA + vB；结果写回目标寄存器。",
+  "ex": "add-double/2addr v0, v1"
+ },
+ {
+  "op": "sub-double/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "减法（2addr 形式）：vA = vA - vB；结果写回目标寄存器。",
+  "ex": "sub-double/2addr v0, v1"
+ },
+ {
+  "op": "mul-double/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "乘法（2addr 形式）：vA = vA * vB；结果写回目标寄存器。",
+  "ex": "mul-double/2addr v0, v1"
+ },
+ {
+  "op": "div-double/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "除法（2addr 形式）：vA = vA / vB；除数为零时抛出 ArithmeticException。",
+  "ex": "div-double/2addr v0, v1"
+ },
+ {
+  "op": "rem-double/2addr",
+  "fmt": "12x",
+  "cat": "运算/转换",
+  "desc": "取余（2addr 形式）：vA = vA % vB；除数为零时抛出 ArithmeticException。",
+  "ex": "rem-double/2addr v0, v1"
+ },
+ {
+  "op": "iget-volatile",
+  "fmt": "22c",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：带 volatile 语义读取实例字段；普通 Smali 使用 iget。",
+  "ex": "iget-volatile v0, Lcom/example/Foo;->value:I",
+  "legacy": true
+ },
+ {
+  "op": "iput-volatile",
+  "fmt": "22c",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：带 volatile 语义写入实例字段；普通 Smali 使用 iput。",
+  "ex": "iput-volatile v0, Lcom/example/Foo;->value:I",
+  "legacy": true
+ },
+ {
+  "op": "sget-volatile",
+  "fmt": "21c",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：带 volatile 语义读取静态字段；普通 Smali 使用 sget。",
+  "ex": "sget-volatile v0, Lcom/example/Foo;->value:I",
+  "legacy": true
+ },
+ {
+  "op": "sput-volatile",
+  "fmt": "21c",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：带 volatile 语义写入静态字段；普通 Smali 使用 sput。",
+  "ex": "sput-volatile v0, Lcom/example/Foo;->value:I",
+  "legacy": true
+ },
+ {
+  "op": "iget-object-volatile",
+  "fmt": "22c",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：带 volatile 语义读取实例字段；普通 Smali 使用 iget-object。",
+  "ex": "iget-object-volatile v0, Lcom/example/Foo;->value:I",
+  "legacy": true
+ },
+ {
+  "op": "iget-wide-volatile",
+  "fmt": "22c",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：带 volatile 语义读取实例字段；普通 Smali 使用 iget-wide。",
+  "ex": "iget-wide-volatile v0, Lcom/example/Foo;->value:I",
+  "legacy": true
+ },
+ {
+  "op": "iput-wide-volatile",
+  "fmt": "22c",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：带 volatile 语义写入实例字段；普通 Smali 使用 iput-wide。",
+  "ex": "iput-wide-volatile v0, Lcom/example/Foo;->value:I",
+  "legacy": true
+ },
+ {
+  "op": "sget-wide-volatile",
+  "fmt": "21c",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：带 volatile 语义读取静态字段；普通 Smali 使用 sget-wide。",
+  "ex": "sget-wide-volatile v0, Lcom/example/Foo;->value:I",
+  "legacy": true
+ },
+ {
+  "op": "sput-wide-volatile",
+  "fmt": "21c",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：带 volatile 语义写入静态字段；普通 Smali 使用 sput-wide。",
+  "ex": "sput-wide-volatile v0, Lcom/example/Foo;->value:I",
+  "legacy": true
+ },
+ {
+  "op": "throw-verification-error",
+  "fmt": "20bc",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：抛出校验错误；普通 Smali 不应生成。",
+  "ex": "throw-verification-error v0, kind@0",
+  "legacy": true
+ },
+ {
+  "op": "execute-inline",
+  "fmt": "35mi",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：请求运行时内联执行指定方法。",
+  "ex": "execute-inline {v0, v1}, Ljava/lang/Math;->abs(I)I",
+  "legacy": true
+ },
+ {
+  "op": "execute-inline/range",
+  "fmt": "3rmi",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用连续寄存器范围请求运行时内联执行指定方法。",
+  "ex": "execute-inline/range {v0 .. v1}, Ljava/lang/Math;->abs(I)I",
+  "legacy": true
+ },
+ {
+  "op": "invoke-direct-empty",
+  "fmt": "35c",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：调用空实现的直接方法。",
+  "ex": "invoke-direct-empty {v0}, Ljava/lang/Object;-><init>()V",
+  "legacy": true
+ },
+ {
+  "op": "invoke-object-init/range",
+  "fmt": "3rc",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用连续寄存器范围调用对象构造函数。",
+  "ex": "invoke-object-init/range {v0 .. v0}, Ljava/lang/Object;-><init>()V",
+  "legacy": true
+ },
+ {
+  "op": "return-void-barrier",
+  "fmt": "10x",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：带内存屏障语义的 void 返回指令。",
+  "ex": "return-void-barrier",
+  "legacy": true
+ },
+ {
+  "op": "return-void-no-barrier",
+  "fmt": "10x",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：不带内存屏障的 void 返回指令。",
+  "ex": "return-void-no-barrier",
+  "legacy": true
+ },
+ {
+  "op": "iget-quick",
+  "fmt": "22cs",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用已解析偏移读取实例字段。",
+  "ex": "iget-quick v0, v1, #0x8",
+  "legacy": true
+ },
+ {
+  "op": "iget-wide-quick",
+  "fmt": "22cs",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用已解析偏移读取实例字段。",
+  "ex": "iget-wide-quick v0, v1, #0x8",
+  "legacy": true
+ },
+ {
+  "op": "iget-object-quick",
+  "fmt": "22cs",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用已解析偏移读取实例字段。",
+  "ex": "iget-object-quick v0, v1, #0x8",
+  "legacy": true
+ },
+ {
+  "op": "iput-quick",
+  "fmt": "22cs",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用已解析偏移写入实例字段。",
+  "ex": "iput-quick v0, v1, #0x8",
+  "legacy": true
+ },
+ {
+  "op": "iput-wide-quick",
+  "fmt": "22cs",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用已解析偏移写入实例字段。",
+  "ex": "iput-wide-quick v0, v1, #0x8",
+  "legacy": true
+ },
+ {
+  "op": "iput-object-quick",
+  "fmt": "22cs",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用已解析偏移写入实例字段。",
+  "ex": "iput-object-quick v0, v1, #0x8",
+  "legacy": true
+ },
+ {
+  "op": "iput-boolean-quick",
+  "fmt": "22cs",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用已解析偏移写入实例字段。",
+  "ex": "iput-boolean-quick v0, v1, #0x8",
+  "legacy": true
+ },
+ {
+  "op": "iput-byte-quick",
+  "fmt": "22cs",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用已解析偏移写入实例字段。",
+  "ex": "iput-byte-quick v0, v1, #0x8",
+  "legacy": true
+ },
+ {
+  "op": "iput-char-quick",
+  "fmt": "22cs",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用已解析偏移写入实例字段。",
+  "ex": "iput-char-quick v0, v1, #0x8",
+  "legacy": true
+ },
+ {
+  "op": "iput-short-quick",
+  "fmt": "22cs",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用已解析偏移写入实例字段。",
+  "ex": "iput-short-quick v0, v1, #0x8",
+  "legacy": true
+ },
+ {
+  "op": "iget-boolean-quick",
+  "fmt": "22cs",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用已解析偏移读取实例字段。",
+  "ex": "iget-boolean-quick v0, v1, #0x8",
+  "legacy": true
+ },
+ {
+  "op": "iget-byte-quick",
+  "fmt": "22cs",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用已解析偏移读取实例字段。",
+  "ex": "iget-byte-quick v0, v1, #0x8",
+  "legacy": true
+ },
+ {
+  "op": "iget-char-quick",
+  "fmt": "22cs",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用已解析偏移读取实例字段。",
+  "ex": "iget-char-quick v0, v1, #0x8",
+  "legacy": true
+ },
+ {
+  "op": "iget-short-quick",
+  "fmt": "22cs",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用已解析偏移读取实例字段。",
+  "ex": "iget-short-quick v0, v1, #0x8",
+  "legacy": true
+ },
+ {
+  "op": "invoke-virtual-quick",
+  "fmt": "35ms",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用已解析索引调用虚方法。",
+  "ex": "invoke-virtual-quick {v0, v1}, Lcom/example/Foo;->bar(I)V",
+  "legacy": true
+ },
+ {
+  "op": "invoke-virtual-quick/range",
+  "fmt": "3rms",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用已解析索引调用虚方法。",
+  "ex": "invoke-virtual-quick/range {v0 .. v1}, Lcom/example/Foo;->bar(I)V",
+  "legacy": true
+ },
+ {
+  "op": "invoke-super-quick",
+  "fmt": "35ms",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用已解析索引调用父类。",
+  "ex": "invoke-super-quick {v0, v1}, Lcom/example/Foo;->bar(I)V",
+  "legacy": true
+ },
+ {
+  "op": "invoke-super-quick/range",
+  "fmt": "3rms",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：使用已解析索引调用父类。",
+  "ex": "invoke-super-quick/range {v0 .. v1}, Lcom/example/Foo;->bar(I)V",
+  "legacy": true
+ },
+ {
+  "op": "iput-object-volatile",
+  "fmt": "22c",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：带 volatile 语义写入实例字段；普通 Smali 使用 iput-object。",
+  "ex": "iput-object-volatile v0, Lcom/example/Foo;->value:I",
+  "legacy": true
+ },
+ {
+  "op": "sget-object-volatile",
+  "fmt": "21c",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：带 volatile 语义读取静态字段；普通 Smali 使用 sget-object。",
+  "ex": "sget-object-volatile v0, Lcom/example/Foo;->value:I",
+  "legacy": true
+ },
+ {
+  "op": "sput-object-volatile",
+  "fmt": "21c",
+  "cat": "负载/旧版",
+  "desc": "ODEX 专用：带 volatile 语义写入静态字段；普通 Smali 使用 sput-object。",
+  "ex": "sput-object-volatile v0, Lcom/example/Foo;->value:I",
+  "legacy": true
+ },
+ {
+  "op": "packed-switch-payload",
+  "fmt": "PackedSwitchPayload",
+  "cat": "负载/旧版",
+  "desc": "负载格式，不是可执行指令；由 .packed-switch 指令生成。",
+  "ex": ".packed-switch 0x0",
+  "legacy": true
+ },
+ {
+  "op": "sparse-switch-payload",
+  "fmt": "SparseSwitchPayload",
+  "cat": "负载/旧版",
+  "desc": "负载格式，不是可执行指令；由 .sparse-switch 指令生成。",
+  "ex": ".sparse-switch",
+  "legacy": true
+ },
+ {
+  "op": "array-payload",
+  "fmt": "ArrayPayload",
+  "cat": "负载/旧版",
+  "desc": "负载格式，不是可执行指令；由 .array-data 指令生成。",
+  "ex": ".array-data 4",
+  "legacy": true
+ }
+];
+function smaliReferencePage(){
+ const body=toolPage('Smali 指令查询','JADX/dexlib2 指令表 · 格式、说明与示例');
+ body.classList.add('smaliRef');
+ let query='',category='全部';
+ body.innerHTML=`<div class="searchline"><input id="smaliSearch" type="search" placeholder="搜索 opcode、格式或说明，例如 invoke-virtual" aria-label="搜索 Smali 指令" autocomplete="off" spellcheck="false"><button id="smaliClear" aria-label="清空搜索">清除</button></div><div class="smaliFilters" role="tablist" aria-label="指令分类"></div><div class="smaliCount" id="smaliCount"></div><div class="smaliRows" id="smaliRows"></div>`;
+ const input=body.querySelector('#smaliSearch'),filters=body.querySelector('.smaliFilters'),rowsEl=body.querySelector('#smaliRows'),countEl=body.querySelector('#smaliCount');
+ for(const name of SMALI_CATEGORIES){const b=document.createElement('button');b.className='smaliChip';b.textContent=name;b.setAttribute('role','tab');b.onclick=()=>{category=name;sync();};filters.append(b);}
+ const rows=()=>{const terms=query.trim().toLowerCase().split(/\s+/).filter(Boolean);return SMALI_OPS.map((item,index)=>({item,index})).filter(({item})=>{if(category==='常用'&&!SMALI_COMMON.has(item.op))return false;if(category==='负载/旧版'){if(!item.legacy)return false;}else if(category!=='全部'&&category!=='常用'&&(item.legacy||item.cat!==category))return false;const hay=(item.op+' '+item.fmt+' '+item.cat+' '+item.desc+' '+item.ex).toLowerCase();return terms.every(term=>hay.includes(term));});};
+ const sync=()=>{for(const b of filters.children){const on=b.textContent===category;b.classList.toggle('active',on);b.setAttribute('aria-selected',String(on));}const found=rows();const legacy=SMALI_OPS.filter(item=>item.legacy).length;countEl.textContent=(query||category!=='全部'?'找到 ':'共 ')+found.length+' 条指令'+(query||category!=='全部'?'':' · 含 '+legacy+' 条 ODEX/负载 · 轻点查看示例');rowsEl.innerHTML=found.length?found.map(({item,index})=>`<button class="smaliRow" data-smali="${index}"><span class="smaliLine"><code>${esc(item.op)}</code><span class="smaliFmt">${esc(item.fmt)}</span></span><span class="smaliDesc">${esc(item.desc)}</span><span class="smaliCat">${esc(item.cat)}</span></button>`).join(''):'<div class="empty">没有匹配的指令。试试 invoke、const、iget 或字段名。</div>';for(const b of rowsEl.querySelectorAll('[data-smali]'))b.onclick=()=>act(()=>smaliDetail(SMALI_OPS[Number(b.dataset.smali)]));};
+ input.oninput=event=>{query=event.target.value;sync();};
+ body.querySelector('#smaliClear').onclick=()=>{query='';input.value='';input.focus();sync();};
+ sync();
+}
+function smaliDetail(item){
+ const tags=(item.legacy?'<span>ODEX/旧版</span>':'')+(SMALI_COMMON.has(item.op)?'<span>常用</span>':'')+`<span>格式 ${esc(item.fmt)}</span><span>${esc(item.cat)}</span>`;
+ dialog(item.op,`<p>${esc(item.desc)}</p><div class="smaliDetailMeta">${tags}</div><p class="smaliExampleLabel">示例</p><pre class="smaliExample">${esc(item.ex)}</pre><p class="smaliHint">${SMALI_FORMAT_HELP}</p>`,[['复制示例',()=>rpc('clipboard',{text:item.ex}).then(()=>toast('示例已复制'))],['关闭',closeModal]]);
+}
 async function translatePage(){
  const body=toolPage('翻译服务','腾讯云 / 百度 / 微软 / AI 大模型');
  await loadTranslateConfig();
@@ -1619,7 +3536,7 @@ function translateButton(onResult){
 
 function moreTools(){options('更多工具',[{icon:'apk',label:'检查本应用的 APK',run:()=>showApk({path:state.info.ownApk})},{icon:'settings',label:'设置',run:preferences},{icon:'phone',label:'存储权限',run:()=>rpc('permission')},{icon:'info',label:'用户指南',run:guide},{icon:'info',label:'关于赛博中枢管家',run:about}]);}
 function guide(){alertBox('用户指南','文件：轻点打开；长按打开文件操作菜单。使用 + 新建或粘贴。\n\nAPK → 查看 → classes.dex。打开一个类；编辑 Smali 或使用 查看 Java。Java 可直接编辑。保存 会将代码编译进临时 DEX 工程。返回 同样会编译未保存的代码；出现错误时编辑器保持打开。\n\n编辑器/DEX 菜单 → 保存并签名 APK 会写回源文件，保留备份，并校验 V1/V2/V3 后再提供 安装。保存工程 只写入未签名的更改。导出 生成一份独立副本。\n\n并非每个反编译出的 Java 文件都是有效源码。请修正编译错误或改用 Smali 编辑。包名/类名请勿修改。\n\n捏合可调整代码大小。文字大小 / 缩放 提供按钮、滑块和 重置。查找替换 直接编辑当前缓冲区，并支持 撤销。\n\n签名使用公开的开发证书。Android 权限与安装规则依然适用。');}
-function about(){closeDrawer();options('赛博中枢管家 · 0.1.9',[{icon:'phone',label:'用户信息（本地）',run:async()=>{const name=await ask('本地用户名',storage.get('cyber-name')||'赛博中枢');if(name!==null){storage.set('cyber-name',name);toast('资料已更新');}}},{icon:'info',label:'用户指南',run:guide},{icon:'history',label:'版本说明',run:()=>alertBox('版本 0.1.9','APK 提取：侧边栏「工具 → 已安装应用」点击应用后进入提取模式，只显示「提取 APK / 查看 / 安装」，不再显示 APK 签名、优化、共存等功能。提取支持选择目录和文件名。\n\n远程存储：侧边栏「远程存储」分组直接列出已保存的连接；打开后只替换当前一侧文件窗格，另一侧继续浏览本地文件。支持窗格内进入文件夹、上传、下载、新建文件夹、重命名和删除。\n\nRoot / Shizuku 授权：侧边栏「工具」新增授权入口，支持 su 授权弹窗申请与 Shizuku 授权状态管理。授权后浏览根目录或受限目录（如 /data）时，Root 经 su、Shizuku 经 shell 特权实际枚举内容，可看到并进入更多文件夹——与 MT 管理器一致。\n\n根目录修复：Android 10+ 禁止普通应用枚举根目录（SELinux 拒绝 readdir /），导致「无法读取此文件夹」。现回退到内置标准目录清单逐项探测存在性；未授权时 /data 等无权限项仍可见，能否进入取决于系统权限。\n\n屏幕取色：侧边栏「工具」新增屏幕取色——十字准星 + 实时放大镜，对准像素后轻点放大镜上的色值或坐标即复制；支持大小/范围/刷新速度/网格线设置（需授权显示在其他应用上层、通知与屏幕录制）。\n\nAPKS 转换：基座与配置分包合并为已签名、已校验的 APK。bundletool 变体分别选择；独立 APK 保留有效签名。APKS 本身保持不变。Play 资源包与不支持的分发类型会给出清晰的错误提示。\n\n性能与 Java 编辑更新：合成器捏合预览；输入时不再全缓冲区扫描；可复用的菜单动画；独立缩略图队列；可编辑 Java（含 ECJ/DEX 编译与诊断）；可撤销的查找替换；带备份的已校验保存并签名。此处不测量设备帧率。\n\n更早的交互更新：侧边栏溢出与边缘滑动；动画菜单、对话框、行反馈与包展开；编辑器侧选项；Java、Smali、XML 和文本中的捏合缩放（大小分别记忆）。打开侧边栏不会保存未保存的代码。\n\n此前的视频更新：成员/字符串导航；用法、子类与重写搜索；成员/代码/片段复制；行与寄存器工具；带 .bak 备份的保存并退出；还原替换；多选、对比与书签；9 种归档格式（含密码/分卷控制）。保留启动恢复与紧凑布局。\n\n功能：双窗格文件管理器；APK 浏览器、清单编辑器与签名；多 DEX、Smali 与 Java 编辑器；本地文件工具、终端、屏幕取色、Root/Shizuku 授权、FTP/FTPS 以及只读共享/MCP。\n\n为赛博中枢管家独立构建。不包含任何原应用代码。')},{icon:'layers',label:'开源致谢',run:()=>alertBox('开源致谢','JADX (Apache-2.0)\nsmali / baksmali / dexlib2 (BSD-3-Clause)\nCodeMirror 5 (MIT)\nPublic Sans (OFL-1.1) · U.S. Web Design System\nScreenColorPicker (MIT) · Ratul Hasan（屏幕取色组件）\nShizuku API (MIT) · Rikka（Root/Shizuku 授权组件）\nTermux terminal-emulator / terminal-view (GPLv3) · Termux（PTY 终端组件）\nJSch (BSD-3-Clause) · mwiede（SFTP 组件）\njCIFS-ng (LGPL-2.1) · AgNO3（SMB 组件）\nBouncy Castle (MIT)（jCIFS-ng 依赖）\nAndroid apksig (Apache-2.0)\nARSCLib 1.4.0 (Apache-2.0)\nECJ 4.6.1 (EPL-1.0) · AOSP dx (Apache-2.0) · ASM (BSD-3-Clause)\nApache Commons Net (Apache-2.0)\nGuava、Gson、Protobuf、ANTLR 与 SLF4J\n\n依赖版本与许可证说明包含在源码包中。')}]);}
+function about(){closeDrawer();options('赛博中枢管家 · 0.1.10',[{icon:'phone',label:'用户信息（本地）',run:async()=>{const name=await ask('本地用户名',storage.get('cyber-name')||'赛博中枢');if(name!==null){storage.set('cyber-name',name);toast('资料已更新');}}},{icon:'info',label:'用户指南',run:guide},{icon:'history',label:'版本说明',run:()=>alertBox('版本 0.1.10','Smali 指令查询：侧边栏「工具 → Smali 指令查询」提供 265 条 Dalvik/DEX 指令的离线检索（含 40 条 ODEX/负载项），指令名与格式依据 JADX 内置 dexlib2 Opcode 表补全。支持按 opcode、格式、说明和示例搜索，并可按常用、数据、运算、跳转、数组、字段、方法、返回、ODEX/负载等分类筛选。轻点指令可查看格式、说明和 Smali 示例，并可复制示例。\n\nAPK 提取：侧边栏「工具 → 已安装应用」点击应用后进入提取模式，只显示「提取 APK / 查看 / 安装」，不再显示 APK 签名、优化、共存等功能。提取支持选择目录和文件名。\n\n远程存储：侧边栏「远程存储」分组直接列出已保存的连接；打开后只替换当前一侧文件窗格，另一侧继续浏览本地文件。支持窗格内进入文件夹、上传、下载、新建文件夹、重命名和删除。\n\nRoot / Shizuku 授权：侧边栏「工具」新增授权入口，支持 su 授权弹窗申请与 Shizuku 授权状态管理。授权后浏览根目录或受限目录（如 /data）时，Root 经 su、Shizuku 经 shell 特权实际枚举内容，可看到并进入更多文件夹——与 MT 管理器一致。\n\n根目录修复：Android 10+ 禁止普通应用枚举根目录（SELinux 拒绝 readdir /），导致「无法读取此文件夹」。现回退到内置标准目录清单逐项探测存在性；未授权时 /data 等无权限项仍可见，能否进入取决于系统权限。\n\n屏幕取色：侧边栏「工具」新增屏幕取色——十字准星 + 实时放大镜，对准像素后轻点放大镜上的色值或坐标即复制；支持大小/范围/刷新速度/网格线设置（需授权显示在其他应用上层、通知与屏幕录制）。\n\nAPKS 转换：基座与配置分包合并为已签名、已校验的 APK。bundletool 变体分别选择；独立 APK 保留有效签名。APKS 本身保持不变。Play 资源包与不支持的分发类型会给出清晰的错误提示。\n\n性能与 Java 编辑更新：合成器捏合预览；输入时不再全缓冲区扫描；可复用的菜单动画；独立缩略图队列；可编辑 Java（含 ECJ/DEX 编译与诊断）；可撤销的查找替换；带备份的已校验保存并签名。此处不测量设备帧率。\n\n更早的交互更新：侧边栏溢出与边缘滑动；动画菜单、对话框、行反馈与包展开；编辑器侧选项；Java、Smali、XML 和文本中的捏合缩放（大小分别记忆）。打开侧边栏不会保存未保存的代码。\n\n此前的视频更新：成员/字符串导航；用法、子类与重写搜索；成员/代码/片段复制；行与寄存器工具；带 .bak 备份的保存并退出；还原替换；多选、对比与书签；9 种归档格式（含密码/分卷控制）。保留启动恢复与紧凑布局。\n\n功能：双窗格文件管理器；APK 浏览器、清单编辑器与签名；多 DEX、Smali 与 Java 编辑器；本地文件工具、终端、屏幕取色、Root/Shizuku 授权、FTP/FTPS 以及只读共享/MCP。\n\n为赛博中枢管家独立构建。不包含任何原应用代码。')},{icon:'layers',label:'开源致谢',run:()=>alertBox('开源致谢','JADX (Apache-2.0)\nsmali / baksmali / dexlib2 (BSD-3-Clause)\nCodeMirror 5 (MIT)\nPublic Sans (OFL-1.1) · U.S. Web Design System\nScreenColorPicker (MIT) · Ratul Hasan（屏幕取色组件）\nShizuku API (MIT) · Rikka（Root/Shizuku 授权组件）\nTermux terminal-emulator / terminal-view (GPLv3) · Termux（PTY 终端组件）\nJSch (BSD-3-Clause) · mwiede（SFTP 组件）\njCIFS-ng (LGPL-2.1) · AgNO3（SMB 组件）\nBouncy Castle (MIT)（jCIFS-ng 依赖）\nAndroid apksig (Apache-2.0)\nARSCLib 1.4.0 (Apache-2.0)\nECJ 4.6.1 (EPL-1.0) · AOSP dx (Apache-2.0) · ASM (BSD-3-Clause)\nApache Commons Net (Apache-2.0)\nGuava、Gson、Protobuf、ANTLR 与 SLF4J\n\n依赖版本与许可证说明包含在源码包中。')}]);}
 window.goBack=async()=>{try{if($('#menuLayer').children.length){closeMenu();return;}if($('#modalLayer').children.length){closeModal();return;}if($('#drawerLayer').children.length){closeDrawer();return;}if(state.screen==='editor'){if(!await canLeave())return;const back=state.editor.returnScreen,kind=state.editor.kind;if(state.disposeEditor)state.disposeEditor();state.cm=null;state.editor=null;$('#content').classList.remove('javaEditor');if(kind==='arsc'){state.screen='tool';await arscRender();return;}if(back==='dex')await renderDex();else await refresh();state.screen=back==='dex'?'dex':'files';if(back!=='dex')renderFiles();return;}if(state.screen==='tool'){if(state.previous==='dex')await renderDex();else{state.screen='files';await refresh();}return;}if(state.screen==='dex'){if(state.dex.tab!=='explorer'){state.dex.tab='explorer';await renderDex();}else await closeDex();return;}if(selectedFiles().length){clearSelection();return;}if(activePane().history.length)await backPane();else if(!activePane().archive&&['/',state.info.home,state.info.workspace].includes(activePane().path))await rpc('exit');else await up();}catch(e){alertBox('无法完成',e.message);}};
 let initialized=false;window.onNativeResume=()=>{if(initialized)act(async()=>{const old=state.info.permission;state.info=await rpc('init');if(!old&&state.info.permission){state.panes[0].path=state.info.home;state.panes[1].path=state.info.home+'/下载';}if(state.screen==='files')await refresh();});};
 async function init(){try{state.info=await rpc('init');const home=state.info.permission?state.info.home:state.info.workspace;state.panes[0].path=home;state.panes[1].path=state.info.permission?home+'/下载':home;await refresh();initialized=true;window.CyberBoot.ready();}catch(e){window.CyberBoot.fail(e);}}

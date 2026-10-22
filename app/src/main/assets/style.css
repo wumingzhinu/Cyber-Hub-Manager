@@ -695,3 +695,24 @@ h1.title,h1.editorTitle{margin:0}
 .netBar{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
 .netBar .primary{padding:8px 12px;font-size:12px;min-height:0}
 .networkStorageDialog .bundleHint{margin-bottom:4px}
+
+/* Smali instruction reference */
+.smaliRef{padding-top:0}
+.smaliRef .searchline{position:sticky;top:0;z-index:3;margin:0 -16px;background:var(--surface)}
+.smaliFilters{display:flex;gap:6px;overflow-x:auto;padding:12px 0 5px;scrollbar-width:none}
+.smaliFilters::-webkit-scrollbar{display:none}
+.smaliChip{flex:none;padding:7px 11px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--muted);font-size:11px;line-height:1;white-space:nowrap}
+.smaliChip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.smaliCount{padding:8px 2px;color:var(--muted);font-size:11px;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.smaliRow{display:flex;flex-direction:column;gap:5px;width:100%;text-align:left;padding:11px 8px;border-bottom:1px solid var(--rule)}
+.smaliRow:active{background:var(--raised)}
+.smaliLine{display:flex;align-items:center;gap:8px;min-width:0}
+.smaliLine code{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--accent);overflow-wrap:anywhere}
+.smaliFmt{flex:none;margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:2px 5px}
+.smaliDesc{font-size:12px;line-height:1.5;color:var(--text)}
+.smaliCat{font-size:10px;color:var(--muted);font-family:var(--mono)}
+.smaliDetailMeta{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
+.smaliDetailMeta span{font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-family:var(--mono)}
+.smaliExampleLabel{font-size:10px!important;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px!important;font-family:var(--mono)}
+.smaliExample{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px;margin:0 0 12px;overflow-x:auto;font-family:var(--mono);font-size:11px;line-height:1.6;color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere}
+.smaliHint{font-size:11px!important;color:var(--muted)}
