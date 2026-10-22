@@ -7,6 +7,11 @@ import jadx.api.*;import jadx.plugins.input.dex.DexInputPlugin;
 public final class DexEngine {
  final File root;File source,session;final Map<String,File>files=new LinkedHashMap<>();final Map<String,DexBackedDexFile>dexes=new LinkedHashMap<>();final SortedMap<String,ClassDef>classes=new TreeMap<>();final Map<String,String>owners=new HashMap<>();String sourceHash;JadxDecompiler jadx;String jadxMode="";
  public DexEngine(File r){root=r;root.mkdirs();}
+ public DexEngine scratch(File src,JSONArray names)throws Exception{
+  DexEngine t=new DexEngine(new File(root,"scratch-"+UUID.randomUUID()));
+  try{t.open(src,names);return t;}catch(Exception error){t.dispose();throw error;}
+ }
+ public void dispose(){close();try{FileOps.deleteTree(root);}catch(Exception ignored){}}
  public JSONObject open(File src,JSONArray names)throws Exception{close();files.clear();dexes.clear();classes.clear();owners.clear();source=src;sourceHash=FileOps.sha256(src);session=new File(root,UUID.randomUUID().toString());session.mkdirs();
   if(names.length()==0)throw new IOException("请至少选择一个 DEX");
   for(int n=0;n<names.length();n++){String name=names.getString(n);File out=FileOps.child(session,new File(name).getName());byte[] data=src.getName().endsWith(".dex")?FileOps.read(src,256L*1024*1024):FileOps.zipEntry(src,name,256L*1024*1024);FileOps.writeAtomic(out,data,false);files.put(name,out);DexBackedDexFile d=DexFileFactory.loadDexFile(out,Opcodes.forApi(apiOf(out)));dexes.put(name,d);for(ClassDef c:d.getClasses()){if(classes.containsKey(c.getType()))throw new IOException("所选 DEX 文件间存在重复类："+c.getType());classes.put(c.getType(),c);owners.put(c.getType(),name);}}

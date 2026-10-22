@@ -9,6 +9,12 @@ import android.net.Uri;
 import android.provider.Settings;
 import android.webkit.*;
 import android.view.*;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.*;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import com.termux.terminal.*;
+import com.termux.view.*;
 import com.cyberhub.manager.color.*;
 import org.json.*;
 import java.io.*;
@@ -22,6 +28,13 @@ public class MainActivity extends Activity {
     private static final String APP_URL="https://appassets.androidplatform.net/assets/app.html";
     private final ExecutorService worker=Executors.newFixedThreadPool(2);
     private final ExecutorService thumbnails=Executors.newSingleThreadExecutor();
+    private FrameLayout root;
+    private FrameLayout terminalOverlay;
+    private TerminalView terminalView;
+    private TerminalSession terminalSession;
+    private int terminalTextSize=14;
+    private boolean terminalCtrl,terminalAlt;
+    private TextView terminalCtrlKey,terminalAltKey;
     @Override public void onCreate(Bundle state){super.onCreate(state);
         System.setProperty("java.io.tmpdir",getCacheDir().getPath());
         try{engine=new DataEngine(this);web=new WebView(this);web.setBackgroundColor(0xff303030);
@@ -40,7 +53,7 @@ public class MainActivity extends Activity {
                 if(web==v){web=null;v.destroy();}showStartupError("Android WebView 已停止。轻点重试以重新打开应用。");return true;
             }
         });
-        web.addJavascriptInterface(new Bridge(),"CyberNative");setContentView(web);web.loadUrl(APP_URL);
+        web.addJavascriptInterface(new Bridge(),"CyberNative");root=new FrameLayout(this);root.addView(web,new FrameLayout.LayoutParams(-1,-1));setContentView(root);web.loadUrl(APP_URL);
         }catch(Throwable error){showStartupError(error.getClass().getSimpleName()+": "+error.getMessage());}
     }
     private WebResourceResponse localAsset(Uri uri,String method){
@@ -83,6 +96,8 @@ public class MainActivity extends Activity {
                     case "clipboard":runOnUiThread(()->((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("赛博中枢管家",a.optString("text"))));result=true;break;
                     case "colorPicker":result=colorPicker(a);break;
                     case "elevated":result=ElevatedAccess.call(MainActivity.this,a);break;
+                    case "terminalOpen":{String p=a.optString("path",getFilesDir().getPath());runOnUiThread(()->openTerminal(p));result=true;break;}
+                    case "terminalClose":runOnUiThread(()->closeTerminal());result=true;break;
                     default:result=engine.call(action,a);
                 }
                 response.put("id",id);response.put("ok",true);response.put("data",result==null?JSONObject.NULL:result);
@@ -90,6 +105,183 @@ public class MainActivity extends Activity {
             final String json=response.toString();runOnUiThread(()->{if(web!=null)web.evaluateJavascript("window.receive&&window.receive("+json+")",null);});
             });
         }
+    }
+    private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
+    private String[] terminalEnv(String home,String cwd){
+        File envFile=new File(getCacheDir(),"termux.env");
+        try(FileOutputStream out=new FileOutputStream(envFile)){out.write("PS1=':\\w \\$ '\n".getBytes(StandardCharsets.UTF_8));}catch(IOException ignored){}
+        return new String[]{
+        "HOME="+home,
+        "PWD="+cwd,
+        "TMPDIR="+getCacheDir().getAbsolutePath(),
+        "PATH=/sbin:/system/sbin:/system/bin:/system/xbin:/vendor/bin",
+        "TERM=xterm-256color",
+        "COLORTERM=truecolor",
+        "LANG=en_US.UTF-8",
+        "ENV="+envFile.getAbsolutePath(),
+        "PS1=:\\w \\$ "
+    };}
+    private void openTerminal(String path){
+        if(terminalOverlay!=null||root==null)return;
+        File cwd=new File(path);
+        if(!cwd.isDirectory())cwd=getFilesDir();
+        final String cwdPath=cwd.getAbsolutePath();
+        final String home=getFilesDir().getAbsolutePath();
+        terminalTextSize=14;
+        terminalView=new TerminalView(this,null);
+        terminalView.setTerminalViewClient(new TermViewClient());
+        terminalView.setTextSize(terminalTextSize);
+        terminalView.setBackgroundColor(0xff000000);
+        terminalView.setTypeface(Typeface.MONOSPACE);
+        terminalSession=new TerminalSession("/system/bin/sh",cwdPath,new String[]{"-i"},terminalEnv(home,cwdPath),2000,new TermSessionClient());
+        terminalView.attachSession(terminalSession);
+
+        terminalOverlay=new FrameLayout(this);
+        terminalOverlay.setBackgroundColor(0xff000000);
+        LinearLayout column=new LinearLayout(this);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.addView(terminalView,new LinearLayout.LayoutParams(-1,0,1));
+
+        LinearLayout keys=new LinearLayout(this);
+        keys.setOrientation(LinearLayout.VERTICAL);
+        keys.setBackgroundColor(0xff000000);
+        addTerminalKeyRow(keys,new String[][]{{"Esc","esc"},{"Tab","tab"},{"PgUp","pgup"},{"Home","home"},{"▲","up"},{"End","end"},{"⋮","menu"}});
+        addTerminalKeyRow(keys,new String[][]{{"Ctrl","ctrl"},{"Alt","alt"},{"PgDn","pgdn"},{"◀","left"},{"▼","down"},{"▶","right"},{"⇄","keyboard"}});
+        column.addView(keys,new LinearLayout.LayoutParams(-1,-2));
+        terminalOverlay.addView(column,new FrameLayout.LayoutParams(-1,-1));
+
+        root.addView(terminalOverlay,new FrameLayout.LayoutParams(-1,-1));
+        terminalView.post(()->{if(terminalView!=null)terminalView.requestFocus();});
+    }
+    private void addTerminalKeyRow(LinearLayout parent,String[][] keys){
+        LinearLayout row=new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        for(final String[] key:keys){
+            TextView b=new TextView(this);
+            b.setText(key[0]);b.setTextSize(15);b.setTextColor(0xfff0f0f0);b.setTypeface(Typeface.MONOSPACE);
+            b.setGravity(Gravity.CENTER);b.setBackgroundColor(0xff000000);b.setClickable(true);b.setFocusable(false);b.setPadding(0,0,0,0);
+            b.setOnClickListener(v->handleTerminalKey(key[1],b));
+            if(key[1].equals("ctrl"))terminalCtrlKey=b;
+            if(key[1].equals("alt"))terminalAltKey=b;
+            row.addView(b,new LinearLayout.LayoutParams(0,dp(42),1));
+        }
+        parent.addView(row,new LinearLayout.LayoutParams(-1,dp(42)));
+    }
+    private void handleTerminalKey(String action,TextView view){
+        switch(action){
+            case "ctrl":terminalCtrl=!terminalCtrl;updateTerminalModifiers();focusTerminal();return;
+            case "alt":terminalAlt=!terminalAlt;updateTerminalModifiers();focusTerminal();return;
+            case "menu":showTerminalMenu(view);return;
+            case "keyboard":toggleTerminalKeyboard();return;
+            case "esc":writeTerminal("\u001b");return;
+            case "tab":writeTerminal("\t");return;
+            case "pgup":writeTerminal("\u001b[5~");return;
+            case "pgdn":writeTerminal("\u001b[6~");return;
+            case "home":writeTerminal("\u001b[H");return;
+            case "end":writeTerminal("\u001b[F");return;
+            case "up":writeTerminal("\u001b[A");return;
+            case "down":writeTerminal("\u001b[B");return;
+            case "left":writeTerminal("\u001b[D");return;
+            case "right":writeTerminal("\u001b[C");return;
+        }
+    }
+    private void writeTerminal(String text){
+        resetTerminalModifiers();
+        TerminalSession session=terminalSession;
+        if(session!=null){byte[] bytes=text.getBytes(StandardCharsets.UTF_8);session.write(bytes,0,bytes.length);}
+        focusTerminal();
+    }
+    private void resetTerminalModifiers(){terminalCtrl=false;terminalAlt=false;updateTerminalModifiers();}
+    private void updateTerminalModifiers(){
+        if(terminalCtrlKey!=null){terminalCtrlKey.setTextColor(terminalCtrl?0xff7fb3ff:0xfff0f0f0);terminalCtrlKey.setBackgroundColor(terminalCtrl?0xff1d3b5a:0xff000000);}
+        if(terminalAltKey!=null){terminalAltKey.setTextColor(terminalAlt?0xff7fb3ff:0xfff0f0f0);terminalAltKey.setBackgroundColor(terminalAlt?0xff1d3b5a:0xff000000);}
+    }
+    private void focusTerminal(){TerminalView view=terminalView;if(view!=null)view.requestFocus();}
+    private void toggleTerminalKeyboard(){
+        TerminalView view=terminalView;
+        if(view==null)return;
+        InputMethodManager imm=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
+        if(imm==null)return;
+        if(imm.isActive(view))imm.hideSoftInputFromWindow(view.getWindowToken(),0);
+        else{view.requestFocus();imm.showSoftInput(view,InputMethodManager.SHOW_IMPLICIT);}
+    }
+    private void pasteTerminal(){
+        TerminalSession session=terminalSession;
+        if(session==null)return;
+        ClipboardManager cm=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+        if(cm==null||!cm.hasPrimaryClip()||cm.getPrimaryClip()==null||cm.getPrimaryClip().getItemCount()==0)return;
+        CharSequence text=cm.getPrimaryClip().getItemAt(0).coerceToText(this);
+        if(text!=null){byte[] bytes=text.toString().getBytes(StandardCharsets.UTF_8);if(bytes.length>0)session.write(bytes,0,bytes.length);}
+        focusTerminal();
+    }
+    private void showTerminalMenu(View anchor){
+        PopupMenu menu=new PopupMenu(this,anchor);
+        menu.getMenu().add(0,1,0,"粘贴");
+        menu.getMenu().add(0,2,1,"清空屏幕");
+        menu.getMenu().add(0,3,2,"关闭终端");
+        menu.setOnMenuItemClickListener(item->{
+            switch(item.getItemId()){
+                case 1:pasteTerminal();return true;
+                case 2:writeTerminal("\u000c");return true;
+                case 3:closeTerminal();return true;
+            }
+            return false;
+        });
+        menu.show();
+    }
+    private void closeTerminal(){
+        if(terminalOverlay==null)return;
+        FrameLayout overlay=terminalOverlay;
+        terminalOverlay=null;terminalView=null;terminalCtrlKey=null;terminalAltKey=null;terminalCtrl=false;terminalAlt=false;
+        TerminalSession session=terminalSession;terminalSession=null;
+        if(root!=null)root.removeView(overlay);
+        if(session!=null){try{session.finishIfRunning();}catch(Throwable ignored){}}
+        if(web!=null){web.requestFocus();web.evaluateJavascript("window.terminalClosed&&window.terminalClosed()",null);}
+    }
+    private final class TermSessionClient implements TerminalSessionClient {
+        @Override public void onTextChanged(TerminalSession session){runOnUiThread(()->{if(terminalView!=null)terminalView.onScreenUpdated();});}
+        @Override public void onTitleChanged(TerminalSession session){}
+        @Override public void onSessionFinished(TerminalSession session){runOnUiThread(()->{if(terminalOverlay!=null){toast("终端会话已结束");closeTerminal();}});}
+        @Override public void onCopyTextToClipboard(TerminalSession session,String text){runOnUiThread(()->{ClipboardManager cm=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("Termux",text));});}
+        @Override public void onPasteTextFromClipboard(TerminalSession session){
+            try{ClipboardManager cm=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);if(cm==null||!cm.hasPrimaryClip()||cm.getPrimaryClip()==null||cm.getPrimaryClip().getItemCount()==0)return;CharSequence text=cm.getPrimaryClip().getItemAt(0).coerceToText(MainActivity.this);if(text!=null){byte[] bytes=text.toString().getBytes(StandardCharsets.UTF_8);if(bytes.length>0)session.write(bytes,0,bytes.length);}}catch(Throwable ignored){}
+        }
+        @Override public void onBell(TerminalSession session){}
+        @Override public void onColorsChanged(TerminalSession session){runOnUiThread(()->{if(terminalView!=null)terminalView.onScreenUpdated();});}
+        @Override public void onTerminalCursorStateChange(boolean state){}
+        @Override public Integer getTerminalCursorStyle(){return TerminalEmulator.DEFAULT_TERMINAL_CURSOR_STYLE;}
+        @Override public void logError(String tag,String message){android.util.Log.e(tag,message);}
+        @Override public void logWarn(String tag,String message){android.util.Log.w(tag,message);}
+        @Override public void logInfo(String tag,String message){android.util.Log.i(tag,message);}
+        @Override public void logDebug(String tag,String message){android.util.Log.d(tag,message);}
+        @Override public void logVerbose(String tag,String message){android.util.Log.v(tag,message);}
+        @Override public void logStackTraceWithMessage(String tag,String message,Exception e){android.util.Log.e(tag,message,e);}
+        @Override public void logStackTrace(String tag,Exception e){android.util.Log.e(tag,"",e);}
+    }
+    private final class TermViewClient implements TerminalViewClient {
+        @Override public float onScale(float scale){return 1f;}
+        @Override public void onSingleTapUp(MotionEvent e){InputMethodManager imm=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);if(imm!=null&&terminalView!=null){terminalView.requestFocus();imm.showSoftInput(terminalView,InputMethodManager.SHOW_IMPLICIT);}}
+        @Override public boolean shouldBackButtonBeMappedToEscape(){return false;}
+        @Override public boolean shouldEnforceCharBasedInput(){return true;}
+        @Override public boolean shouldUseCtrlSpaceWorkaround(){return true;}
+        @Override public boolean isTerminalViewSelected(){return terminalView!=null;}
+        @Override public void copyModeChanged(boolean copyMode){}
+        @Override public boolean onKeyDown(int keyCode,KeyEvent e,TerminalSession session){return false;}
+        @Override public boolean onKeyUp(int keyCode,KeyEvent e){return false;}
+        @Override public boolean onLongPress(MotionEvent event){return false;}
+        @Override public boolean readControlKey(){return terminalCtrl;}
+        @Override public boolean readAltKey(){return terminalAlt;}
+        @Override public boolean readShiftKey(){return false;}
+        @Override public boolean readFnKey(){return false;}
+        @Override public boolean onCodePoint(int codePoint,boolean ctrlDown,TerminalSession session){if(terminalCtrl||terminalAlt)resetTerminalModifiers();return false;}
+        @Override public void onEmulatorSet(){}
+        @Override public void logError(String tag,String message){android.util.Log.e(tag,message);}
+        @Override public void logWarn(String tag,String message){android.util.Log.w(tag,message);}
+        @Override public void logInfo(String tag,String message){android.util.Log.i(tag,message);}
+        @Override public void logDebug(String tag,String message){android.util.Log.d(tag,message);}
+        @Override public void logVerbose(String tag,String message){android.util.Log.v(tag,message);}
+        @Override public void logStackTraceWithMessage(String tag,String message,Exception e){android.util.Log.e(tag,message,e);}
+        @Override public void logStackTrace(String tag,Exception e){android.util.Log.e(tag,"",e);}
     }
     private File shareCopy(File src)throws IOException{File root=new File(getCacheDir(),"shared");root.mkdirs();File dst=FileOps.child(root,src.getName());java.nio.file.Files.copy(src.toPath(),dst.toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);return dst;}
     private Uri shareUri(File f){return new Uri.Builder().scheme("content").authority(getPackageName()+".files").appendPath(f.getName()).build();}
@@ -174,6 +366,6 @@ public class MainActivity extends Activity {
         }
     }
     @Override protected void onResume(){super.onResume();if(web!=null)web.evaluateJavascript("window.onNativeResume&&window.onNativeResume()",null);}
-    @Override public void onBackPressed(){if(web!=null)web.evaluateJavascript("window.goBack&&window.goBack()",null);}
-    @Override protected void onDestroy(){if(engine!=null)engine.close();worker.shutdownNow();thumbnails.shutdownNow();if(web!=null){web.removeJavascriptInterface("CyberNative");web.destroy();web=null;}super.onDestroy();}
+    @Override public void onBackPressed(){if(terminalOverlay!=null){closeTerminal();return;}if(web!=null)web.evaluateJavascript("window.goBack&&window.goBack()",null);}
+    @Override protected void onDestroy(){closeTerminal();if(engine!=null)engine.close();worker.shutdownNow();thumbnails.shutdownNow();if(web!=null){web.removeJavascriptInterface("CyberNative");web.destroy();web=null;}super.onDestroy();}
 }

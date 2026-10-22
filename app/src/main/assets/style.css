@@ -679,3 +679,19 @@ h1.title,h1.editorTitle{margin:0}
   .filemeta{margin-top:1px}
   #bottom .iconbtn{width:20%}
 }
+
+
+/* Recycle bin */
+.recycleGroup{position:sticky;top:0;z-index:2;padding:9px 10px;font-size:13px;line-height:18px;color:var(--muted);background:var(--ground);border-bottom:1px solid var(--rule)}
+.recyclePane:not(.active) .recycleGroup{background:var(--surface)}
+.recyclePane .fileicon.dex{background:#377c80!important;color:#fff!important}
+.recyclePane .fileicon.file{background:#2f5fbf!important;color:#fff!important}
+.recyclePane .fileicon.xml,.recyclePane .fileicon.java,.recyclePane .fileicon.smali{background:#354e9b!important;color:#fff!important}
+.recyclePane .fileicon.zip,.recyclePane .fileicon.apks{background:#927367!important;color:#fff!important}
+.recyclePane .fileicon.arsc{background:#a57306!important;color:#fff!important}
+.recyclePane .fileicon.apk{background:#2e7d32!important;color:#fff!important}
+.recyclePane .fileicon.folder{background:transparent!important;color:var(--muted)!important}
+.recyclePane .recycleRow{padding-left:10px;padding-right:10px}
+.netBar{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+.netBar .primary{padding:8px 12px;font-size:12px;min-height:0}
+.networkStorageDialog .bundleHint{margin-bottom:4px}

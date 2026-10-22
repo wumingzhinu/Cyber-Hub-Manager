@@ -67,6 +67,11 @@ public final class DataEngine {
    case "dexRepair":{JSONObject r=dex.repair();record("已修复 DEX："+r.getInt("count")+" 个");return r;}
    case "dexToSmali":{File out=new File(a.getString("destination"));JSONObject r=dex.toSmali(out);record("已导出 Smali："+r.getString("path"));return r;}
    case "dexToJar":{File out=new File(a.getString("destination"));JSONObject r=dex.toJar(out);record("已生成 JAR："+r.getString("path"));return r;}
+   case "dexDirectProperties":{File src=resolve(a);DexEngine t=dex.scratch(src,new JSONArray().put(dexEntryName(a,src)));try{JSONObject r=t.properties().put("path",dexLabel(a,src));return r;}finally{t.dispose();}}
+   case "dexDirectRepair":{File src=resolve(a);String name=dexEntryName(a,src);DexEngine t=dex.scratch(src,new JSONArray().put(name));try{JSONObject r=t.repair();byte[] data=FileOps.read(t.files.get(name),256L*1024*1024);JSONObject p=publishDex(a,name,data);record("已修复 DEX："+dexLabel(a,src));return r.put("path",p.getString("path")).put("backup",p.getString("backup")).put("signed",p.getBoolean("signed"));}finally{t.dispose();}}
+   case "dexDirectToSmali":{File src=resolve(a);File out=new File(a.getString("destination"));DexEngine t=dex.scratch(src,new JSONArray().put(dexEntryName(a,src)));try{JSONObject r=t.toSmali(out).put("source",dexLabel(a,src));record("已导出 Smali："+r.getString("path"));return r;}finally{t.dispose();}}
+   case "dexDirectToJar":{File src=resolve(a);File out=new File(a.getString("destination"));DexEngine t=dex.scratch(src,new JSONArray().put(dexEntryName(a,src)));try{JSONObject r=t.toJar(out).put("source",dexLabel(a,src));record("已生成 JAR："+r.getString("path"));return r;}finally{t.dispose();}}
+   case "dexDirectReplaceStrings":{File src=resolve(a);String name=dexEntryName(a,src);DexEngine t=dex.scratch(src,new JSONArray().put(name));try{JSONObject r=t.replaceStrings(a).put("path",dexLabel(a,src));if(r.optInt("replaced",0)==0)return r.put("changed",false);byte[] data=FileOps.read(t.files.get(name),256L*1024*1024);JSONObject p=publishDex(a,name,data);record("已替换 DEX 字符串 "+r.getInt("replaced")+" 处");return r.put("changed",true).put("backup",p.getString("backup")).put("signed",p.getBoolean("signed"));}finally{t.dispose();}}
    case "dexMerge":{File out=new File(a.getString("destination"));JSONObject r=dex.mergeDex(a,out);record("已合并 DEX："+r.getInt("classes")+" 个类");return r;}
    case "dexReplaceStrings":{JSONObject r=dex.replaceStrings(a);record("已替换 DEX 字符串 "+r.getInt("replaced")+" 处");return r;}
    case "dexOpen":return dex.open(resolve(a),a.getJSONArray("entries"));
@@ -89,6 +94,7 @@ public final class DataEngine {
    case "plugins":return plugins(a);
    case "service":return services.action(a);
    case "ftp":return FtpTools.call(a);
+   case "netStorage":return NetworkStorage.call(a);
    default:throw new IOException("未知操作："+action);
   }
  }
@@ -148,9 +154,10 @@ public final class DataEngine {
   return output;
  }
  String recycle(File f)throws Exception{
-  if(!f.exists())throw new IOException("文件已不存在");String id=UUID.randomUUID().toString();File target=new File(trash,id);FileOps.copyTree(f,target);JSONObject meta=new JSONObject().put("path",f.getCanonicalPath()).put("name",f.getName()).put("time",System.currentTimeMillis()).put("id",id);FileOps.writeAtomic(new File(trash,id+".json"),meta.toString().getBytes(StandardCharsets.UTF_8),false);FileOps.deleteTree(f);record("已移入回收站 "+f.getName());return id;
+  if(!f.exists())throw new IOException("文件已不存在");String id=UUID.randomUUID().toString();File target=new File(trash,id);long bytes=treeSize(f);FileOps.copyTree(f,target);JSONObject meta=new JSONObject().put("path",f.getCanonicalPath()).put("name",f.getName()).put("time",System.currentTimeMillis()).put("id",id).put("dir",f.isDirectory()).put("size",bytes);FileOps.writeAtomic(new File(trash,id+".json"),meta.toString().getBytes(StandardCharsets.UTF_8),false);FileOps.deleteTree(f);record("已移入回收站 "+f.getName());return id;
  }
- JSONArray recycleList()throws Exception{JSONArray arr=new JSONArray();File[] fs=trash.listFiles();if(fs!=null)for(File f:fs)if(f.getName().endsWith(".json"))arr.put(new JSONObject(new String(FileOps.read(f,65536),StandardCharsets.UTF_8)));return arr;}
+ JSONArray recycleList()throws Exception{JSONArray arr=new JSONArray();File[] fs=trash.listFiles();if(fs==null)return arr;List<JSONObject> rows=new ArrayList<>();for(File f:fs){if(!f.getName().endsWith(".json"))continue;JSONObject o=new JSONObject(new String(FileOps.read(f,65536),StandardCharsets.UTF_8));File item=new File(trash,o.optString("id"));if(!o.has("dir"))o.put("dir",item.isDirectory());if(!o.has("size"))o.put("size",item.exists()?treeSize(item):0);rows.add(o);}rows.sort((x,y)->Long.compare(y.optLong("time"),x.optLong("time")));for(JSONObject o:rows)arr.put(o);return arr;}
+ static long treeSize(File f){if(f.isFile())return f.length();File[] fs=f.listFiles();long n=0;if(fs!=null)for(File c:fs)n+=treeSize(c);return n;}
  JSONObject apkInfo(File f)throws Exception{
   PackageManager pm=activity.getPackageManager();PackageInfo p=pm.getPackageArchiveInfo(f.getPath(),PackageManager.GET_PERMISSIONS);if(p==null)throw new IOException("Android 无法解析此 APK");p.applicationInfo.sourceDir=f.getPath();p.applicationInfo.publicSourceDir=f.getPath();String sig="未签名 / 未校验";
   try{ApkVerifier.Result v=new ApkVerifier.Builder(f).build().verify();List<String>s=new ArrayList<>();if(v.isVerifiedUsingV1Scheme())s.add("V1");if(v.isVerifiedUsingV2Scheme())s.add("V2");if(v.isVerifiedUsingV3Scheme())s.add("V3");sig=v.isVerified()?String.join(" + ",s):"签名无效或未签名";}catch(Exception e){sig="无法校验："+e.getMessage();}
@@ -161,6 +168,27 @@ public final class DataEngine {
  void sign(File src,File dst)throws Exception{sign(src,dst,true,true,true);}
   void sign(File src,File dst,boolean v1,boolean v2,boolean v3)throws Exception{try(InputStream key=activity.getAssets().open("development-signing.p12")){ApkSigning.sign(src,dst,key,v1,v2,v3);}}
  JSONArray dexFiles(File f)throws Exception{JSONArray a=new JSONArray();if(f.getName().endsWith(".dex"))return a.put(f.getName());try(ZipFile z=new ZipFile(f)){Enumeration<? extends ZipEntry>en=z.entries();while(en.hasMoreElements()){String n=en.nextElement().getName();if(n.matches("classes[0-9]*\\.dex"))a.put(n);}}return a;}
+  static String dexEntryName(JSONObject a,File src)throws Exception{return a.optString("archive").isEmpty()?src.getName():a.getString("entry");}
+  static String dexLabel(JSONObject a,File src){String archive=a.optString("archive");return archive.isEmpty()?src.getPath():archive+"!"+a.optString("entry");}
+  JSONObject publishDex(JSONObject a,String entry,byte[] data)throws Exception{
+   String archive=a.optString("archive");
+   if(archive.isEmpty()){
+    File original=new File(a.getString("path"));if(!original.isFile())throw new IOException("找不到 DEX 文件："+original.getName());
+    File prepared=File.createTempFile(".dex-direct-",".tmp",original.getAbsoluteFile().getParentFile());
+    try{FileOps.writeAtomic(prepared,data,false);File backup=FileOps.commitWithBackup(prepared,original);return new JSONObject().put("path",original.getPath()).put("backup",backup.getPath()).put("signed",false);}
+    finally{prepared.delete();}
+   }
+   File original=new File(archive);if(!original.isFile())throw new IOException("找不到 APK 文件："+original.getName());
+   File rewritten=File.createTempFile(".apk-direct-",".tmp",original.getAbsoluteFile().getParentFile());
+   File signed=new File(rewritten.getPath()+".signed.apk");
+   try{
+    Map<String,byte[]> edits=new HashMap<>();edits.put(a.getString("entry"),data);
+    FileOps.rewriteZip(original,rewritten,edits);
+    try(InputStream key=activity.getAssets().open("development-signing.p12")){ApkSigning.sign(rewritten,signed,key);}
+    File backup=FileOps.commitWithBackup(signed,original);
+    return new JSONObject().put("path",original.getPath()).put("backup",backup.getPath()).put("signed",true);
+   }finally{rewritten.delete();signed.delete();}
+  }
  JSONArray apps()throws Exception{JSONArray a=new JSONArray();List<ApplicationInfo>apps=activity.getPackageManager().getInstalledApplications(0);apps.sort((x,y)->String.valueOf(x.loadLabel(activity.getPackageManager())).compareToIgnoreCase(String.valueOf(y.loadLabel(activity.getPackageManager()))));for(ApplicationInfo p:apps)a.put(new JSONObject().put("name",String.valueOf(p.loadLabel(activity.getPackageManager()))).put("package",p.packageName).put("path",p.sourceDir));return a;}
  void record(String text){try{JSONArray old=new JSONArray(activity.getPreferences(0).getString("log","[]"));JSONArray next=new JSONArray();next.put(new JSONObject().put("text",text).put("time",System.currentTimeMillis()));for(int i=0;i<Math.min(199,old.length());i++)next.put(old.get(i));activity.getPreferences(0).edit().putString("log",next.toString()).apply();}catch(Exception ignored){}}
  String terminal(String command,String path)throws Exception{if(command.trim().isEmpty())return "";File dir=new File(path);if(!dir.isDirectory())throw new IOException("请先选择一个普通文件夹");java.lang.Process p=new ProcessBuilder("/system/bin/sh","-c",command).directory(dir).redirectErrorStream(true).start();java.util.concurrent.ExecutorService one=java.util.concurrent.Executors.newSingleThreadExecutor();java.util.concurrent.Future<byte[]>future=one.submit(()->FileOps.bytes(p.getInputStream(),1024*1024));try{if(!p.waitFor(20,java.util.concurrent.TimeUnit.SECONDS)){p.destroyForcibly();throw new IOException("命令在 20 秒后超时");}String result=new String(future.get(2,java.util.concurrent.TimeUnit.SECONDS),StandardCharsets.UTF_8);record("终端命令完成（退出码 "+p.exitValue()+")");return result+"\n[退出码 "+p.exitValue()+"]";}finally{p.destroy();one.shutdownNow();}}

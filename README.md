@@ -28,7 +28,7 @@ Merged APKs cannot update an installed app signed with a different developer key
 - Java toolbar has undo, redo, save and line tools. **Find and replace** edits the live buffer and is undoable. Smali register tools are hidden in Java; comments use the correct language syntax.
 - Failed Java compilation keeps the buffer open and shows diagnostics with a jump-to-line action. Concurrent saves compile once. Buffer changes during an asynchronous save are not falsely marked clean.
 - **Save and sign APK** rewrites, signs and verifies V1/V2/V3 before committing to the source with an exact backup. Failed signing leaves the source unchanged. Exporting a copy no longer clears the unsaved-project flag. Opening another DEX asks how to handle unsaved work.
-- Tapping a DEX file opens the DEX tool menu: **Dex 编辑器 Plus**, repair, DEX properties, Smali export, JAR export, translation mode and string replacement. Every entry except the merge tool forces the DEX editor open first: the project picker lists the `classes*.dex` files, the editor loads the chosen set, and the action then runs on that project. JAR export first extracts the selected DEX files from an APK into a local `*_dex` folder, then emits a `.class` JAR that JD-GUI can inspect. Repair and string edits preserve the original DEX version/API level.
+- Tapping a DEX file opens the DEX tool menu: **Dex 编辑器 Plus**, repair, DEX properties, Smali export, JAR export, translation mode and string replacement. Repair, DEX properties, Smali export, JAR export and string replacement run directly on the tapped `classes*.dex` without opening the DEX editor; only **Dex 编辑器 Plus** (and translation mode, which needs the string tab) opens a project. Direct repair and string replacement write back with a `.bak` backup and re-sign the containing APK; Smali/JAR export leave the source untouched. Repair and string edits preserve the original DEX version/API level.
 - Merging `classes*.dex` moved out of the single-file menu: select two or more DEX files, long-press to open the file action sheet, and pick **合并 DEX** next to **分享**. The entry only appears when every selected file is a DEX, and only the selected files are merged.
 
 ## Machine translation
@@ -64,7 +64,7 @@ Java compilation requires valid, compilable source. Decompiled Java is not guara
 
 | Area | Working implementation |
 | --- | --- |
-| Files | Two side-by-side panes on phones and tablets. Folder/history navigation, selection, copy/move, batch rename, bookmarks, recycle/restore, backup restore, create, filter, properties/SHA-256, share. |
+| Files | Two side-by-side panes on phones and tablets. Folder/history navigation, selection, copy/move, batch rename, bookmarks, recycle/restore, backup restore, create, filter, properties/SHA-256, share. The recycle bin opens only in the pane that was active last and leaves the other pane untouched; entries are grouped by date (today, yesterday, 7 days, 30 days, older), the header shows folder/file counts plus total size, and the pane keeps the file manager’s bottom shortcut bar. Swipe rows for multi-select, then restore or permanently delete the selected entries in one action. |
 | Archives | ZIP, 7z, TAR, TAR.GZ/XZ/ZST/BZ2/LZ4, GZIP; format-appropriate compression, ZIP/7z AES passwords, split archives, extraction. Entries inside an archive can be renamed: the archive is rewritten as an `-edited` copy with the new name, the original package is left untouched, and stale JAR signatures are dropped so the copy can be signed again. |
 | APK | Metadata/icon, signature verification, browse/extract, edited archive output, signing, Android install intent. Protection is not assessed. |
 | APKS | Convert base/config/feature split sets; select bundletool variants; preserve signed standalone APKs; sign and verify merged APKs; install output. |
@@ -73,8 +73,8 @@ Java compilation requires valid, compilable source. Decompiled Java is not guara
 | Editors | Syntax colors, line tools, search/replace, go to line, wrap, undo/redo, export, text zoom. Smali register analysis/increase. |
 | Resources | resources.arsc opens a four-way chooser: ArscEditor, ArscEditor++ (Browse/Recent/Search/Constants workspace), translation mode with per-language comparison and new-language cloning, and a resource query tool for `@`/`?` names, IDs, colors and base conversions. Editors support package/type/config/entry browsing, scalar and complex values, rename/add/delete, per-config import/delete, string-pool replace, and save with APK re-sign support. AXML string-pool viewing remains available separately. The Arsc编辑器++ browse tab is a drill-down tree like the DEX editor — package → type → resource — with the default configuration inlined under its type and other configurations shown as locale rows instead of a "default" folder; a selected resource opens in place instead of jumping to the type list, and the tree cache is dropped after every edit. Tapping a resource opens it in the text editor as XML (`<string name="app_name" id="0x7f030000" package="…" type="string">value</string>`); editing that value and saving writes it back into the resource table. Complex (style/array) values open as XML collection items and save per index. The Arsc编辑器++ browse tab carries a name filter and the same shortcut symbol bar (`→ / + - * = <`) as the code editor, so symbols can be typed without a keyboard. |
 | Installed apps | List/filter and inspect/extract base APKs. Installed-app export reads the base APK; use an APKS bundle for split conversion. |
-| Tools | Local profile/preferences, activity record, file comparisons, shell terminal, own-format `.sh` plugins. |
-| Network | FTP/explicit FTPS client; token-protected read-only local HTTP sharing; local MCP `list_files`/`read_text`. |
+| Tools | Local profile/preferences, activity record, file comparisons, an embedded Termux terminal (`terminal-emulator` + `terminal-view`) with a real PTY running `/system/bin/sh`, and own-format `.sh` plugins. |
+| Network | Saved network storage (WebDAV, FTP, FTPS, SFTP, SMB and S3-compatible object storage) with list/download/upload/mkdir/rename/delete; FTP/explicit FTPS client; token-protected read-only local HTTP sharing; local MCP `list_files`/`read_text`. |
 
 ### File multi-select gestures
 
@@ -86,13 +86,13 @@ Selecting several files/folders in the two-pane file view supports three continu
 
 A plain long-press without sliding still opens the file action menu as before; a tap with no active selection still opens the file/folder as before.
 
-Remote/network tools run only while the app process lives and respect Android permissions. Terminal commands have a 20-second timeout. DEX searches are capped; usage search covers selected DEX instructions/type declarations, not reflection. Register analysis is a usage/count view, not liveness analysis. Root escalation, cloud subscriptions, remote desktop control and proprietary plugins are not provided. ARSC editing handles compiled resource tables; building new resource IDs still requires a resource compiler.
+Remote/network tools run only while the app process lives and respect Android permissions. The embedded Termux terminal is interactive and has no fixed command timeout; the separate `.sh` plugin runner still uses the 20-second batch limit. DEX searches are capped; usage search covers selected DEX instructions/type declarations, not reflection. Register analysis is a usage/count view, not liveness analysis. Root escalation, cloud subscriptions, remote desktop control and proprietary plugins are not provided. ARSC editing handles compiled resource tables; building new resource IDs still requires a resource compiler.
 
 ## Validation and limits
 
 See `VALIDATION.txt`, `tests/results/` and `tests/performance-profile.cjs` for the actual checks. Native code runs in JVM tests with real ZIP/DEX/AXML/signatures; UI tests use a mocked bridge and Happy DOM. The profile counts expensive operations on a 15,003-line buffer. It is **not a device FPS measurement**.
 
-No physical Android device/emulator was available. Installation, actual WebView frame pacing, pinch/keyboard rendering, device memory pressure, FTP endpoints and Android JNI execution still require device testing. The local browser runtime was unavailable and cloud local-preview access was denied; that restriction was respected. This is a development build, not a promise of pixel-perfect or universally lag-free behavior.
+No physical Android device/emulator was available. Installation, actual WebView frame pacing, pinch/keyboard rendering, device memory pressure, live WebDAV/FTP/FTPS/SFTP/SMB/S3 endpoints and Android JNI execution still require device testing. The local browser runtime was unavailable and cloud local-preview access was denied; that restriction was respected. This is a development build, not a promise of pixel-perfect or universally lag-free behavior.
 
 The signing certificate is a **public development key** bundled to make local signing work. It cannot update an app signed by a different developer; use your own key for a production identity. APK size includes the offline Java compiler, compile-only Android API library and resource-aware APKS merge engine. The API library is copied to cache only on the first Java compilation.
 
@@ -114,6 +114,10 @@ Its default build-tools selection is 34.0.0; pass `--tools` for another installe
 
 `python tools/dependencies.py` recreates pinned runtime JARs. `python tools/compiler-api.py /path/to/platforms/android-34/android.jar` recreates the compile-only classpath asset. Dependency/source/license information is in `THIRD-PARTY-NOTICES.txt`, `DEPENDENCIES.json` and `licenses/`.
 
+## Terminal component
+
+The embedded terminal uses the Termux `terminal-emulator` and `terminal-view` libraries (GPLv3), resolved from JitPack. Native PTY support is provided by `libtermux.so`, packaged for arm64-v8a, armeabi-v7a, x86 and x86_64. The session runs the device's `/system/bin/sh`; no Termux bootstrap or package repository is bundled. The screen is a black full-screen terminal with a two-row key bar (`Esc`/`Tab`/`PgUp`/`Home`/arrows/`End` and `Ctrl`/`Alt`/`PgDn`/arrows/keyboard toggle); the `⋮` menu provides paste, clear and close, and the system Back button also closes the terminal.
+
 ## Source and tests
 
 - `app/src/main/assets/`: HTML/CSS/JS interface, CodeMirror and compile-only API asset.
@@ -121,7 +125,7 @@ Its default build-tools selection is 34.0.0; pass `--tools` for another installe
 - `DexEngine.java` / `JavaEditCompiler.java`: decompile, compile, transactional DEX merge, commit/export.
 - `ApkSigning.java`: temporary signing, mandatory verification, atomic publication.
 - `FileOps.java`, `Axml.java`, `ArchiveTools.java`, `BatchFiles.java`, `CompareTools.java`: file/format engines.
-- `LocalService.java`, `FtpTools.java`: explicitly started network tools.
+- `LocalService.java`, `FtpTools.java`, `NetworkStorage.java`: explicitly started network tools and saved network storage.
 
 ```sh
 python tests/run-core.py

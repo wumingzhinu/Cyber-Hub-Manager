@@ -188,5 +188,20 @@
     "group": "io.github.reandroid",
     "artifact": "ARSCLib",
     "version": "1.4.0"
+  },
+  {
+    "group": "com.github.mwiede",
+    "artifact": "jsch",
+    "version": "0.2.20"
+  },
+  {
+    "group": "eu.agno3.jcifs",
+    "artifact": "jcifs-ng",
+    "version": "2.1.10"
+  },
+  {
+    "group": "org.bouncycastle",
+    "artifact": "bcprov-jdk18on",
+    "version": "1.76"
   }
 ]
