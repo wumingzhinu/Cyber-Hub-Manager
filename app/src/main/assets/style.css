@@ -38,7 +38,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--blue)}
 .fileicon.arsc{background:#a57306}
 .fileicon.zip,.fileicon.apks{background:#927367}
 .fileinfo{min-width:0;flex:1}
-.filename{font-size:14px;line-height:18px;word-break:break-word;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.filename{font-size:14px;line-height:18px;word-break:break-word;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:var(--name-lines,2);overflow:hidden}
 .filemeta{display:block;font-size:10px;line-height:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:clip;margin:0}
 .parent .filename{color:var(--muted)}
 #content{flex:1;min-height:0;overflow:hidden;position:relative}
@@ -424,7 +424,7 @@ body.light #toolbar{border-bottom-color:var(--border)}
 .filename{font-size:14px;line-height:18px;font-weight:400;letter-spacing:-.005em}
 .filemeta{font-size:11px;line-height:15px;color:var(--faint);font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.03em;margin-top:1px}
 .parent .filename{color:var(--muted);font-weight:500}
-#bottom{height:46px;min-height:46px;background:var(--ground);border-top:1px solid var(--border);padding:0 4px}
+#bottom{height:calc(46px + var(--bottom-extra,0px));min-height:calc(46px + var(--bottom-extra,0px));background:var(--ground);border-top:1px solid var(--border);padding:0 4px var(--bottom-extra,0px)}
 #bottom .iconbtn{width:44px;height:44px}
 #bottom .iconbtn:active{background:var(--raised)}
 .bottom-key{font-family:var(--mono);font-size:18px;color:var(--muted);height:44px;border-radius:6px}
@@ -584,7 +584,7 @@ body.light .cm-s-cyber .cm-comment{color:#6a737d}
 body.light .cm-s-cyber .cm-keyword{color:#8250df}
 body.light .cm-s-cyber .cm-string{color:#0a7b45}
 body.light .cm-s-cyber .cm-number,body.light .cm-s-cyber .cm-atom{color:#9a6700}
-#bottom.editorBottom{height:42px;min-height:42px}
+#bottom.editorBottom{height:calc(42px + var(--bottom-extra,0px));min-height:calc(42px + var(--bottom-extra,0px))}
 #bottom.editorBottom .bottom-key{height:40px;font-size:17px}
 
 /* supporting screens */
@@ -716,3 +716,54 @@ h1.title,h1.editorTitle{margin:0}
 .smaliExampleLabel{font-size:10px!important;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px!important;font-family:var(--mono)}
 .smaliExample{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px;margin:0 0 12px;overflow-x:auto;font-family:var(--mono);font-size:11px;line-height:1.6;color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere}
 .smaliHint{font-size:11px!important;color:var(--muted)}
+
+/* Settings page — grouped list in the style of the reference screenshot */
+.settingsLayer{
+  --st-bg:#f7f7f8;--st-text:#111214;--st-sub:#77797e;--st-line:#e4e4e7;--st-blue:#2196f3;
+  --st-bar:#2f3033;--st-bar-text:#fff;--st-track:#e2e2e6;--st-thumb:#fff;--st-press:#00000006;
+  position:fixed;inset:0;z-index:25;display:flex;flex-direction:column;background:var(--st-bg);color:var(--st-text);
+  animation:settingsEnter .18s cubic-bezier(.2,0,0,1);
+}
+body:not(.light) .settingsLayer{
+  --st-bg:#171719;--st-text:#f2f2f3;--st-sub:#9a9ca3;--st-line:#2a2a2e;--st-blue:#64b5f6;
+  --st-bar:#141416;--st-bar-text:#f2f2f3;--st-track:#3a3a3e;--st-thumb:#9a9ca3;--st-press:#ffffff0a;
+}
+@keyframes settingsEnter{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.settingsBar{flex:none;height:64px;display:flex;align-items:center;padding:0 6px;background:var(--st-bar);color:var(--st-bar-text)}
+.settingsBar h1{margin:0 0 0 8px;font-size:21px;line-height:27px;font-weight:500;letter-spacing:.01em}
+.settingsBack{width:48px;height:48px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:50%;color:var(--st-bar-text);padding:0}
+.settingsBack svg{width:26px;height:26px}
+.settingsBack:active{background:#ffffff1f}
+.settingsScroll{flex:1;min-height:0;width:100%;overflow-y:auto;overscroll-behavior:contain;padding-bottom:max(28px,env(safe-area-inset-bottom));scrollbar-width:thin;scrollbar-color:#b9b9bf transparent}
+.settingsSection{padding:26px 0 12px;border-bottom:1px solid var(--st-line)}
+.settingsSection:last-child{border-bottom:0}
+.settingsSection h2{margin:0 0 4px;padding:0 22px;color:var(--st-blue);font-size:19px;line-height:26px;font-weight:700;letter-spacing:.01em}
+.settingsRow{display:flex;align-items:center;gap:20px;width:100%;min-height:56px;padding:14px 22px;text-align:left;color:var(--st-text);background:transparent}
+label.settingsRow{cursor:pointer}
+.settingsRow:active{background:var(--st-press)}
+.settingsStatic{cursor:default}
+.settingsStatic:active{background:transparent}
+.settingsText{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.settingsTitle{font-size:19px;line-height:27px;font-weight:400;color:var(--st-text);overflow-wrap:anywhere}
+.settingsSub{font-size:16px;line-height:23px;font-weight:400;color:var(--st-sub);overflow-wrap:anywhere}
+.settingsSwitch{appearance:none;-webkit-appearance:none;flex:none;width:44px;height:26px;margin:0;border:0;border-radius:999px;background:var(--st-track);position:relative;cursor:pointer;transition:background-color .18s ease}
+.settingsSwitch:after{content:"";display:block;position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:var(--st-thumb);box-shadow:0 1px 3px #00000033;transition:left .18s ease,background-color .18s ease}
+.settingsSwitch:checked{background:#cfe7fb}
+body:not(.light) .settingsSwitch:checked{background:#1d3b57}
+.settingsSwitch:checked:after{left:20px;background:var(--st-blue);box-shadow:0 1px 4px #2196f355}
+.settingsRow:focus-visible,.settingsBack:focus-visible,.settingsSwitch:focus-visible{outline:2px solid var(--st-blue);outline-offset:2px}
+@media(max-width:420px){.settingsSection h2{padding:0 18px}.settingsRow{padding:13px 18px;gap:14px}.settingsTitle{font-size:18px;line-height:26px}.settingsSub{font-size:15px;line-height:21px}}
+@media(min-width:600px){.settingsScroll{max-width:720px;margin:0 auto}}
+
+.settingsDisabled{opacity:.55;cursor:default}
+.settingsDisabled:active{background:transparent}
+body.list-small .file{min-height:34px;padding:3px 10px}
+body.list-small .filename{font-size:13px;line-height:17px}
+body.list-small .fileicon{width:24px;height:24px}
+body.list-small .fileicon svg{width:17px;height:17px}
+body.list-small .filemeta{font-size:9px;line-height:13px}
+body.list-large .file{min-height:54px;padding:7px 10px}
+body.list-large .filename{font-size:16px;line-height:21px}
+body.list-large .fileicon{width:34px;height:34px}
+body.list-large .fileicon svg{width:24px;height:24px}
+body.list-large .filemeta{font-size:11px;line-height:15px}

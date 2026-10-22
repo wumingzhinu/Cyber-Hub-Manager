@@ -117,7 +117,7 @@ public final class DataEngine {
   String id="doc"+(++docCounter);documents.put(id,d);return new JSONObject().put("id",id).put("text",text).put("name",f.getName()).put("path",f.getPath()).put("binaryXml",d.axml!=null);
  }
  JSONObject save(JSONObject a)throws Exception{
-  Doc d=documents.get(a.getString("id"));if(d==null)throw new IOException("文档会话已过期");if(d.file.lastModified()!=d.modified)throw new IOException("文件已在外部被修改；保存前请重新加载");String text=a.getString("text");byte[] bytes=d.axml==null?text.getBytes(StandardCharsets.UTF_8):d.axml.encode(text);FileOps.writeAtomic(d.file,bytes,true);d.modified=d.file.lastModified();File output=d.file;
+  Doc d=documents.get(a.getString("id"));if(d==null)throw new IOException("文档会话已过期");if(d.file.lastModified()!=d.modified)throw new IOException("文件已在外部被修改；保存前请重新加载");String text=a.getString("text");byte[] bytes=d.axml==null?text.getBytes(StandardCharsets.UTF_8):d.axml.encode(text);FileOps.writeAtomic(d.file,bytes,a.optBoolean("backup",true));d.modified=d.file.lastModified();File output=d.file;
   if(!d.archive.isEmpty()){
    Map<String,byte[]>edits=archiveEdits.computeIfAbsent(d.archive,k->new HashMap<>());edits.put(d.entry,bytes);output=archiveOutput(d.archive);
    FileOps.rewriteZip(new File(d.archive),output,edits);
