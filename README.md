@@ -31,6 +31,24 @@ Merged APKs cannot update an installed app signed with a different developer key
 - Tapping a DEX file opens the DEX tool menu: **Dex 编辑器 Plus**, repair, DEX properties, Smali export, JAR export, translation mode and string replacement. JAR export first extracts the selected DEX files from an APK into a local `*_dex` folder, then emits a `.class` JAR that JD-GUI can inspect. Repair and string edits preserve the original DEX version/API level.
 - Merging `classes*.dex` moved out of the single-file menu: select two or more DEX files, long-press to open the file action sheet, and pick **合并 DEX** next to **分享**. The entry only appears when every selected file is a DEX, and only the selected files are merged.
 
+## Machine translation
+
+**Drawer → Tools → Translation service** picks the provider, target language and credentials. Requests go out from the device; keys are kept in the app's private storage and never leave it except to the chosen provider.
+
+| Provider | Credentials | Notes |
+| --- | --- | --- |
+| Tencent Cloud TMT | SecretId, SecretKey, project ID, optional region | TC3-HMAC-SHA256 signed `TextTranslate` call against `tmt.tencentcloudapi.com`. |
+| Baidu Translate | AppID, App Key | `api/trans/vip/translate` with the salted MD5 signature. |
+| Microsoft Translator | subscription key, optional resource region | `api.cognitive.microsofttranslator.com/translate` (API 3.0). |
+| AI model | base URL, API key, model, custom prompt | OpenAI-compatible `/chat/completions`. The prompt may use `{lang}` (target language) and `{text}` (source). |
+
+- **Translate** appears in the DEX string dialog and in the ARSC translation dialog; it fills the target field so the result can be edited before it is applied.
+- **Translate all** in the DEX *Strings* tab and in the ARSC translation mode translates the visible strings, writes them into the project or the target language configuration, and keeps the normal save flow (DEX: save project; ARSC: save resource table).
+- The source language is detected automatically. The target language follows the settings page, or the ARSC configuration qualifier (`en-rUS` → English).
+- Each provider uses its own language codes; the shared list covers 19 languages including Simplified and Traditional Chinese.
+
+Translation quality depends on the provider. Machine output still needs review, especially for product names, placeholders (`%1$s`) and format specifiers.
+
 ## Edit → save → sign
 
 1. Grant file access, tap an APK, choose **View**, then open `classes.dex` and select the DEX files needed by the project.

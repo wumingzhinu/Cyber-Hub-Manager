@@ -324,7 +324,7 @@ async function dexBranch(container,prefix){
 }
 async function renderDex(){
  state.screen='dex';if(!state.dex.expanded)state.dex.expanded=new Set();
- header('DEX 编辑器','临时工程',[{icon:'build',label:'保存工程',run:closeDex},{icon:'more',label:'DEX 菜单',run:()=>menu([{icon:'save',label:'保存工程',run:saveProject},{icon:'check',label:'保存并签名 APK',run:saveAndSignProject},{icon:'export',label:'导出 DEX / APK',run:exportDex},{icon:'settings',label:'设置',run:preferences},{icon:'close',label:'关闭工程',run:closeDex}])}]);
+ header('DEX 编辑器','临时工程',[{icon:'build',label:'保存工程',run:closeDex},...(state.dex.tab==='strings'?[{icon:'text',label:'翻译全部',run:dexTranslateAll}]:[]),{icon:'more',label:'DEX 菜单',run:()=>menu([{icon:'save',label:'保存工程',run:saveProject},{icon:'check',label:'保存并签名 APK',run:saveAndSignProject},{icon:'export',label:'导出 DEX / APK',run:exportDex},{icon:'settings',label:'设置',run:preferences},{icon:'close',label:'关闭工程',run:closeDex}])}]);
  const tabLabels={explorer:'浏览',history:'历史',search:'搜索',strings:'字符串'};
   $('#subbar').innerHTML='<div class="tabs" role="tablist">'+['explorer','history','search','strings'].map(t=>`<button role="tab" aria-selected="${state.dex.tab===t}" class="tab ${state.dex.tab===t?'active':''}" data-tab="${t}">${tabLabels[t]}</button>`).join('')+'</div>';
  document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>act(async()=>{const order=['explorer','history','search','strings'],direction=order.indexOf(b.dataset.tab)>order.indexOf(state.dex.tab)?1:-1;state.dex.tab=b.dataset.tab;await renderDex();animateContent($('.tree'),direction);}));$('#bottom').replaceChildren();$('#content').classList.remove('javaEditor');
@@ -367,8 +367,26 @@ async function dexToJar(){
  dialog('JAR 已生成','<p class="break">'+esc(r.path)+'</p><p>'+r.classes+' 个 .class，可用 JD-GUI 等工具查看。</p>'+(r.dexDir?'<p class="break">APK 内的 DEX 已先解压到：'+esc(r.dexDir)+'</p>':'')+'<p class="bundleHint">先在本地目录解压 DEX，再转换；不会在 APK 内直接生成 JAR。</p>',[['关闭',closeModal],['打开文件夹',async()=>{closeModal();await navigate(state.active,{path:folder,archive:'',entry:''});}]]);
 }
 async function dexTranslation(){state.dex.tab='strings';state.dex.query='';toast('点击字符串即可翻译并写回 DEX');await renderDex();}
+async function dexTranslateAll(){
+ const rows=await rpc('dexStrings',{query:state.dex.query});
+ const list=(rows||[]).filter(x=>typeof x==='string'&&x.trim());
+ if(!list.length)return toast('没有可翻译的字符串。');
+ if(!await confirmBox('批量翻译？',`将翻译 ${list.length} 条字符串并写入当前工程，保存工程后生效。`,'翻译'))return;
+ const map={};let done=0,fail=0;
+ for(const original of list){
+  try{const text=await translateText(original);if(!text)throw Error('空');map[original]=text;done++;}
+  catch(error){fail++;}
+ }
+ if(Object.keys(map).length){await rpc('dexReplaceStrings',{replacements:map});state.dex.modified=true;}
+ await renderDex();
+ toast('已翻译 '+done+' 条'+(fail?'，失败 '+fail+' 条':''));
+}
 function dexEditString(original){
  const d=dialog('翻译字符串','<label>原始字符串</label><pre class="diffText">'+esc(original)+'</pre><label>修改后的字符串</label><textarea id="dexStringValue" rows="6" spellcheck="false">'+esc(original)+'</textarea><p class="bundleHint">将替换所有 DEX 中相同的字符串字面量；保存工程后写入原文件。</p>',[['取消',closeModal],['应用',async()=>{const now=d.querySelector('#dexStringValue').value;if(now===original){closeModal();return;}const r=await rpc('dexReplaceStrings',{replacements:{[original]:now}});state.dex.modified=true;closeModal();toast('已替换 '+r.replaced+' 处，涉及 '+r.classes+' 个方法');await renderDex();}]]);
+ const actions=d.querySelector('.actions'),btn=document.createElement('button');
+ btn.textContent='翻译';
+ btn.onclick=()=>act(async()=>{const input=$('#dexStringValue');if(!input)return;btn.disabled=true;btn.textContent='翻译中…';try{const r=await translateText(original);if(r)input.value=r;else toast('翻译结果为空');}catch(e){alertBox('无法完成',e.message);}finally{btn.disabled=false;btn.textContent='翻译';}});
+ actions.insertBefore(btn,actions.firstChild);
  setTimeout(()=>{const t=d.querySelector('textarea');if(t&&t.isConnected){t.focus();t.setSelectionRange(0,0);}},30);
 }
 function dexReplaceDialog(){
@@ -847,7 +865,7 @@ async function arscTranslateRender(){
   const a=state.arscTranslate;if(!a)return;
   const r=await rpc('arscTranslate',{session:a.session,config:a.config,offset:a.offset,limit:a.limit,query:a.query});
   a.rows=r.rows||[];a.total=r.total||0;a.configs=r.configs||a.configs;
-  header('翻译模式',a.name,[{icon:'back',label:'退出翻译',run:arscTranslateBack},{icon:'save',label:'保存资源表',run:arscTranslateSave},{icon:'more',label:'更多',run:()=>menu([{icon:'refresh',label:'重新加载',run:()=>act(arscTranslateRender)},{icon:'close',label:'退出',run:arscTranslateBack}])}],true);
+  header('翻译模式',a.name,[{icon:'back',label:'退出翻译',run:arscTranslateBack},{icon:'text',label:'翻译全部',run:arscTranslateAll},{icon:'save',label:'保存资源表',run:arscTranslateSave},{icon:'more',label:'更多',run:()=>menu([{icon:'refresh',label:'重新加载',run:()=>act(arscTranslateRender)},{icon:'close',label:'退出',run:arscTranslateBack}])}],true);
   $('#subbar').innerHTML='';$('#bottom').innerHTML='';
   $('#content').innerHTML=`<div class="toolpage">
     <div class="sectionLabel">目标语言</div>
@@ -871,11 +889,39 @@ async function arscTranslateRender(){
 async function arscTranslateEdit(e){
   const a=state.arscTranslate;
   const body=`<p class="break">${esc(e.name||'')} · ${arscHex(e.id)}</p><label>源文本</label><div class="arscSourceText">${esc(e.source||'')}</div><label>译文（${esc(a.config||'默认')}）</label><textarea id="arscTransText" class="toolinput" rows="4">${esc(e.target||'')}</textarea>`;
-  dialog('编辑翻译',body,[['取消',closeModal],['保存',async()=>{
+  const d=dialog('编辑翻译',body,[['取消',closeModal],['保存',async()=>{
     const v=$('#arscTransText').value;
     await rpc('arscEdit',{session:a.session,op:'setValue',id:e.id,config:a.config,valueIndex:-1,type:3,value:v});
     a.dirty=true;arscTouch(a);closeModal();toast('译文已更新');await arscTranslateRender();
   }]]);
+ const actions=d.querySelector('.actions'),btn=document.createElement('button');
+ btn.textContent='翻译';
+ btn.onclick=()=>act(async()=>{const input=$('#arscTransText');if(!input)return;btn.disabled=true;btn.textContent='翻译中…';try{const r=await translateText(e.source||'',arscLanguageKey(a.config));if(r)input.value=r;else toast('翻译结果为空');}catch(error){alertBox('无法完成',error.message);}finally{btn.disabled=false;btn.textContent='翻译';}});
+ actions.insertBefore(btn,actions.firstChild);
+}
+async function arscLanguageKey(qualifier){
+ const raw=String(qualifier||''),base=raw.split('-')[0].toLowerCase();
+ const known=(translateLanguages||[]).map(l=>l.key);
+ if(known.includes(base))return base;
+ if(base==='zh'&&/hant|tw|hk|mo/.test(raw.toLowerCase()))return 'zhTW';
+ return base||'en';
+}
+async function arscTranslateAll(){
+ const a=state.arscTranslate;if(!a)return;
+ const rows=(a.rows||[]).filter(r=>r.source&&!r.hasTarget);
+ if(!rows.length)return toast('没有需要翻译的字符串。');
+ if(!await confirmBox('批量翻译？',`将翻译 ${rows.length} 条字符串并写入 ${a.config||'默认'} 配置。`,'翻译'))return;
+ let done=0,fail=0;
+ for(const row of rows){
+  try{
+   const text=await translateText(row.source,arscLanguageKey(a.config));
+   if(!text)throw Error('返回为空');
+   await rpc('arscEdit',{session:a.session,op:'setValue',id:row.id,config:a.config,valueIndex:-1,type:3,value:text});
+   done++;
+  }catch(error){fail++;}
+ }
+ a.dirty=true;arscTouch(a);await arscTranslateRender();
+ toast('已翻译 '+done+' 条'+(fail?'，失败 '+fail+' 条':''));
 }
 async function arscTranslateNew(){
   const a=state.arscTranslate;
@@ -1244,7 +1290,7 @@ async function openDrawer(drag=false){closeMenu();const layer=$('#drawerLayer');
  row('#storageRows','phone','根目录',()=>navigate(state.active,{path:'/',archive:'',entry:''}));
  const storageRow=row('#storageRows','sd','存储目录',()=>navigate(state.active,{path:state.info.home,archive:'',entry:''}),'<div class="small">正在读取存储…</div>');
  row('#storageRows','folder','应用工作区',()=>navigate(state.active,{path:state.info.workspace,archive:'',entry:''}));row('#networkRows','network','FTP / FTPS 连接',ftpPage);row('#backgroundRows','history',`${pending.size} 个当前操作`,backgroundPage);
- for(const [ic,label,fn]of [['trash','回收站',recyclePage],['plugin','插件管理器',pluginPage],['remote','远程管理',()=>servicePage('remote')],['layers','已安装应用',appsPage],['text','文本编辑器',newText],['terminal','终端模拟器',terminalPage],['search','屏幕取色',colorPickerTool],['switch','Root / Shizuku 授权',elevatedTool],['network','MCP 服务',()=>servicePage('mcp')],['history','活动记录',logPage],['more','更多工具',moreTools]])row('#toolRows',ic,label,fn);
+ for(const [ic,label,fn]of [['trash','回收站',recyclePage],['plugin','插件管理器',pluginPage],['remote','远程管理',()=>servicePage('remote')],['layers','已安装应用',appsPage],['text','翻译服务',translatePage],['edit','文本编辑器',newText],['terminal','终端模拟器',terminalPage],['search','屏幕取色',colorPickerTool],['switch','Root / Shizuku 授权',elevatedTool],['network','MCP 服务',()=>servicePage('mcp')],['history','活动记录',logPage],['more','更多工具',moreTools]])row('#toolRows',ic,label,fn);
  try{const disk=await rpc('disk',{path:state.info.home});if(!drawer.isConnected)return;storageRow.querySelector('.storage').innerHTML='存储目录<div class="meter"><span style="width:'+ (disk.total?(1-disk.free/disk.total)*100:0)+'%"></span></div><div class="small">'+size(disk.total-disk.free)+' 已用，'+size(disk.free)+' 可用</div>';}catch(error){if(drawer.isConnected)storageRow.querySelector('.small').textContent='无法获取存储信息';}
 }
 function drawerMenu(){menu([{icon:'copy',label:'书签',run:()=>{closeDrawer();bookmarks();}},{icon:'refresh',label:'刷新',run:async()=>{closeDrawer();if(state.screen==='files')await refresh();}},{icon:'settings',label:'设置',run:()=>{closeDrawer();preferences();}},{icon:'info',label:'关于',run:()=>{closeDrawer();about();}}]);}
@@ -1322,6 +1368,95 @@ async function elevatedTool(){
     {icon:'info',label:'说明',run:()=>alertBox('授权说明','Root 通过 su 授权弹窗申请；Shizuku 需先安装并启动 Shizuku 应用。\n\n授权后浏览根目录或受限目录（如 /data）时，Root 经 su、Shizuku 经 shell 特权实际枚举内容，可看到并进入更多文件夹，与 MT 管理器一致；未授权时只显示内置标准清单。\n\n撤销授权请在 Magisk / Shizuku 中操作。')}
   ]);
 }
+const TRANSLATE_PROVIDERS=[['tencent','腾讯云翻译'],['baidu','百度翻译'],['microsoft','微软翻译'],['ai','AI 大模型']];
+let translateConfig=null,translateLanguages=[];
+async function loadTranslateConfig(){
+ const r=await rpc('translateConfig',{op:'get'});
+ translateConfig=r.config||{};translateLanguages=r.languages||[];
+ return translateConfig;
+}
+function translateProviderName(key){const row=TRANSLATE_PROVIDERS.find(p=>p[0]===key);return row?row[1]:key;}
+function translateTargetName(key){const row=(translateLanguages||[]).find(l=>l.key===key);return row?row.name:key;}
+async function translateText(text,to){
+ if(!text||!text.trim())return '';
+ if(!translateLanguages.length)await loadTranslateConfig();
+ const r=await rpc('translate',{text:text,to:to||(translateConfig&&translateConfig.target)||''});
+ return r.text||'';
+}
+function translateFields(provider){
+ if(provider==='tencent')return [
+  ['tencentSecretId','SecretId','text','腾讯云访问密钥 ID'],
+  ['tencentSecretKey','SecretKey','password','腾讯云访问密钥'],
+  ['tencentProjectId','项目 ID','text','TMT 项目 ID（纯数字）'],
+  ['tencentRegion','地域','text','可选，例如 ap-guangzhou']];
+ if(provider==='baidu')return [
+  ['baiduAppId','AppID','text','百度翻译应用 ID'],
+  ['baiduAppKey','App Key','password','百度翻译密钥']];
+ if(provider==='microsoft')return [
+  ['microsoftKey','订阅密钥','password','Azure Translator 密钥'],
+  ['microsoftRegion','资源区域','text','可选，例如 eastasia']];
+ return [
+  ['aiBaseUrl','接口地址','text','例如 https://api.openai.com/v1'],
+  ['aiApiKey','API Key','password','模型服务密钥'],
+  ['aiModel','模型','text','例如 gpt-4o-mini'],
+  ['aiPrompt','提示词','textarea','{lang} 会被替换为目标语言']];
+}
+async function translatePage(){
+ const body=toolPage('翻译服务','腾讯云 / 百度 / 微软 / AI 大模型');
+ await loadTranslateConfig();
+ const c=translateConfig||{},provider=c.provider||'tencent';
+ const langs=(translateLanguages||[]);
+ const render=()=>{
+  const p=(translateConfig&&translateConfig.provider)||'tencent';
+  const fields=translateFields(p).map(([key,label,type,hint])=>{
+   const value=(translateConfig&&translateConfig[key])||'';
+   if(type==='textarea')return `<label>${esc(label)}</label><textarea class="toolinput" id="tf_${key}" rows="3" spellcheck="false">${esc(value)}</textarea><p class="muted">${esc(hint)}</p>`;
+   return `<label>${esc(label)}</label><input class="toolinput" id="tf_${key}" type="${type==='password'?'password':'text'}" value="${esc(value)}" autocomplete="off" spellcheck="false"><p class="muted">${esc(hint)}</p>`;
+  }).join('');
+  body.innerHTML=`<p>翻译请求从本机直接发出，密钥保存在应用私有存储中。</p>
+   <label>翻译服务</label>
+   <div class="searchline"><select id="tfProvider" style="flex:1;background:transparent;color:var(--text);border:0;padding:10px 0">${TRANSLATE_PROVIDERS.map(x=>`<option value="${x[0]}" ${x[0]===p?'selected':''}>${esc(x[1])}</option>`).join('')}</select></div>
+   <label>目标语言</label>
+   <div class="searchline"><select id="tfTarget" style="flex:1;background:transparent;color:var(--text);border:0;padding:10px 0">${langs.map(l=>`<option value="${esc(l.key)}" ${l.key===(translateConfig.target||'en')?'selected':''}>${esc(l.name)}</option>`).join('')}</select></div>
+   ${fields}
+   <button class="primary" id="tfSave">保存</button>
+   <button class="primary" id="tfTest">测试翻译</button>`;
+  body.querySelector('#tfProvider').onchange=async e=>{translateConfig.provider=e.target.value;render();};
+  body.querySelector('#tfSave').onclick=()=>act(async()=>{
+   const payload={op:'set',provider:body.querySelector('#tfProvider').value,target:body.querySelector('#tfTarget').value};
+   for(const [key]of translateFields(payload.provider)){const el=body.querySelector('#tf_'+key);if(el)payload[key]=el.value;}
+   const saved=await rpc('translateConfig',payload);
+   translateConfig=saved.config||saved;render();toast('翻译服务已保存');
+  });
+  body.querySelector('#tfTest').onclick=()=>act(async()=>{
+   const provider=body.querySelector('#tfProvider').value,target=body.querySelector('#tfTarget').value;
+   const payload={op:'set',provider:provider,target:target};
+   for(const [key]of translateFields(provider)){const el=body.querySelector('#tf_'+key);if(el)payload[key]=el.value;}
+   await rpc('translateConfig',payload);
+   await loadTranslateConfig();
+   const result=await translateText('Hello world','auto');
+   alertBox('测试翻译',result||'（返回为空）');
+  });
+ };
+ render();
+}
+function translateButton(onResult){
+ const b=document.createElement('button');
+ b.textContent='翻译';
+ b.onclick=()=>act(async()=>{
+  const input=b.dataset.input?$(b.dataset.input):null;
+  const text=input&&input.value!==undefined?input.value:(b.dataset.text||'');
+  if(!text||!text.trim())return toast('没有可翻译的文本');
+  b.disabled=true;b.textContent='翻译中…';
+  try{
+   const result=await translateText(text,b.dataset.to||'');
+   if(result&&onResult)onResult(result);
+   else toast(result||'（返回为空）');
+  }finally{b.disabled=false;b.textContent='翻译';}
+ });
+ return b;
+}
+
 function moreTools(){options('更多工具',[{icon:'apk',label:'检查本应用的 APK',run:()=>showApk({path:state.info.ownApk})},{icon:'settings',label:'设置',run:preferences},{icon:'phone',label:'存储权限',run:()=>rpc('permission')},{icon:'info',label:'用户指南',run:guide},{icon:'info',label:'关于赛博中枢管家',run:about}]);}
 function guide(){alertBox('用户指南','文件：轻点打开；长按打开文件操作菜单。使用 + 新建或粘贴。\n\nAPK → 查看 → classes.dex。打开一个类；编辑 Smali 或使用 查看 Java。Java 可直接编辑。保存 会将代码编译进临时 DEX 工程。返回 同样会编译未保存的代码；出现错误时编辑器保持打开。\n\n编辑器/DEX 菜单 → 保存并签名 APK 会写回源文件，保留备份，并校验 V1/V2/V3 后再提供 安装。保存工程 只写入未签名的更改。导出 生成一份独立副本。\n\n并非每个反编译出的 Java 文件都是有效源码。请修正编译错误或改用 Smali 编辑。包名/类名请勿修改。\n\n捏合可调整代码大小。文字大小 / 缩放 提供按钮、滑块和 重置。查找替换 直接编辑当前缓冲区，并支持 撤销。\n\n签名使用公开的开发证书。Android 权限与安装规则依然适用。');}
 function about(){closeDrawer();options('赛博中枢管家 · 0.1.6',[{icon:'phone',label:'用户信息（本地）',run:async()=>{const name=await ask('本地用户名',storage.get('cyber-name')||'赛博中枢');if(name!==null){storage.set('cyber-name',name);toast('资料已更新');}}},{icon:'info',label:'用户指南',run:guide},{icon:'history',label:'版本说明',run:()=>alertBox('版本 0.1.6','Root / Shizuku 授权：侧边栏「工具」新增授权入口，支持 su 授权弹窗申请与 Shizuku 授权状态管理。授权后浏览根目录或受限目录（如 /data）时，Root 经 su、Shizuku 经 shell 特权实际枚举内容，可看到并进入更多文件夹——与 MT 管理器一致。\n\n根目录修复：Android 10+ 禁止普通应用枚举根目录（SELinux 拒绝 readdir /），导致「无法读取此文件夹」。现回退到内置标准目录清单逐项探测存在性；未授权时 /data 等无权限项仍可见，能否进入取决于系统权限。\n\n屏幕取色：侧边栏「工具」新增屏幕取色——十字准星 + 实时放大镜，对准像素后轻点放大镜上的色值或坐标即复制；支持大小/范围/刷新速度/网格线设置（需授权显示在其他应用上层、通知与屏幕录制）。\n\nAPKS 转换：基座与配置分包合并为已签名、已校验的 APK。bundletool 变体分别选择；独立 APK 保留有效签名。APKS 本身保持不变。Play 资源包与不支持的分发类型会给出清晰的错误提示。\n\n性能与 Java 编辑更新：合成器捏合预览；输入时不再全缓冲区扫描；可复用的菜单动画；独立缩略图队列；可编辑 Java（含 ECJ/DEX 编译与诊断）；可撤销的查找替换；带备份的已校验保存并签名。此处不测量设备帧率。\n\n更早的交互更新：侧边栏溢出与边缘滑动；动画菜单、对话框、行反馈与包展开；编辑器侧选项；Java、Smali、XML 和文本中的捏合缩放（大小分别记忆）。打开侧边栏不会保存未保存的代码。\n\n此前的视频更新：成员/字符串导航；用法、子类与重写搜索；成员/代码/片段复制；行与寄存器工具；带 .bak 备份的保存并退出；还原替换；多选、对比与书签；9 种归档格式（含密码/分卷控制）。保留启动恢复与紧凑布局。\n\n功能：双窗格文件管理器；APK 浏览器、清单编辑器与签名；多 DEX、Smali 与 Java 编辑器；本地文件工具、终端、屏幕取色、Root/Shizuku 授权、FTP/FTPS 以及只读共享/MCP。\n\n为赛博中枢管家独立构建。不包含任何原应用代码。')},{icon:'layers',label:'开源致谢',run:()=>alertBox('开源致谢','JADX (Apache-2.0)\nsmali / baksmali / dexlib2 (BSD-3-Clause)\nCodeMirror 5 (MIT)\nPublic Sans (OFL-1.1) · U.S. Web Design System\nScreenColorPicker (MIT) · Ratul Hasan（屏幕取色组件）\nShizuku API (MIT) · Rikka（Root/Shizuku 授权组件）\nAndroid apksig (Apache-2.0)\nARSCLib 1.4.0 (Apache-2.0)\nECJ 4.6.1 (EPL-1.0) · AOSP dx (Apache-2.0) · ASM (BSD-3-Clause)\nApache Commons Net (Apache-2.0)\nGuava、Gson、Protobuf、ANTLR 与 SLF4J\n\n依赖版本与许可证说明包含在源码包中。')}]);}

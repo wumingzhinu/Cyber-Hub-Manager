@@ -5,9 +5,9 @@ import org.json.*;import java.io.*;import java.nio.charset.StandardCharsets;impo
 import com.android.apksig.*;
 
 public final class DataEngine {
- final MainActivity activity;final File workspace,cache,trash;final DexEngine dex;final ArscEngine arsc;final Map<String,Doc> documents=new HashMap<>();final Map<String,Map<String,byte[]>> archiveEdits=new HashMap<>();final Map<String,File> archiveOutputs=new HashMap<>();final LocalService services;private long docCounter=0;
+ final MainActivity activity;final File workspace,cache,trash;final DexEngine dex;final ArscEngine arsc;final Map<String,Doc> documents=new HashMap<>();final Map<String,Map<String,byte[]>> archiveEdits=new HashMap<>();final Map<String,File> archiveOutputs=new HashMap<>();final LocalService services;final Translate translate;private long docCounter=0;
  static class Doc {File file;String archive,entry;Axml axml;long modified;}
- DataEngine(MainActivity a){activity=a;workspace=new File(a.getFilesDir(),"工作区");workspace.mkdirs();cache=new File(a.getCacheDir(),"entries");cache.mkdirs();trash=new File(a.getFilesDir(),"recycle");trash.mkdirs();dex=new DexEngine(new File(a.getCacheDir(),"dex"));arsc=new ArscEngine(this);services=new LocalService(workspace);
+ DataEngine(MainActivity a){activity=a;workspace=new File(a.getFilesDir(),"工作区");workspace.mkdirs();cache=new File(a.getCacheDir(),"entries");cache.mkdirs();trash=new File(a.getFilesDir(),"recycle");trash.mkdirs();dex=new DexEngine(new File(a.getCacheDir(),"dex"));arsc=new ArscEngine(this);services=new LocalService(workspace);translate=new Translate(a);
   File welcome=new File(workspace,"欢迎.txt");if(!welcome.exists())try{FileOps.writeAtomic(welcome,("赛博中枢管家 0.1\n\n点「授予文件访问权限」即可浏览手机文件。\n轻点文件打开；长按进行复制、移动、重命名或移入回收站。\nAPK：查看内容、编辑清单、打开 DEX、查看 Java/Smali。\n编辑会创建备份或生成独立的已编辑归档。\nJava 和 Smali 均可编辑。保存会编译更改；「保存并签名 APK」会校验签名并保留备份。\n\n网络服务仅在本应用进程运行时可用。\n").getBytes(StandardCharsets.UTF_8),false);}catch(Exception ignored){}
  }
  boolean permission(){return Build.VERSION.SDK_INT>=30?Environment.isExternalStorageManager():activity.checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)==PackageManager.PERMISSION_GRANTED;}
@@ -34,6 +34,8 @@ public final class DataEngine {
    case "arscSave":{JSONObject r=arsc.save(a.getString("session"));record("已保存资源表 "+r.optString("path"));return r;}
    case "arscClose":arsc.close(a.getString("session"));return true;
    case "resolve":return resolve(a).getPath();
+   case "translateConfig":{String op=a.optString("op","get");if(op.equals("set")){translate.saveConfig(a);return translate.config();}return new JSONObject().put("config",translate.config()).put("languages",translate.languages());}
+   case "translate":return translate.translate(a);
    case "create":{File f=FileOps.child(new File(a.getString("path")),a.getString("name"));if(f.exists())throw new IOException("名称已存在");if(a.optBoolean("folder")){if(!f.mkdir())throw new IOException("无法创建文件夹");}else FileOps.writeAtomic(f,new byte[0],false);record("已创建 "+f);return f.getPath();}
    case "batchRename":{Object r=BatchFiles.rename(a.getJSONArray("files"));record("已重命名所选文件");return r;}
    case "batchTransfer":{JSONArray fs=a.getJSONArray("files");List<File>sources=new ArrayList<>();List<String>names=new ArrayList<>();boolean move=a.optBoolean("move");for(int i=0;i<fs.length();i++){JSONObject f=fs.getJSONObject(i);if(move&&!f.optString("archive").isEmpty())throw new IOException("移动前请先解压归档条目");sources.add(resolve(f));names.add(f.getString("name"));}Object r=BatchFiles.transfer(sources,names,new File(a.getString("destination")),move);record((move?"已移动 ":"已复制 ")+sources.size()+" 个所选文件");return r;}
