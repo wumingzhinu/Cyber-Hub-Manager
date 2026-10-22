@@ -1,8 +1,8 @@
-# Cyber Hub Manager — 0.1.6 development build
+# Cyber Hub Manager — 0.1.7 development build
 
 Android file manager and APK/DEX editor using a local WebView interface and native Java tools. Core tools work offline. Android 8.0 / API 26 or newer is required.
 
-Install `Cyber-Hub-Manager-0.1.6.apk` as an **Update** over the existing app. Package `com.cyberhub.manager`, development signer and local asset origin are unchanged; versionCode is 7. Do not uninstall if you want to keep the private Workspace.
+Install `Cyber-Hub-Manager-0.1.7.apk` as an **Update** over the existing app. Package `com.cyberhub.manager`, development signer and local asset origin are unchanged; versionCode is 8. Do not uninstall if you want to keep the private Workspace.
 
 ## APKS → APK conversion
 
@@ -110,7 +110,7 @@ All runtime JARs, four Zstandard Android ABIs and local UI assets are included. 
 python tools/build.py --sdk /absolute/path/to/android-sdk
 ```
 
-Its default build-tools selection is 34.0.0; pass `--tools` for another installed build-tools directory. Output: `dist/Cyber-Hub-Manager-0.1.6.apk`. It compiles with desktop ECJ, converts with D8, aligns, signs, verifies signatures and checks packaged assets before publishing.
+Its default build-tools selection is 34.0.0; pass `--tools` for another installed build-tools directory. Output: `dist/Cyber-Hub-Manager-0.1.7.apk`. It compiles with desktop ECJ, converts with D8, aligns, signs, verifies signatures and checks packaged assets before publishing.
 
 `python tools/dependencies.py` recreates pinned runtime JARs. `python tools/compiler-api.py /path/to/platforms/android-34/android.jar` recreates the compile-only classpath asset. Dependency/source/license information is in `THIRD-PARTY-NOTICES.txt`, `DEPENDENCIES.json` and `licenses/`.
 
