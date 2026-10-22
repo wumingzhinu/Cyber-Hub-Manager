@@ -498,9 +498,11 @@ body.light .dialog{box-shadow:0 18px 44px #0003}
 .dexPickRow{display:flex!important;align-items:center;min-height:48px;margin:0!important;padding:0 8px;border-radius:6px;font-size:14px!important;line-height:20px;color:var(--text)!important;cursor:pointer}
 .dexPickRow:active{background:var(--surface)}
 .dexPickRow input[type=checkbox]{margin:0 12px 0 0!important}
+.dexPickRow input[type=radio]{width:18px!important;height:18px!important;min-width:18px!important;margin:0 12px 0 0!important;padding:0!important;border:0!important;background:transparent!important;flex:none;accent-color:var(--accent)}
 .dexPickIcon{width:24px;height:24px;flex:none;display:flex;align-items:center;justify-content:center;margin-right:10px;color:var(--muted)}
 .dexPickIcon svg{width:20px;height:20px}
-.dexPickName{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:13px;letter-spacing:-.03em}
+.dexPickName{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:13px;letter-spacing:-.03em}
+.dexPickDesc{flex:none;max-width:48%;padding-left:10px;color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .multidexDialog .actions{flex-direction:row!important;align-items:center!important;margin-top:16px;gap:4px}
 .multidexDialog .actions button{height:38px!important;min-width:0!important;padding:0 16px!important;text-align:center!important}
 

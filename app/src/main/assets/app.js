@@ -391,20 +391,22 @@ function arscTypeLabel(t){const x=ARSC_TYPES.find(a=>a[2]===t||(t>=28&&t<=31&&a[
 function arscChoice(t){let i=ARSC_TYPES.findIndex(a=>a[2]===t);if(i<0&&t>=28&&t<=31)i=3;return i<0?0:i;}
 function arscOptions(selected){return ARSC_TYPES.map((a,i)=>`<option value="${i}" ${i===selected?'selected':''}>${a[1]}</option>`).join('');}
 function arscOpenWith(args,name){
-  const modes=[['plus','Arsc编辑器++'],['editor','Arsc编辑器'],['translate','翻译模式'],['query','资源查询']];
-  const body='<div class="arscChooser">'+modes.map((m,i)=>`<label><input type="radio" name="arscOpenMode" value="${m[0]}" ${i===0?'checked':''}><span>${m[1]}</span></label>`).join('')+'</div>';
-  dialog('打开方式…',body,[['取消',closeModal],['打开',()=>{
-    const mode=document.querySelector('input[name="arscOpenMode"]:checked').value;
+  const modes=[['plus','Arsc编辑器++','浏览 · 最近 · 搜索 · 常量','layers'],['editor','Arsc编辑器','经典资源浏览与编辑','arsc'],['translate','翻译模式','按语言对照与替换','text'],['query','资源查询','按名称 / ID / 值查找','search']];
+  const body='<p class="dexPickHint">选择要打开的资源表工具。</p><div class="dexPickList">'+modes.map((m,i)=>`<label class="dexPickRow"><input type="radio" name="arscOpenMode" value="${m[0]}" ${i===0?'checked':''}><span class="dexPickIcon">${icon(m[3])}</span><span class="dexPickName">${esc(m[1])}</span><span class="dexPickDesc">${esc(m[2])}</span></label>`).join('')+'</div>';
+  const d=dialog('资源表工程',body,[['取消',closeModal],['打开',()=>{
+    const picked=d.querySelector('input[name="arscOpenMode"]:checked');
+    const mode=picked?picked.value:'plus';
     closeModal();
     if(mode==='query')return showArscQuery(args,name);
     if(mode==='translate')return showArscTranslate(args,name);
     if(mode==='plus')return showArsc(args,name,'plus');
     return showArsc(args,name,'editor');
   }]]);
+  d.classList.add('multidexDialog');
 }
 async function showArsc(args,name,mode){
   const s=await rpc('arscOpen',Object.assign({},args,{name:name||''}));
-  state.arsc={session:s.session,name:s.name||name||'resources.arsc',size:s.size||0,archive:s.archive||'',entry:s.entry||'',packages:s.packages||[],stringCount:s.stringCount||0,level:'root',pkgId:-1,typeId:-1,pkgName:'',typeName:'',config:'',configLabel:'',offset:0,limit:200,query:'',rows:[],entryData:null,dirty:false,mode:mode||'editor',tab:'explore',treeOpen:{},history:[],search:{query:'',type:'value',caseSensitive:false,regex:false,path:'/'},poolFilter:''};
+  state.arsc={session:s.session,name:s.name||name||'resources.arsc',size:s.size||0,archive:s.archive||'',entry:s.entry||'',packages:s.packages||[],stringCount:s.stringCount||0,level:'root',pkgId:-1,typeId:-1,pkgName:'',typeName:'',config:'',configLabel:'',offset:0,limit:200,query:'',rows:[],entryData:null,dirty:false,mode:mode||'editor',tab:'explore',treeOpen:{},treeConfigs:{},treeEntries:{},history:[],search:{query:'',type:'value',caseSensitive:false,regex:false,path:'/'},poolFilter:''};
   state.previous=state.screen==='tool'?state.previous:'files';state.screen='tool';
   await arscRender();
 }
@@ -412,6 +414,7 @@ function arscHeader(){
   const a=state.arsc;if(!a)return;
   const plus=a.mode==='plus';
   let title=plus?'Arsc编辑器++':'Arsc编辑器',sub=a.name;
+  if(plus&&a.level==='entry'&&a.entryData){title=a.entryData.name||'资源';sub=(a.entryData.package?a.entryData.package+':':'')+(a.entryData.type||'')+' · '+(a.entryData.configLabel||a.entryData.config||'默认');}
   if(!plus){
     if(a.level==='package'){title=a.pkgName;sub='包 '+arscHex(a.pkgId)+' · '+a.name;}
     else if(a.level==='type'){title=a.typeName;sub='类型 '+arscHex(a.typeId)+' · '+a.name;}
@@ -421,7 +424,7 @@ function arscHeader(){
     else if(a.level==='search'){title='搜索结果';sub=a.query||'';}
   }
   const actions=plus
-    ?[{icon:'build',label:'保存资源表',run:arscSave},{icon:'more',label:'更多',run:arscPlusMenu}]
+    ?[{icon:'back',label:'返回',run:arscBack},{icon:'build',label:'保存资源表',run:arscSave},{icon:'more',label:'更多',run:arscPlusMenu}]
     :[{icon:'back',label:a.level==='root'?'关闭资源表':'返回',run:arscBack},{icon:'search',label:'搜索资源',run:()=>options('搜索资源',[{icon:'search',label:'按资源名搜索',run:()=>arscSearchDialog('name')},{icon:'pin',label:'按资源 ID 搜索',run:()=>arscSearchDialog('id')},{icon:'text',label:'按值搜索',run:()=>arscSearchDialog('value')}])},{icon:'save',label:'保存资源表',run:arscSave},{icon:'more',label:'资源表菜单',run:arscMenu}];
   header(title,sub,actions,false);
   $('#subbar').innerHTML=a.mode==='plus'?arscPlusTabs(a):'';
@@ -434,7 +437,8 @@ function arscPlusTabs(a){
   return '<div class="tabs" role="tablist">'+tabs.map(t=>`<button role="tab" aria-selected="${a.tab===t[0]}" class="tab ${a.tab===t[0]?'active':''}" data-arsc-tab="${t[0]}">${t[1]}</button>`).join('')+'</div>';
 }
 function arscTag(id){return '['+((Number(id)||0)>>>0).toString(16).toUpperCase().padStart(2,'0')+']';}
-function arscTreeOpen(a,key){return !a.treeOpen||a.treeOpen[key]!==false;}
+function arscTreeOpen(a,key,dflt){const v=a.treeOpen?a.treeOpen[key]:undefined;return v===undefined?!!dflt:!!v;}
+function arscTouch(a){if(a){a.treeConfigs={};a.treeEntries={};}}
 function arscTreeRow(kind,name,badge,onclick,expandable,expanded,glyph){
   const b=document.createElement('button');
   b.className='treeRow'+(expandable?'':' classRow');
@@ -447,30 +451,42 @@ function arscTreeRow(kind,name,badge,onclick,expandable,expanded,glyph){
   if(badge)h+='<span class="arscNodeBadge">'+esc(badge)+'</span>';
   b.innerHTML=h;b.onclick=()=>act(onclick);return b;
 }
+async function arscTreeConfigs(a,pkgId,typeId){const r=await rpc('arscBrowse',{session:a.session,packageId:pkgId,typeId:typeId,offset:0,limit:1});return r.configs||[];}
+async function arscTreeEntries(a,pkgId,typeId,config){const r=await rpc('arscBrowse',{session:a.session,packageId:pkgId,typeId:typeId,config:config||'',offset:0,limit:500});return r.entries||[];}
 async function arscRenderPlusTree(body){
   const a=state.arsc;
   const r=await rpc('arscBrowse',{session:a.session,packageId:-1,typeId:-1,offset:0,limit:1});
-  const pkgs=r.packages||[];a.packages=pkgs;a.treeOpen=a.treeOpen||{};
+  const pkgs=r.packages||[];a.packages=pkgs;a.treeOpen=a.treeOpen||{};a.treeConfigs=a.treeConfigs||{};a.treeEntries=a.treeEntries||{};
   body.className='toolpage arscTreePage';
-  const tree=document.createElement('div');tree.className='tree';tree.setAttribute('role','tree');tree.setAttribute('aria-label','ARSC 包与类型');
+  const tree=document.createElement('div');tree.className='tree';tree.setAttribute('role','tree');tree.setAttribute('aria-label','ARSC 包、类型与资源');
+  const message=t=>{const d=document.createElement('div');d.className='treeMessage';d.textContent=t;return d;};
   for(const p of pkgs){
-    const pk='p'+p.id,openP=arscTreeOpen(a,pk);
-    tree.append(arscTreeRow('folder',p.name,arscTag(p.id),()=>{a.treeOpen[pk]=!openP;return arscRender();},true,openP));
-    if(!openP)continue;
-    const pKids=document.createElement('div');pKids.className='treeChildren';
-    for(const t of p.types||[]){
-      const tk=pk+'t'+t.id,openT=arscTreeOpen(a,tk);
-      pKids.append(arscTreeRow('folder',t.name,arscTag(t.id),()=>{a.treeOpen[tk]=!openT;return arscRender();},true,openT));
-      if(!openT)continue;
-      const tKids=document.createElement('div');tKids.className='treeChildren';
-      const openType=()=>{a.pkgId=p.id;a.pkgName=p.name;a.typeId=t.id;a.typeName=t.name;a.offset=0;a.level='type';return arscRender();};
-      const openEntries=async()=>{a.pkgId=p.id;a.pkgName=p.name;a.typeId=t.id;a.typeName=t.name;a.offset=0;const r=await rpc('arscBrowse',{session:a.session,packageId:p.id,typeId:t.id,offset:0,limit:1});const c=(r.configs||[])[0];a.level='config';a.config=c?c.qualifiers:'';a.configLabel=c?c.label:'默认';return arscRender();};
-      tKids.append(arscTreeRow('leaf','type-info','',openType,false,false,'i'));
-      tKids.append(arscTreeRow('leaf',t.name,'',openEntries,false,false,'T'));
-      pKids.append(tKids);
+   const pk='p'+p.id,openP=arscTreeOpen(a,pk,true);
+   tree.append(arscTreeRow('folder',p.name||'(未命名)',arscTag(p.id)+' · '+(p.count||0)+' 项',()=>{a.treeOpen[pk]=!openP;return arscRender();},true,openP));
+   if(!openP)continue;
+   const pKids=document.createElement('div');pKids.className='treeChildren';
+   for(const t of p.types||[]){
+    const tk=pk+'t'+t.id,openT=arscTreeOpen(a,tk,false);
+    pKids.append(arscTreeRow('folder',t.name||'(未命名)',arscTag(t.id)+' · '+(t.count||0)+' 项',()=>{a.treeOpen[tk]=!openT;return arscRender();},true,openT));
+    if(!openT)continue;
+    const tKids=document.createElement('div');tKids.className='treeChildren';
+    let configs=a.treeConfigs[tk];
+    if(!configs){configs=await arscTreeConfigs(a,p.id,t.id);a.treeConfigs[tk]=configs;}
+    if(!configs.length)tKids.append(message('此类型没有配置。'));
+    for(const c of configs){
+     const qual=c.qualifiers||'',ck=tk+'c'+qual,openC=arscTreeOpen(a,ck,false);
+     tKids.append(arscTreeRow('folder',c.label||qual||'默认',qual+' · '+(c.count||0)+' 项',()=>{a.treeOpen[ck]=!openC;return arscRender();},true,openC));
+     if(!openC)continue;
+     const cKids=document.createElement('div');cKids.className='treeChildren';
+     let entries=a.treeEntries[ck];
+     if(!entries){entries=await arscTreeEntries(a,p.id,t.id,qual);a.treeEntries[ck]=entries;}
+     if(!entries.length)cKids.append(message('此配置没有资源。'));
+     for(const e of entries)cKids.append(arscTreeRow('leaf',e.name||'(未命名)',arscHex(e.id),()=>arscOpenEntry(e.id,qual),false,false,'R'));
+     tKids.append(cKids);
     }
-    pKids.append(arscTreeRow('leaf','package-info','',()=>{a.pkgId=p.id;a.pkgName=p.name;a.offset=0;a.level='package';return arscRender();},false,false,'P'));
-    tree.append(pKids);
+    pKids.append(tKids);
+   }
+   tree.append(pKids);
   }
   body.replaceChildren(tree);tree.scrollTop=a.treeScroll||0;tree.onscroll=()=>a.treeScroll=tree.scrollTop;
 }
@@ -640,7 +656,7 @@ async function arscCommitValue(a,e,index,add){
   const choice=Number($('#arscValueType').value),type=ARSC_TYPES[choice][2],value=$('#arscValueText').value;
   const args={session:a.session,op:add?'addValue':'setValue',id:e.id,config:e.config||'',valueIndex:index,type:type,value:value};
   if(add){const nid=$('#arscNameId').value.trim();args.nameId=nid||'0';}
-  await rpc('arscEdit',args);a.dirty=true;closeModal();toast('资源值已更新');
+  await rpc('arscEdit',args);a.dirty=true;arscTouch(a);closeModal();toast('资源值已更新');
   if(a.level==='entry'){await arscOpenEntry(e.id,e.config||'');}else{await arscRender();}
 }
 async function arscBatchReplace(){
@@ -648,29 +664,29 @@ async function arscBatchReplace(){
   const find=await ask('批量替换字符串','','查找文本（区分大小写）');if(find===null||!find)return;
   const replace=await ask('批量替换字符串','','替换为（可留空）');if(replace===null)return;
   if(!await confirmBox('批量替换',`将在全局字符串池中替换所有包含“${esc(find)}”的字符串。`,'替换'))return;
-  const r=await rpc('arscEdit',{session:a.session,op:'replacePool',find:find,replace:replace});a.dirty=!!r.count;
+  const r=await rpc('arscEdit',{session:a.session,op:'replacePool',find:find,replace:replace});a.dirty=!!r.count;arscTouch(a);
   toast('已替换 '+r.count+' 条字符串');await arscRender();
 }
 async function arscEditPool(index,text){
   const a=state.arsc,v=await ask('编辑字符串',text,'字符串 '+index);
   if(v===null)return;
-  await rpc('arscEdit',{session:a.session,op:'setPool',index:index,text:v});a.dirty=true;toast('字符串已更新');await arscRender();
+  await rpc('arscEdit',{session:a.session,op:'setPool',index:index,text:v});a.dirty=true;arscTouch(a);toast('字符串已更新');await arscRender();
 }
 async function arscRename(e){
   const a=state.arsc,v=await ask('重命名资源',e.name,'新名称');
   if(v===null||!v.trim())return;
-  await rpc('arscEdit',{session:a.session,op:'rename',id:e.id,config:e.config||'',name:v.trim()});a.dirty=true;toast('已重命名');await arscOpenEntry(e.id,e.config||'');
+  await rpc('arscEdit',{session:a.session,op:'rename',id:e.id,config:e.config||'',name:v.trim()});a.dirty=true;arscTouch(a);toast('已重命名');await arscOpenEntry(e.id,e.config||'');
 }
 async function arscAddConfig(e){
   const a=state.arsc,v=await ask('添加配置','','配置限定符（如 en-rUS、zh-rCN、night；留空为默认）');
   if(v===null)return;
-  await rpc('arscEdit',{session:a.session,op:'importConfig',id:e.id,config:e.config||'',from:e.config||'',qualifiers:v.trim()});a.dirty=true;toast('已添加配置');await arscOpenEntry(e.id,v.trim());
+  await rpc('arscEdit',{session:a.session,op:'importConfig',id:e.id,config:e.config||'',from:e.config||'',qualifiers:v.trim()});a.dirty=true;arscTouch(a);toast('已添加配置');await arscOpenEntry(e.id,v.trim());
 }
 async function arscEditParent(e){
   const a=state.arsc;
   const v=await ask('编辑父样式',e.parent||arscHex(e.parentId||0),'父样式 ID 或 [包:]style/名称');
   if(v===null)return;
-  await rpc('arscEdit',{session:a.session,op:'setParent',id:e.id,config:e.config||'',parentId:v.trim()});a.dirty=true;toast('父样式已更新');await arscOpenEntry(e.id,e.config||'');
+  await rpc('arscEdit',{session:a.session,op:'setParent',id:e.id,config:e.config||'',parentId:v.trim()});a.dirty=true;arscTouch(a);toast('父样式已更新');await arscOpenEntry(e.id,e.config||'');
 }
 async function arscDeleteValue(e){
   const a=state.arsc;
@@ -679,7 +695,7 @@ async function arscDeleteValue(e){
   if(v===null)return;
   const index=Number(v);if(!Number.isInteger(index)||index<0)return toast('序号无效');
   if(!await confirmBox('删除集合值','确定删除第 '+index+' 项？','删除'))return;
-  await rpc('arscEdit',{session:a.session,op:'removeValue',id:e.id,config:e.config||'',valueIndex:index});a.dirty=true;toast('已删除');await arscOpenEntry(e.id,e.config||'');
+  await rpc('arscEdit',{session:a.session,op:'removeValue',id:e.id,config:e.config||'',valueIndex:index});a.dirty=true;arscTouch(a);toast('已删除');await arscOpenEntry(e.id,e.config||'');
 }
 async function arscClose(){
   const a=state.arsc;if(!a)return window.goBack();
@@ -690,7 +706,7 @@ async function arscDeleteEntry(e){
   const a=state.arsc;
   const all=await new Promise(resolve=>{dialog('删除资源',`<p>选择删除范围。此操作会清空资源值，保存后生效。</p><p class="muted">${esc(e.name||'')}</p>`,[['取消',()=>{closeModal();resolve(null);}],['当前配置',()=>{closeModal();resolve(false);}],['所有配置',()=>{closeModal();resolve(true);}]]);});
   if(all===null)return;
-  await rpc('arscEdit',{session:a.session,op:'deleteEntry',id:e.id,config:e.config||'',all:all});a.dirty=true;toast('已删除');a.level='config';a.entryData=null;await arscRender();
+  await rpc('arscEdit',{session:a.session,op:'deleteEntry',id:e.id,config:e.config||'',all:all});a.dirty=true;arscTouch(a);toast('已删除');a.level='config';a.entryData=null;await arscRender();
 }
 async function arscAddEntry(){
   const a=state.arsc;
@@ -702,13 +718,13 @@ async function arscAddEntry(){
     if(entryId!==null&&(!Number.isInteger(entryId)||entryId<0||entryId>65535))throw new Error('条目 ID 必须是 0–65535');
     const args={session:a.session,op:'addEntry',packageId:a.pkgId,typeId:a.typeId,typeName:a.typeName,config:a.config||'',name:name,type:ARSC_TYPES[choice][2],value:$('#arscValueText').value};
     if(entryId!==null)args.entryId=entryId;
-    await rpc('arscEdit',args);a.dirty=true;closeModal();toast('已添加资源');await arscRender();
+    await rpc('arscEdit',args);a.dirty=true;arscTouch(a);closeModal();toast('已添加资源');await arscRender();
   }]]);
 }
 async function arscDeleteConfig(){
   const a=state.arsc;
   if(!await confirmBox('删除配置','将删除 '+a.typeName+' 的配置“'+(a.configLabel||'默认')+'”中的全部条目。','删除'))return;
-  await rpc('arscEdit',{session:a.session,op:'deleteConfig',packageId:a.pkgId,typeId:a.typeId,config:a.config||''});a.dirty=true;toast('配置已删除');a.level='type';await arscRender();
+  await rpc('arscEdit',{session:a.session,op:'deleteConfig',packageId:a.pkgId,typeId:a.typeId,config:a.config||''});a.dirty=true;arscTouch(a);toast('配置已删除');a.level='type';await arscRender();
 }
 async function arscSearchDialog(mode){
   const a=state.arsc;
@@ -779,14 +795,14 @@ async function arscTranslateEdit(e){
   dialog('编辑翻译',body,[['取消',closeModal],['保存',async()=>{
     const v=$('#arscTransText').value;
     await rpc('arscEdit',{session:a.session,op:'setValue',id:e.id,config:a.config,valueIndex:-1,type:3,value:v});
-    a.dirty=true;closeModal();toast('译文已更新');await arscTranslateRender();
+    a.dirty=true;arscTouch(a);closeModal();toast('译文已更新');await arscTranslateRender();
   }]]);
 }
 async function arscTranslateNew(){
   const a=state.arscTranslate;
   const q=await ask('新建语言','','语言配置限定符，例如 en-rUS、zh-rCN、ja');if(q===null||!q.trim())return;
   const r=await rpc('arscTranslateAdd',{session:a.session,qualifiers:q.trim()});
-  a.dirty=true;a.config=r.qualifiers;a.offset=0;toast('已复制 '+r.count+' 条源字符串');await arscTranslateRender();
+  a.dirty=true;arscTouch(a);a.config=r.qualifiers;a.offset=0;toast('已复制 '+r.count+' 条源字符串');await arscTranslateRender();
 }
 async function arscTranslateSave(){
   const a=state.arscTranslate;const r=await rpc('arscSave',{session:a.session});a.dirty=false;
