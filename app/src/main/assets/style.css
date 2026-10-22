@@ -356,3 +356,324 @@ body.light .pane:not(.active){background:#f2f2f2}
 .arscColor{height:56px;border:1px solid var(--line);margin:8px 0}
 .treeRow .arscNodeBadge{margin-left:6px;color:var(--muted);font-size:12px;flex:none}
 .toolpage.arscTreePage{padding:0;background:transparent;overflow:hidden;color:var(--text)}
+
+/* ==========================================================================
+   Design refresh — Data terminal
+   True neutral darks, one accent used as a 1px selection line, figures set in
+   tabular monospace, flat surfaces separated by tone and a single rule.
+   ========================================================================== */
+:root{
+  --ground:#171719;--surface:#131217;--raised:#212023;--active:#26262b;
+  --border:#2a2a2e;--rule:#1f1f23;--control:#3a3a3e;
+  --text:#f2f2f3;--muted:#9a9ca3;--faint:#8a8c92;
+  --accent:#4a8ad6;--positive:#5fc39c;--negative:#e5566f;--warning:#d9a441;
+  --radius-card:6px;--radius-control:8px;--radius-pill:999px;
+  --mono:monospace;
+  --bg:var(--ground);--bar:var(--ground);--code:#131217;--dialog:var(--raised);
+  --line:var(--border);--blue:var(--accent);--icon:transparent;--hover:var(--raised);--gutter:#1b1b20;
+}
+body.light{
+  --ground:#f5f5f2;--surface:#ffffff;--raised:#ffffff;--active:#ececea;
+  --border:#dcdcd8;--rule:#e9e9e5;--control:#c8c8c3;
+  --text:#171719;--muted:#5f6368;--faint:#6f7277;
+  --accent:#2f6fb5;--positive:#247b50;--negative:#c4242a;--warning:#8a5a00;
+  --bg:var(--ground);--bar:var(--ground);--code:#ffffff;--dialog:var(--raised);
+  --line:var(--border);--blue:var(--accent);--icon:transparent;--hover:var(--active);--gutter:#efefec;
+}
+body{
+  background:var(--ground);color:var(--text);
+  font-family:Roboto,"Noto Sans SC","Noto Sans CJK SC",system-ui,-apple-system,sans-serif;
+  font-size:14px;line-height:1.45;letter-spacing:0;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+body.light #toolbar{border-bottom-color:var(--border)}
+::selection{background:#4a8ad655;color:var(--text)}
+#toolbar{height:56px;min-height:56px;padding:0 6px;background:var(--ground);border-bottom:1px solid var(--border)}
+#toolbar .titleblock{padding:0 10px}
+.title{font-size:20px;font-weight:600;line-height:24px;letter-spacing:-.015em}
+.subtitle{font-size:11px;line-height:15px;color:var(--muted);font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.pathTitle{font-size:19px;font-weight:600;letter-spacing:-.02em}
+.iconbtn{width:44px;height:44px;border-radius:8px;color:var(--text)}
+.iconbtn:active{background:var(--raised)}
+.iconbtn svg{width:22px;height:22px}
+.editorActions .iconbtn{width:20%}
+.brandMark{width:28px;height:28px;min-width:28px;display:grid;place-items:center;border:0;border-radius:0;background:transparent;color:var(--text);font:inherit}
+.brandLogo{display:block;width:24px;height:24px}
+.brandAccent{stroke:var(--accent)}
+.apkHead .brandMark{width:48px;height:48px;min-width:48px;border:0;border-radius:50%;background:transparent}
+.apkHead .brandLogo{width:34px;height:34px}
+
+/* file panes */
+.filepanes{background:var(--ground)}
+.pane{background:var(--ground);border-right:1px solid var(--border);box-shadow:none;scrollbar-width:thin;scrollbar-color:var(--control) transparent}
+.pane:not(.active){background:var(--surface)}
+.pane.active{background:var(--ground);box-shadow:inset 0 1px 0 var(--accent)}
+.pane:last-child{border-right:0}
+.file{min-height:42px;padding:5px 10px;border-radius:0}
+.file:active,.file.selected{background:var(--active)}
+.file.selected{box-shadow:inset 1px 0 0 var(--accent)}
+.file.selected .filename{color:var(--text)}
+.fileicon{width:28px;height:28px;border-radius:6px;background:transparent!important;color:var(--muted);margin-right:10px}
+.fileicon svg{width:20px;height:20px;stroke-width:1.7}
+.fileicon.apk,.fileicon.xml,.fileicon.java,.fileicon.smali,.fileicon.dex,.fileicon.arsc,.fileicon.zip,.fileicon.apks{background:transparent!important;color:var(--muted)}
+.fileicon.apk svg{width:24px;height:24px}
+.fileicon img{width:28px;height:28px;border-radius:6px}
+.fileinfo{min-width:0;flex:1}
+.filename{font-size:14px;line-height:18px;font-weight:400;letter-spacing:-.005em}
+.filemeta{font-size:11px;line-height:15px;color:var(--faint);font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.03em;margin-top:1px}
+.parent .filename{color:var(--muted);font-weight:500}
+#bottom{height:46px;min-height:46px;background:var(--ground);border-top:1px solid var(--border);padding:0 4px}
+#bottom .iconbtn{width:44px;height:44px}
+#bottom .iconbtn:active{background:var(--raised)}
+.bottom-key{font-family:var(--mono);font-size:18px;color:var(--muted);height:44px;border-radius:6px}
+.bottom-key:active{background:var(--raised);color:var(--text)}
+.empty{padding:34px 18px;color:var(--muted);font-size:13px;line-height:1.6}
+.primary{color:var(--text);background:var(--accent);text-transform:none;border-radius:var(--radius-pill);font-weight:600;font-size:13px;padding:10px 18px;letter-spacing:0}
+.primary:active{filter:brightness(.92)}
+body.light .primary{color:#fff}
+.permission{background:var(--raised);color:var(--muted);border-bottom:1px solid var(--border);font-size:12px}
+.permission button{color:var(--accent)}
+
+/* dialogs */
+.drawerShade,.shade{background:#000a}
+.dialog{background:var(--raised);border:1px solid var(--border);border-radius:var(--radius-card);box-shadow:0 18px 44px #0009;padding:20px 20px 8px;color:var(--text)}
+body.light .dialog{box-shadow:0 18px 44px #0003}
+.dialog h2{font-size:19px;font-weight:600;line-height:25px;letter-spacing:-.01em;margin:0 0 12px}
+.dialog p{font-size:14px;line-height:1.55;color:var(--text)}
+.dialog .actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:4px;margin-top:16px}
+.dialog .actions button{min-height:38px;height:auto;padding:8px 14px;border:1px solid transparent;border-radius:var(--radius-pill);color:var(--muted);text-transform:none;font-size:13px;font-weight:500;line-height:20px;text-align:center;min-width:0}
+.dialog .actions button:active{background:var(--surface);color:var(--text)}
+.dialog:not(.stackedActions) .actions button:last-child{background:var(--text);border-color:var(--text);color:var(--ground);font-weight:600}
+.dialog:not(.stackedActions) .actions button:last-child:active{filter:brightness(.9);background:var(--text);color:var(--ground)}
+.dialog:not(.stackedActions) .actions button:last-child:disabled{background:var(--control);border-color:var(--control);color:var(--ground);opacity:.5}
+.dialog .actions button:disabled{opacity:.45}
+.stackedActions .actions{flex-direction:column;align-items:stretch}
+.stackedActions .actions button{text-align:right;min-height:44px;border-radius:8px}
+.dialog label{font-size:12px;line-height:16px;color:var(--muted);margin-top:12px}
+.dialog input:not([type=checkbox]):not([type=range]),.dialog select,.toolinput,.bundleDialog select,.archiveDialog input:not([type=checkbox]),.archiveDialog select{
+  width:100%;height:42px;background:var(--surface);border:1px solid var(--control);border-radius:var(--radius-control);
+  color:var(--text);padding:10px 12px;margin:6px 0 14px;outline:none;font-size:14px;
+}
+.dialog input:not([type=checkbox]):not([type=range]):focus,.dialog select:focus,.toolinput:focus,.bundleDialog select:focus{
+  border-color:var(--accent);box-shadow:0 0 0 2px #4a8ad62e
+}
+.dialog select option{background:var(--raised);color:var(--text)}
+.dialog input[type=checkbox]{-webkit-appearance:none;appearance:none;width:20px;height:20px;border:1.5px solid var(--control);border-radius:4px;margin:0 12px 0 0;flex:none;position:relative;background:transparent}
+.dialog input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent)}
+.dialog input[type=checkbox]:checked:after{content:"";display:block;position:absolute;width:5px;height:10px;border:solid var(--ground);border-width:0 2px 2px 0;transform:rotate(45deg);left:6px;top:2px}
+.dialog textarea,.diffText,#renamePreview{background:var(--surface);border:1px solid var(--control);border-radius:var(--radius-control);color:var(--text);padding:10px;font-size:12px;line-height:1.55}
+.dialog .toggleRow{min-height:44px;margin:0!important;font-size:14px!important;line-height:20px;color:var(--text)}
+.dialog .toggleRow input[type=checkbox]{width:40px;height:22px;margin:0;border:0!important;border-radius:var(--radius-pill)!important;background:var(--control)!important;overflow:visible;flex:none}
+.dialog .toggleRow input[type=checkbox]:after{display:block;content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border:0;border-radius:50%;background:var(--text);transform:none;box-shadow:none;transition:left .16s ease,background-color .16s ease}
+.dialog .toggleRow input[type=checkbox]:checked{background:var(--accent)!important;border:0!important}
+.dialog .toggleRow input[type=checkbox]:checked:after{left:20px;background:#fff}
+.dialog input[type=range]{accent-color:var(--accent);height:28px}
+
+/* action lists: no fake radio, a chevron only when there is no icon */
+.options{padding:0;margin:0 -20px}
+.options .option{display:flex;align-items:center;min-height:48px;width:100%;padding:0 20px;font-size:15px;text-align:left;border-bottom:1px solid var(--rule);border-radius:0}
+.options .option:last-child{border-bottom:0}
+.options .option:active{background:var(--surface)}
+.optionIcon{width:20px;height:20px;flex:none;display:flex;align-items:center;justify-content:center;margin-right:14px;color:var(--muted)}
+.optionIcon svg{width:20px;height:20px}
+.optionLabel{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.optionChevron{display:flex;align-items:center;margin-left:12px;color:var(--faint)}
+.optionChevron svg{width:14px;height:14px}
+.optionsGrid{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0;margin:0 -8px}
+.optionsGrid .option{display:flex;align-items:center;min-height:52px;padding:10px 12px;border-bottom:0;border-radius:6px;font-size:14px;line-height:18px;white-space:normal;background:var(--surface)}
+.optionsGrid .option:active{background:var(--active)}
+.optionsGrid .optionIcon{margin-right:10px;width:18px;height:18px}
+.optionsGrid .optionIcon svg{width:18px;height:18px}
+.optionsGrid .optionLabel{white-space:normal;overflow-wrap:anywhere}
+.optionsDialog{padding-bottom:10px}
+.optionsDialog h2{margin-bottom:10px}
+
+/* DEX project picker */
+.dexPickHint{margin:0 0 12px;color:var(--muted);font-size:13px}
+.dexPickTools{display:flex;align-items:center;gap:4px;padding:0 0 10px;border-bottom:1px solid var(--rule)}
+.dexPickTools button{min-height:32px;padding:6px 9px;border-radius:6px;color:var(--accent);font-size:12px;font-weight:600}
+.dexPickTools button:active{background:var(--surface)}
+.dexPickCount{margin-left:auto;color:var(--muted);font-family:var(--mono);font-size:11px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.dexPickList{max-height:min(46vh,320px);overflow:auto;margin:0 -8px;padding:4px 0}
+.dexPickRow{display:flex!important;align-items:center;min-height:48px;margin:0!important;padding:0 8px;border-radius:6px;font-size:14px!important;line-height:20px;color:var(--text)!important;cursor:pointer}
+.dexPickRow:active{background:var(--surface)}
+.dexPickRow input[type=checkbox]{margin:0 12px 0 0!important}
+.dexPickIcon{width:24px;height:24px;flex:none;display:flex;align-items:center;justify-content:center;margin-right:10px;color:var(--muted)}
+.dexPickIcon svg{width:20px;height:20px}
+.dexPickName{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:13px;letter-spacing:-.03em}
+.multidexDialog .actions{flex-direction:row!important;align-items:center!important;margin-top:16px;gap:4px}
+.multidexDialog .actions button{height:38px!important;min-width:0!important;padding:0 16px!important;text-align:center!important}
+
+/* floating menus and sheets */
+.overflowMenu{background:var(--raised);border:1px solid var(--border);border-radius:var(--radius-card);box-shadow:0 18px 36px #0009;color:var(--text);width:196px;padding:4px}
+body.light .overflowMenu{box-shadow:0 18px 36px #0003}
+.overflowMenu button{min-height:44px;font-size:14px;padding:8px 10px;border-radius:4px}
+.overflowMenu button:active{background:var(--surface)}
+.overflowMenu svg{width:20px;height:20px;margin-right:10px;color:var(--muted)}
+.overflowMenu .end{color:var(--muted);font-family:var(--mono);font-size:11px}
+.fileActionMenu{inset:auto 0 0 0;left:0;top:auto;transform:none;margin:0 auto;width:100%;max-width:520px;max-height:calc(100dvh - 12px);border:1px solid var(--border);border-bottom:0;border-radius:12px 12px 0 0;background:var(--raised);box-shadow:0 -18px 44px #0009;animation:sheetEnter .2s cubic-bezier(.2,0,0,1)}
+body.light .fileActionMenu{box-shadow:0 -18px 44px #0003}
+.closing .fileActionMenu{animation:sheetExit .14s ease-in forwards!important}
+.actionHint{padding:14px 16px 10px;border-bottom:1px solid var(--rule);font-size:11px;line-height:16px;color:var(--muted);font-family:var(--mono);letter-spacing:-.02em}
+.actionGrid{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:8px 8px 10px}
+.actionGrid button{display:flex;align-items:center;gap:10px;min-height:48px;padding:8px 10px;border-radius:6px;font-size:14px;text-align:left}
+.actionGrid button:active{background:var(--surface)}
+.actionGrid button svg{width:20px;height:20px;flex:none;color:var(--muted)}
+.actionGrid button span{min-width:0;overflow-wrap:anywhere}
+@keyframes sheetEnter{from{opacity:.6;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}
+@keyframes sheetExit{to{opacity:0;transform:translateY(20px)}}
+
+/* drawer */
+.drawer{width:84vw;max-width:340px;background:var(--surface);border-right:1px solid var(--border);box-shadow:18px 0 44px #0008;color:var(--text)}
+body.light .drawer{box-shadow:18px 0 44px #0002}
+.drawerHead{height:60px;padding:6px 8px;border-bottom:1px solid var(--rule);background:var(--surface)}
+.drawer .brandMark{width:28px;height:28px;min-width:28px;border:0;border-radius:0}
+.drawerTop .title{font-size:16px;font-weight:600;line-height:20px;letter-spacing:-.01em}
+.drawerTop .subtitle{font-size:10px;line-height:14px;font-family:var(--mono);color:var(--muted)}
+.drawer #themeToggle,.drawer #drawerMore{width:36px;height:44px;border-radius:8px}
+.drawer #themeToggle:active,.drawer #drawerMore:active{background:var(--raised)}
+.sectionLabel{min-height:38px;padding:8px 14px;color:var(--muted);font-size:11px;letter-spacing:.02em;border-top:1px solid var(--rule)}
+.sectionLabel:first-of-type{border-top:0}
+.sectionLabel svg{width:12px;height:12px}
+.drawerRow{min-height:42px;padding:6px 14px;font-size:14px;border-radius:0}
+.drawerRow:active{background:var(--raised)}
+.circleicon{width:20px;height:20px;border-radius:0;background:transparent;margin-right:14px;color:var(--muted)}
+.circleicon svg{width:18px;height:18px;stroke-width:1.7}
+.storage .small{font-family:var(--mono);font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.meter{height:2px;background:var(--control);margin:8px 0 5px;border-radius:0}
+.meter span{background:var(--accent);height:2px}
+.currentDocument{background:var(--raised);color:var(--text);box-shadow:inset 1px 0 0 var(--accent);min-height:52px}
+.currentDocument small{font-size:10px;color:var(--muted);font-family:var(--mono)}
+.drawer .pill{background:var(--raised);color:var(--muted);border:1px solid var(--border)}
+
+/* tabs, trees and editor chrome */
+.tabs{height:48px;background:var(--ground);border-bottom:1px solid var(--border);padding:0 8px;gap:6px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:0 0 auto;min-width:0;padding:0 12px;font-size:14px;font-weight:500;line-height:47px;text-transform:none;color:var(--muted);border-bottom:1px solid transparent}
+.tab.active{color:var(--text);border-bottom-color:var(--accent)}
+.tree{padding-bottom:14px;background:var(--ground)}
+.treeRow{min-height:34px;height:34px;padding:0 12px;font-size:14px}
+.treeRow:active{background:var(--raised)}
+.treeRow .fileicon{width:22px;height:22px;margin-right:8px}
+.treeRow .fileicon svg{width:17px;height:17px}
+.treeRow .classicon{width:22px;height:22px;border:1px solid var(--control);border-radius:4px;background:transparent;color:var(--muted);font-family:var(--mono);font-size:10px;margin-right:8px}
+.treeRow .chevron{color:var(--muted)}
+.treeChildren{padding-left:25px}
+.breadcrumbs{background:var(--surface);color:var(--muted);border-bottom:1px solid var(--rule);font-family:var(--mono);font-size:11px}
+.editorInfo{height:26px;padding:0 10px;background:var(--surface);border-bottom:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:-.02em}
+.editorInfo #docName{max-width:52%}
+.editorOverflow{width:28px;height:24px;border-radius:4px}
+.CodeMirror{background:var(--code);color:#c9d1d9;font-family:var(--mono);font-size:13px;line-height:1.45}
+.CodeMirror-gutters{background:var(--ground);border-right:1px solid var(--rule)}
+.CodeMirror-linenumber{color:var(--faint);font-family:var(--mono);font-size:11px;padding:0 6px 0 4px}
+.CodeMirror-cursor{border-left:1px solid var(--accent)}
+.CodeMirror-selected{background:#35506d!important}
+.smaliMethod{background:#573d4822}
+.cm-s-cyber .cm-comment{color:#7f8790}
+.cm-s-cyber .cm-keyword{color:#c3a6ce}
+.cm-s-cyber .cm-string{color:#9db778}
+.cm-s-cyber .cm-number,.cm-s-cyber .cm-atom{color:#c9b879}
+.cm-s-cyber .cm-tag{color:#d7bd77}
+.cm-s-cyber .cm-attribute{color:#b0a0cf}
+body.light .CodeMirror{color:#24292f}
+body.light .CodeMirror-gutters{background:#f0f0ed}
+body.light .CodeMirror-linenumber{color:#8a8d94}
+body.light .cm-s-cyber .cm-comment{color:#6a737d}
+body.light .cm-s-cyber .cm-keyword{color:#8250df}
+body.light .cm-s-cyber .cm-string{color:#0a7b45}
+body.light .cm-s-cyber .cm-number,body.light .cm-s-cyber .cm-atom{color:#9a6700}
+#bottom.editorBottom{height:42px;min-height:42px}
+#bottom.editorBottom .bottom-key{height:40px;font-size:17px}
+
+/* supporting screens */
+.toolpage{padding:18px 16px 28px}
+.toolpage h3{font-size:19px;font-weight:600;letter-spacing:-.01em;margin:4px 0 14px}
+.toolpage p{color:var(--muted);font-size:13px;line-height:1.55}
+.listrow{min-height:52px;padding:10px 8px;border-bottom:1px solid var(--rule);gap:12px}
+.listrow:active{background:var(--raised)}
+.listrow .main{font-size:14px}
+.listrow small{font-size:11px;color:var(--muted);font-family:var(--mono);letter-spacing:-.02em}
+.listrow svg{width:20px;height:20px;color:var(--muted)}
+.searchline{padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface)}
+.searchline input{height:36px;font-size:13px}
+.searchline button{color:var(--accent);font-size:12px;font-weight:600;padding:8px 10px;border-radius:6px}
+.searchline button:active{background:var(--raised)}
+.terminal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-control);padding:12px;color:#a8d5b5;font-size:12px}
+body.light .terminal{color:#1f6b3f}
+.banner{background:var(--raised);color:var(--muted);border:1px solid var(--border);border-radius:var(--radius-control);font-size:12px}
+.pill{background:var(--raised);color:var(--muted);border:1px solid var(--border);border-radius:4px;font-size:11px}
+.dataGrid{grid-template-columns:44% 56%;font-size:14px;line-height:20px;grid-row-gap:8px;margin-top:16px}
+.dataGrid>div{color:var(--muted);font-size:13px}
+.dataGrid .value{color:var(--text);font-family:var(--mono);font-size:12px;letter-spacing:-.02em}
+.apkHead{height:52px}
+.apkHead h2{font-size:18px;font-weight:600;letter-spacing:-.01em}
+.apkHead .subtitle{margin-top:2px;font-size:11px}
+.apkDialog .actions{margin-top:10px}
+.bundleSource,.signHint,.bundleHint{font-size:12px;line-height:1.5;color:var(--muted)}
+#toast{background:var(--raised);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-card);box-shadow:0 12px 28px #0008;font-size:13px;padding:10px 14px}
+body.light #toast{box-shadow:0 12px 28px #0002}
+#progress{height:1px;background:var(--accent)}
+.zoomBadge{background:var(--raised);border:1px solid var(--border);color:var(--text);border-radius:4px;font-family:var(--mono);font-size:11px}
+.zoomControls button{color:var(--accent)}
+.currentDocument .storage{font-size:14px}
+body.light .fileicon{color:#5f6368}
+body.light .file.selected{background:var(--active)}
+body.light .file.selected .filename{color:var(--text)}
+body.light .pane.active{box-shadow:inset 0 1px 0 var(--accent)}
+body.light .dialog input[type=checkbox]:checked:after{border-color:#fff}
+body.light .multidexDialog .dexPickIcon,body.light .optionIcon{color:var(--muted)}
+@media(max-width:420px){
+  .dialog{padding:18px 16px 8px}
+  .options{margin:0 -16px}
+  .options .option{padding:0 16px}
+  .dataGrid{grid-template-columns:42% 58%}
+  .pathTitle{font-size:18px}
+  .title{font-size:19px}
+  .filemeta{font-size:10.5px}
+}
+.sheetShade{background:#0007}
+.fileActionMenu{padding-bottom:max(10px,env(safe-area-inset-bottom))}
+@media(max-width:420px){.dexPickTools button{font-size:11px;padding:6px 7px}.actionGrid button{font-size:13px;gap:8px;padding:8px}}
+/* final pass: row labels, range control, tablet scale */
+.checkrow{display:flex!important;align-items:center;min-height:44px;font-size:15px!important;line-height:20px;margin:0!important;color:var(--text)!important}
+.checkrow input[type=checkbox]{margin:0 12px 0 0!important}
+.dialog input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:32px;background:transparent;padding:0;margin:6px 0 12px;border:0;outline:none;accent-color:var(--accent)}
+.dialog input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:999px;background:var(--control)}
+.dialog input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;margin-top:-7.5px;border:0;border-radius:50%;background:var(--text)}
+.dialog input[type=range]:focus-visible{outline:1px solid var(--accent);outline-offset:4px}
+@media(min-width:600px){
+  .title{font-size:22px;line-height:26px}
+  .pathTitle{font-size:21px}
+  .subtitle{font-size:12px;line-height:16px}
+  .file{min-height:48px;padding:6px 14px}
+  .filename{font-size:15px;line-height:20px}
+  .filemeta{font-size:12px;line-height:16px}
+  .fileicon{width:30px;height:30px}
+  .fileicon svg{width:21px;height:21px}
+  .fileicon.apk svg{width:26px;height:26px}
+  .dialog{max-width:460px}
+}
+.dialog.dangerDialog:not(.stackedActions) .actions button:last-child{background:var(--negative);border-color:var(--negative);color:#fff}
+/* bundled face + file list as a two-line table row */
+@font-face{font-family:"Public Sans";src:url("fonts/PublicSans.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
+body{font-family:"Public Sans",Roboto,"Noto Sans SC","Noto Sans CJK SC",system-ui,-apple-system,sans-serif}
+h1.title,h1.editorTitle{margin:0}
+.fileline{display:flex;align-items:baseline;gap:8px;min-width:0}
+.fileline .filename{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.filesize{flex:none;font-family:var(--mono);font-size:11px;line-height:15px;color:var(--muted);font-variant-numeric:tabular-nums;letter-spacing:-.03em;white-space:nowrap}
+.filemeta{display:block;font-family:var(--mono);font-size:11px;line-height:15px;color:var(--faint);font-variant-numeric:tabular-nums;letter-spacing:-.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+@media(max-width:420px){.file{padding-left:16px;padding-right:16px}}
+@media(min-width:600px){.filesize,.filemeta{font-size:12px;line-height:16px}}
+.file{padding-left:16px;padding-right:16px}
+/* Phone: keep both file panes visible side by side. */
+@media(max-width:600px){
+  .filepanes .pane{width:50%}
+  .file{min-height:46px;padding:5px 8px}
+  .fileicon{width:24px;height:24px;margin-right:8px}
+  .fileicon svg{width:18px;height:18px}
+  .fileicon.apk svg{width:22px;height:22px}
+  .filename{font-size:13px;line-height:17px}
+  .filesize,.filemeta{font-size:10px;line-height:14px}
+  .filemeta{margin-top:1px}
+  #bottom .iconbtn{width:20%}
+}
