@@ -391,18 +391,16 @@ function arscTypeLabel(t){const x=ARSC_TYPES.find(a=>a[2]===t||(t>=28&&t<=31&&a[
 function arscChoice(t){let i=ARSC_TYPES.findIndex(a=>a[2]===t);if(i<0&&t>=28&&t<=31)i=3;return i<0?0:i;}
 function arscOptions(selected){return ARSC_TYPES.map((a,i)=>`<option value="${i}" ${i===selected?'selected':''}>${a[1]}</option>`).join('');}
 function arscOpenWith(args,name){
-  const modes=[['plus','Arsc编辑器++','浏览 · 最近 · 搜索 · 常量','layers'],['editor','Arsc编辑器','经典资源浏览与编辑','arsc'],['translate','翻译模式','按语言对照与替换','text'],['query','资源查询','按名称 / ID / 值查找','search']];
-  const body='<p class="dexPickHint">选择要打开的资源表工具。</p><div class="dexPickList">'+modes.map((m,i)=>`<label class="dexPickRow"><input type="radio" name="arscOpenMode" value="${m[0]}" ${i===0?'checked':''}><span class="dexPickIcon">${icon(m[3])}</span><span class="dexPickName">${esc(m[1])}</span><span class="dexPickDesc">${esc(m[2])}</span></label>`).join('')+'</div>';
-  const d=dialog('资源表工程',body,[['取消',closeModal],['打开',()=>{
-    const picked=d.querySelector('input[name="arscOpenMode"]:checked');
-    const mode=picked?picked.value:'plus';
+  const modes=[['plus','Arsc编辑器++'],['editor','Arsc编辑器'],['translate','翻译模式'],['query','资源查询']];
+  const body='<div class="arscChooser">'+modes.map((m,i)=>`<label><input type="radio" name="arscOpenMode" value="${m[0]}" ${i===0?'checked':''}><span>${m[1]}</span></label>`).join('')+'</div>';
+  dialog('打开方式…',body,[['取消',closeModal],['打开',()=>{
+    const mode=document.querySelector('input[name="arscOpenMode"]:checked').value;
     closeModal();
     if(mode==='query')return showArscQuery(args,name);
     if(mode==='translate')return showArscTranslate(args,name);
     if(mode==='plus')return showArsc(args,name,'plus');
     return showArsc(args,name,'editor');
   }]]);
-  d.classList.add('multidexDialog');
 }
 async function showArsc(args,name,mode){
   const s=await rpc('arscOpen',Object.assign({},args,{name:name||''}));
