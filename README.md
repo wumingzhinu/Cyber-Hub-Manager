@@ -1,8 +1,8 @@
-# Cyber Hub Manager — 0.1.8 development build
+# Cyber Hub Manager — 0.1.9 development build
 
 Android file manager and APK/DEX editor using a local WebView interface and native Java tools. Core tools work offline. Android 8.0 / API 26 or newer is required.
 
-Install `Cyber-Hub-Manager-0.1.8.apk` as an **Update** over the existing app. Package `com.cyberhub.manager`, development signer and local asset origin are unchanged; versionCode is 9. Do not uninstall if you want to keep the private Workspace.
+Install `Cyber-Hub-Manager-0.1.9.apk` as an **Update** over the existing app. Package `com.cyberhub.manager`, development signer and local asset origin are unchanged; versionCode is 10. Do not uninstall if you want to keep the private Workspace.
 
 ## APKS → APK conversion
 
@@ -72,7 +72,7 @@ Java compilation requires valid, compilable source. Decompiled Java is not guara
 | DEX | MultiDex tree/history/search, string occurrences, member navigation, usages/subclasses/overrides, Smali/Java editing, compile/save/export/sign. |
 | Editors | Syntax colors, line tools, search/replace, go to line, wrap, undo/redo, export, text zoom. Smali register analysis/increase. |
 | Resources | resources.arsc opens a four-way chooser: ArscEditor, ArscEditor++ (Browse/Recent/Search/Constants workspace), translation mode with per-language comparison and new-language cloning, and a resource query tool for `@`/`?` names, IDs, colors and base conversions. Editors support package/type/config/entry browsing, scalar and complex values, rename/add/delete, per-config import/delete, string-pool replace, and save with APK re-sign support. AXML string-pool viewing remains available separately. The Arsc编辑器++ browse tab is a drill-down tree like the DEX editor — package → type → resource — with the default configuration inlined under its type and other configurations shown as locale rows instead of a "default" folder; a selected resource opens in place instead of jumping to the type list, and the tree cache is dropped after every edit. Tapping a resource opens it in the text editor as XML (`<string name="app_name" id="0x7f030000" package="…" type="string">value</string>`); editing that value and saving writes it back into the resource table. Complex (style/array) values open as XML collection items and save per index. The Arsc编辑器++ browse tab carries a name filter and the same shortcut symbol bar (`→ / + - * = <`) as the code editor, so symbols can be typed without a keyboard. |
-| Installed apps | List/filter and inspect/extract base APKs. Installed-app export reads the base APK; use an APKS bundle for split conversion. |
+| Installed apps | List/filter and extract base APKs. Tapping an app opens extraction mode with **Extract APK / View / Install**; APK signing and other editing functions are hidden. Extraction reads the base APK and lets you choose folder and filename; use an APKS bundle for split conversion. |
 | Tools | Local profile/preferences, activity record, file comparisons, an embedded Termux terminal (`terminal-emulator` + `terminal-view`) with a real PTY running `/system/bin/sh`, and own-format `.sh` plugins. |
 | Network | Saved remote storage entries (WebDAV, FTP, FTPS, SFTP, SMB and S3-compatible object storage) listed in the sidebar; opening one replaces only the active file pane with remote browsing, leaving the other pane local. Supports list/download/upload/mkdir/rename/delete; token-protected read-only local HTTP sharing; local MCP `list_files`/`read_text`. |
 
@@ -110,7 +110,7 @@ All runtime JARs, four Zstandard Android ABIs and local UI assets are included. 
 python tools/build.py --sdk /absolute/path/to/android-sdk
 ```
 
-Its default build-tools selection is 34.0.0; pass `--tools` for another installed build-tools directory. Output: `dist/Cyber-Hub-Manager-0.1.8.apk`. It compiles with desktop ECJ, converts with D8, aligns, signs, verifies signatures and checks packaged assets before publishing.
+Its default build-tools selection is 34.0.0; pass `--tools` for another installed build-tools directory. Output: `dist/Cyber-Hub-Manager-0.1.9.apk`. It compiles with desktop ECJ, converts with D8, aligns, signs, verifies signatures and checks packaged assets before publishing.
 
 `python tools/dependencies.py` recreates pinned runtime JARs. `python tools/compiler-api.py /path/to/platforms/android-34/android.jar` recreates the compile-only classpath asset. Dependency/source/license information is in `THIRD-PARTY-NOTICES.txt`, `DEPENDENCIES.json` and `licenses/`.
 

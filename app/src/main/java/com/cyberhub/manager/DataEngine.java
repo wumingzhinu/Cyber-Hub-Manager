@@ -13,7 +13,7 @@ public final class DataEngine {
  boolean permission(){return Build.VERSION.SDK_INT>=30?Environment.isExternalStorageManager():activity.checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)==PackageManager.PERMISSION_GRANTED;}
  synchronized Object call(String action,JSONObject a)throws Exception{
   switch(action){
-   case "init":return new JSONObject().put("permission",permission()).put("home",Environment.getExternalStorageDirectory().getPath()).put("workspace",workspace.getPath()).put("version","0.1.8").put("ownApk",activity.getApplicationInfo().sourceDir);
+   case "init":return new JSONObject().put("permission",permission()).put("home",Environment.getExternalStorageDirectory().getPath()).put("workspace",workspace.getPath()).put("version","0.1.9").put("ownApk",activity.getApplicationInfo().sourceDir);
    case "list":return list(a);
    case "disk":{File f=new File(a.getString("path"));return new JSONObject().put("total",f.getTotalSpace()).put("free",f.getUsableSpace());}
    case "exportText":{File f=FileOps.child(new File(a.getString("path")),a.getString("name"));if(f.exists())throw new IOException("输出已存在");FileOps.writeAtomic(f,a.getString("text").getBytes(StandardCharsets.UTF_8),false);record("已导出 "+f);return f.getPath();}
@@ -52,6 +52,7 @@ public final class DataEngine {
    case "zip":{File f=new File(a.getString("path")),dst=FileOps.child(f.getParentFile(),a.getString("name"));FileOps.zip(f,dst);record("已归档 "+f.getName());return dst.getPath();}
    case "properties":{File f=resolve(a);return new JSONObject().put("path",f.getPath()).put("size",f.length()).put("modified",f.lastModified()).put("readable",f.canRead()).put("writable",f.canWrite()).put("sha256",f.isFile()?FileOps.sha256(f):"—");}
    case "apkInfo":return apkInfo(resolve(a));
+   case "extractApk":return extractApk(a);
    case "bundleInspect":return ApksConverter.inspect(resolve(a));
    case "bundleConvert":{File src=resolve(a),dst=FileOps.child(new File(a.getString("destination")),a.getString("name"));try(InputStream key=activity.getAssets().open("development-signing.p12")){JSONObject result=ApksConverter.convert(src,dst,a.getString("choice"),a.getString("fingerprint"),new File(activity.getCacheDir(),"bundle-conversion"),key,message->activity.bundleProgress(a.optString("job"),message));record("已将 APKS 转换为 "+dst);return result;}}
    case "apkIcon":return iconForPath(a.getString("path"));
@@ -158,6 +159,20 @@ public final class DataEngine {
  }
  JSONArray recycleList()throws Exception{JSONArray arr=new JSONArray();File[] fs=trash.listFiles();if(fs==null)return arr;List<JSONObject> rows=new ArrayList<>();for(File f:fs){if(!f.getName().endsWith(".json"))continue;JSONObject o=new JSONObject(new String(FileOps.read(f,65536),StandardCharsets.UTF_8));File item=new File(trash,o.optString("id"));if(!o.has("dir"))o.put("dir",item.isDirectory());if(!o.has("size"))o.put("size",item.exists()?treeSize(item):0);rows.add(o);}rows.sort((x,y)->Long.compare(y.optLong("time"),x.optLong("time")));for(JSONObject o:rows)arr.put(o);return arr;}
  static long treeSize(File f){if(f.isFile())return f.length();File[] fs=f.listFiles();long n=0;if(fs!=null)for(File c:fs)n+=treeSize(c);return n;}
+ String extractApk(JSONObject a)throws Exception{
+  File src=resolve(a);
+  if(!src.isFile()||!src.getName().toLowerCase(Locale.ROOT).endsWith(".apk"))throw new IOException("源文件不是 APK");
+  File dir=new File(a.getString("destination"));
+  if(!dir.isDirectory()&&!dir.mkdirs())throw new IOException("无法创建目标文件夹："+dir);
+  String name=a.optString("name","").trim();
+  if(name.isEmpty())name=src.getName();
+  if(!name.toLowerCase(Locale.ROOT).endsWith(".apk"))name+=".apk";
+  File dst=FileOps.child(dir,name);
+  if(dst.exists())throw new IOException("目标已存在："+dst.getName());
+  FileOps.copyTree(src,dst);
+  record("已提取 APK "+dst.getName());
+  return dst.getPath();
+ }
  JSONObject apkInfo(File f)throws Exception{
   PackageManager pm=activity.getPackageManager();PackageInfo p=pm.getPackageArchiveInfo(f.getPath(),PackageManager.GET_PERMISSIONS);if(p==null)throw new IOException("Android 无法解析此 APK");p.applicationInfo.sourceDir=f.getPath();p.applicationInfo.publicSourceDir=f.getPath();String sig="未签名 / 未校验";
   try{ApkVerifier.Result v=new ApkVerifier.Builder(f).build().verify();List<String>s=new ArrayList<>();if(v.isVerifiedUsingV1Scheme())s.add("V1");if(v.isVerifiedUsingV2Scheme())s.add("V2");if(v.isVerifiedUsingV3Scheme())s.add("V3");sig=v.isVerified()?String.join(" + ",s):"签名无效或未签名";}catch(Exception e){sig="无法校验："+e.getMessage();}
