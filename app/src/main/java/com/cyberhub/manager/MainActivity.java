@@ -33,7 +33,7 @@ public class MainActivity extends Activity {
     private TerminalView terminalView;
     private TerminalSession terminalSession;
     private int terminalTextSize=14;
-    private boolean terminalCtrl,terminalAlt;
+    private boolean terminalCtrl,terminalAlt,terminalKeyboardShown;
     private TextView terminalCtrlKey,terminalAltKey;
     @Override public void onCreate(Bundle state){super.onCreate(state);
         System.setProperty("java.io.tmpdir",getCacheDir().getPath());
@@ -109,7 +109,28 @@ public class MainActivity extends Activity {
     private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
     private String[] terminalEnv(String home,String cwd){
         File envFile=new File(getCacheDir(),"termux.env");
-        try(FileOutputStream out=new FileOutputStream(envFile)){out.write("PS1=':\\w \\$ '\n".getBytes(StandardCharsets.UTF_8));}catch(IOException ignored){}
+        String rc=
+            "PS1='$(cyber_prompt)'\n"+
+            "cyber_prompt(){\n"+
+            "  case \"$PWD\" in\n"+
+            "    \"$HOME\") printf '~ $ ' ;;\n"+
+            "    \"$HOME\"/*) printf '~/%s $ ' \"${PWD#\"$HOME\"/}\" ;;\n"+
+            "    *) printf '%s $ ' \"$PWD\" ;;\n"+
+            "  esac\n"+
+            "}\n"+
+            "LS_COLORS='di=01;34:ln=01;36:pi=33:so=01;35:bd=01;33:cd=01;33:or=01;31:mi=01;31:ex=01;32'\n"+
+            "export LS_COLORS\n"+
+            "ls(){\n"+
+            "  if command ls --color=auto \"$@\" 2>/dev/null; then return; fi\n"+
+            "  command ls -1F \"$@\" 2>/dev/null | while IFS= read -r cyber_entry; do\n"+
+            "    case \"$cyber_entry\" in\n"+
+            "      */) printf '\\033[01;34m%s\\033[0m\\n' \"$cyber_entry\" ;;\n"+
+            "      \\*) printf '\\033[01;32m%s\\033[0m\\n' \"$cyber_entry\" ;;\n"+
+            "      *) printf '%s\\n' \"$cyber_entry\" ;;\n"+
+            "    esac\n"+
+            "  done\n"+
+            "}\n";
+        try(FileOutputStream out=new FileOutputStream(envFile)){out.write(rc.getBytes(StandardCharsets.UTF_8));}catch(IOException ignored){}
         return new String[]{
         "HOME="+home,
         "PWD="+cwd,
@@ -119,7 +140,7 @@ public class MainActivity extends Activity {
         "COLORTERM=truecolor",
         "LANG=en_US.UTF-8",
         "ENV="+envFile.getAbsolutePath(),
-        "PS1=:\\w \\$ "
+        "PS1=\\w \\$ "
     };}
     private void openTerminal(String path){
         if(terminalOverlay!=null||root==null)return;
@@ -128,16 +149,25 @@ public class MainActivity extends Activity {
         final String cwdPath=cwd.getAbsolutePath();
         final String home=getFilesDir().getAbsolutePath();
         terminalTextSize=14;
+        terminalKeyboardShown=false;
         terminalView=new TerminalView(this,null);
         terminalView.setTerminalViewClient(new TermViewClient());
         terminalView.setTextSize(terminalTextSize);
         terminalView.setBackgroundColor(0xff000000);
         terminalView.setTypeface(Typeface.MONOSPACE);
+        terminalView.setFocusable(true);
+        terminalView.setFocusableInTouchMode(true);
+        terminalView.setDefaultFocusHighlightEnabled(false);
         terminalSession=new TerminalSession("/system/bin/sh",cwdPath,new String[]{"-i"},terminalEnv(home,cwdPath),2000,new TermSessionClient());
         terminalView.attachSession(terminalSession);
 
         terminalOverlay=new FrameLayout(this);
         terminalOverlay.setBackgroundColor(0xff000000);
+        terminalOverlay.setOnApplyWindowInsetsListener((v,insets)->{
+            if(Build.VERSION.SDK_INT>=30)terminalKeyboardShown=insets.isVisible(WindowInsets.Type.ime());
+            else terminalKeyboardShown=insets.getSystemWindowInsetBottom()>dp(80);
+            return insets;
+        });
         LinearLayout column=new LinearLayout(this);
         column.setOrientation(LinearLayout.VERTICAL);
         column.addView(terminalView,new LinearLayout.LayoutParams(-1,0,1));
@@ -151,7 +181,7 @@ public class MainActivity extends Activity {
         terminalOverlay.addView(column,new FrameLayout.LayoutParams(-1,-1));
 
         root.addView(terminalOverlay,new FrameLayout.LayoutParams(-1,-1));
-        terminalView.post(()->{if(terminalView!=null)terminalView.requestFocus();});
+        terminalView.post(()->{TerminalView view=terminalView;if(view!=null){view.requestFocus();showTerminalKeyboard();}});
     }
     private void addTerminalKeyRow(LinearLayout parent,String[][] keys){
         LinearLayout row=new LinearLayout(this);
@@ -197,14 +227,32 @@ public class MainActivity extends Activity {
         if(terminalAltKey!=null){terminalAltKey.setTextColor(terminalAlt?0xff7fb3ff:0xfff0f0f0);terminalAltKey.setBackgroundColor(terminalAlt?0xff1d3b5a:0xff000000);}
     }
     private void focusTerminal(){TerminalView view=terminalView;if(view!=null)view.requestFocus();}
-    private void toggleTerminalKeyboard(){
+    private void showTerminalKeyboard(){
+        TerminalView view=terminalView;
+        if(view==null)return;
+        view.requestFocus();
+        InputMethodManager imm=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
+        if(imm==null)return;
+        view.postDelayed(()->{TerminalView target=terminalView;if(target!=null){target.requestFocus();imm.showSoftInput(target,InputMethodManager.SHOW_IMPLICIT);}},120);
+    }
+    private void hideTerminalKeyboard(){
         TerminalView view=terminalView;
         if(view==null)return;
         InputMethodManager imm=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
-        if(imm==null)return;
-        if(imm.isActive(view))imm.hideSoftInputFromWindow(view.getWindowToken(),0);
-        else{view.requestFocus();imm.showSoftInput(view,InputMethodManager.SHOW_IMPLICIT);}
+        if(imm!=null)imm.hideSoftInputFromWindow(view.getWindowToken(),0);
     }
+    private void toggleTerminalKeyboard(){
+        if(terminalKeyboardShown)hideTerminalKeyboard();
+        else showTerminalKeyboard();
+    }
+    private void changeTerminalTextSize(int delta){
+        int size=Math.max(8,Math.min(40,terminalTextSize+delta));
+        if(size==terminalTextSize)return;
+        terminalTextSize=size;
+        TerminalView view=terminalView;
+        if(view!=null){view.setTextSize(size);view.requestFocus();}
+    }
+    private void resetTerminalTextSize(){terminalTextSize=14;TerminalView view=terminalView;if(view!=null){view.setTextSize(14);view.requestFocus();}}
     private void pasteTerminal(){
         TerminalSession session=terminalSession;
         if(session==null)return;
@@ -218,11 +266,17 @@ public class MainActivity extends Activity {
         PopupMenu menu=new PopupMenu(this,anchor);
         menu.getMenu().add(0,1,0,"粘贴");
         menu.getMenu().add(0,2,1,"清空屏幕");
-        menu.getMenu().add(0,3,2,"关闭终端");
+        menu.getMenu().add(0,4,2,"放大字体");
+        menu.getMenu().add(0,5,3,"缩小字体");
+        menu.getMenu().add(0,6,4,"重置字号");
+        menu.getMenu().add(0,3,5,"关闭终端");
         menu.setOnMenuItemClickListener(item->{
             switch(item.getItemId()){
                 case 1:pasteTerminal();return true;
                 case 2:writeTerminal("\u000c");return true;
+                case 4:changeTerminalTextSize(1);return true;
+                case 5:changeTerminalTextSize(-1);return true;
+                case 6:resetTerminalTextSize();return true;
                 case 3:closeTerminal();return true;
             }
             return false;
@@ -232,7 +286,8 @@ public class MainActivity extends Activity {
     private void closeTerminal(){
         if(terminalOverlay==null)return;
         FrameLayout overlay=terminalOverlay;
-        terminalOverlay=null;terminalView=null;terminalCtrlKey=null;terminalAltKey=null;terminalCtrl=false;terminalAlt=false;
+        hideTerminalKeyboard();
+        terminalOverlay=null;terminalView=null;terminalCtrlKey=null;terminalAltKey=null;terminalCtrl=false;terminalAlt=false;terminalKeyboardShown=false;
         TerminalSession session=terminalSession;terminalSession=null;
         if(root!=null)root.removeView(overlay);
         if(session!=null){try{session.finishIfRunning();}catch(Throwable ignored){}}
@@ -259,8 +314,11 @@ public class MainActivity extends Activity {
         @Override public void logStackTrace(String tag,Exception e){android.util.Log.e(tag,"",e);}
     }
     private final class TermViewClient implements TerminalViewClient {
-        @Override public float onScale(float scale){return 1f;}
-        @Override public void onSingleTapUp(MotionEvent e){InputMethodManager imm=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);if(imm!=null&&terminalView!=null){terminalView.requestFocus();imm.showSoftInput(terminalView,InputMethodManager.SHOW_IMPLICIT);}}
+        @Override public float onScale(float scale){
+            if(scale<0.9f||scale>1.1f){changeTerminalTextSize(scale>1f?1:-1);return 1f;}
+            return scale;
+        }
+        @Override public void onSingleTapUp(MotionEvent e){if(!terminalKeyboardShown)showTerminalKeyboard();else focusTerminal();}
         @Override public boolean shouldBackButtonBeMappedToEscape(){return false;}
         @Override public boolean shouldEnforceCharBasedInput(){return true;}
         @Override public boolean shouldUseCtrlSpaceWorkaround(){return true;}
