@@ -6,12 +6,14 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.json.JSONObject;
+import org.json.JSONArray;
 import rikka.shizuku.Shizuku;
 import rikka.shizuku.ShizukuRemoteProcess;
 
@@ -165,6 +167,73 @@ public final class ElevatedAccess {
             finally{if(p!=null)p.destroy();}
         }
         return null;
+    }
+
+    public static boolean hasChannel(Context c){
+        return rootGranted(c)||shizukuGranted();
+    }
+
+    private static String quote(String s){
+        return "'"+s.replace("'","'\\''")+"'";
+    }
+
+    private static Process open(Context c,String cmd,boolean merge){
+        try{
+            if(rootGranted(c))return new ProcessBuilder("su","-c",cmd).redirectErrorStream(merge).start();
+            if(shizukuGranted()){
+                if(newProcessMethod==null){
+                    newProcessMethod=Shizuku.class.getDeclaredMethod("newProcess",String[].class,String[].class,String.class);
+                    newProcessMethod.setAccessible(true);
+                }
+                return (Process)newProcessMethod.invoke(null,new Object[]{new String[]{"sh","-c",cmd},null,null});
+            }
+        }catch(Throwable ignored){}
+        return null;
+    }
+
+    /** 以提权身份读取文件；失败返回 null。 */
+    public static byte[] readFile(Context c,File f,long limit){
+        Process p=open(c,"cat -- "+quote(f.getAbsolutePath()),false);
+        if(p==null)return null;
+        try{
+            byte[] data=FileOps.bytes(p.getInputStream(),limit);
+            if(!waitExit(p,30))return null;
+            return p.exitValue()==0?data:null;
+        }catch(Throwable t){return null;}
+        finally{p.destroy();}
+    }
+
+    /** 以提权身份写入文件；backup=true 时先保留 .bak。 */
+    public static boolean writeFile(Context c,File f,byte[] data,boolean backup){
+        if(backup)elevatedCommand(c,"[ -f "+quote(f.getAbsolutePath())+" ] && cp -f -- "+quote(f.getAbsolutePath())+" "+quote(f.getAbsolutePath()+".bak")+" 2>/dev/null; true");
+        Process p=open(c,"cat > "+quote(f.getAbsolutePath()),false);
+        if(p==null)return false;
+        try{
+            try(OutputStream out=p.getOutputStream()){out.write(data);}
+            if(!waitExit(p,30))return false;
+            return p.exitValue()==0;
+        }catch(Throwable t){return false;}
+        finally{p.destroy();}
+    }
+
+    /** 提权枚举目录并返回 name/path/dir/size/time；失败返回 null。 */
+    public static JSONArray listDetailed(Context c,File dir,boolean hidden){
+        String script="cd "+quote(dir.getAbsolutePath())+" 2>/dev/null || { echo __CYBER_FAIL__; exit 3; }; for f in * .[!.]* ..?*; do [ -e \"$f\" ] || continue; if [ -d \"$f\" ]; then d=1; else d=0; fi; s=$(stat -c %s \"$f\" 2>/dev/null || echo 0); t=$(stat -c %Y \"$f\" 2>/dev/null || echo 0); n=$(printf '%s' \"$f\" | base64 | tr -d '\\n'); printf '%s\\t%s\\t%s\\t%s\\n' \"$d\" \"$s\" \"$t\" \"$n\"; done";
+        String out=elevatedCommand(c,script);
+        if(out==null||out.contains("__CYBER_FAIL__"))return null;
+        JSONArray arr=new JSONArray();
+        for(String line:out.split("\n")){
+            if(line.isEmpty())continue;
+            String[] parts=line.split("\\t",4);
+            if(parts.length!=4)continue;
+            try{
+                String name=new String(java.util.Base64.getDecoder().decode(parts[3]),StandardCharsets.UTF_8);
+                if(!hidden&&name.startsWith("."))continue;
+                boolean isDir="1".equals(parts[0]);
+                arr.put(new JSONObject().put("name",name).put("path",new File(dir,name).getPath()).put("dir",isDir).put("size",isDir?0:Long.parseLong(parts[1])).put("time",Long.parseLong(parts[2])*1000L));
+            }catch(Exception ignored){}
+        }
+        return arr;
     }
 
     /** 用提权通道枚举目录内容（含隐藏项）；失败返回 null。 */

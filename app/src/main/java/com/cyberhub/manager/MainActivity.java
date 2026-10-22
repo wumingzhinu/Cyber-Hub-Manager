@@ -90,6 +90,7 @@ public class MainActivity extends Activity {
                     case "apkIcon":result=engine.iconForPath(a.getString("path"));break;
                     case "exit":runOnUiThread(()->finish());result=true;break;
                     case "permission":runOnUiThread(()->storagePermission());result=true;break;
+                    case "safPermission":{String which=a.optString("which","data");runOnUiThread(()->SafAccess.request(MainActivity.this,which));result=true;break;}
                     case "install":{File f=new File(a.getString("path"));if(!f.isFile())throw new IOException("APK 未找到");File shared=shareCopy(f);runOnUiThread(()->install(shared));result=true;break;}
                     case "shareMultiple":{ArrayList<Uri>uris=new ArrayList<>();JSONArray paths=a.getJSONArray("paths");for(int i=0;i<paths.length();i++)uris.add(shareUri(shareCopy(new File(paths.getString(i)))));if(uris.isEmpty())throw new IOException("未选择文件");runOnUiThread(()->{try{Intent intent=new Intent(Intent.ACTION_SEND_MULTIPLE).setType("application/octet-stream").putParcelableArrayListExtra(Intent.EXTRA_STREAM,uris).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);ClipData clip=ClipData.newRawUri("文件",uris.get(0));for(int i=1;i<uris.size();i++)clip.addItem(new ClipData.Item(uris.get(i)));intent.setClipData(clip);startActivity(Intent.createChooser(intent,"分享文件"));}catch(Exception error){toast(error.getMessage());}});result=true;break;}
                     case "share":{File shared=shareCopy(new File(a.getString("path")));runOnUiThread(()->share(shared));result=true;break;}
@@ -404,6 +405,12 @@ public class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int req,int res,Intent data){
         super.onActivityResult(req,res,data);
+        if(req==SafAccess.REQUEST){
+            String message=SafAccess.take(this,res,data);
+            if(message!=null)toast(message);
+            if(web!=null)web.evaluateJavascript("window.onNativeResume&&window.onNativeResume()",null);
+            return;
+        }
         if(req==COLOR_PICK_REQ){
             if(res==RESULT_OK&&data!=null){
                 try{
