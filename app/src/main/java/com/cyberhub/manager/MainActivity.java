@@ -11,6 +11,10 @@ import android.webkit.*;
 import android.view.*;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.*;
+import android.graphics.*;
+import android.media.*;
+import android.util.Base64;
+import android.text.TextUtils;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import com.termux.terminal.*;
@@ -35,6 +39,15 @@ public class MainActivity extends Activity {
     private int terminalTextSize=14;
     private boolean terminalCtrl,terminalAlt,terminalKeyboardShown;
     private TextView terminalCtrlKey,terminalAltKey;
+    private FrameLayout mediaOverlay;
+    private MediaPlayer mediaPlayer;
+    private VideoView mediaVideo;
+    private SeekBar mediaSeek;
+    private TextView mediaTime,mediaPlayButton;
+    private final Handler mediaHandler=new Handler(Looper.getMainLooper());
+    private Runnable mediaTicker;
+    private boolean mediaUserSeeking,mediaLoop;
+    private AudioManager mediaAudioManager;
     @Override public void onCreate(Bundle state){super.onCreate(state);
         System.setProperty("java.io.tmpdir",getCacheDir().getPath());
         try{engine=new DataEngine(this);web=new WebView(this);web.setBackgroundColor(0xff303030);
@@ -100,6 +113,10 @@ public class MainActivity extends Activity {
                     case "elevated":result=ElevatedAccess.call(MainActivity.this,a);break;
                     case "terminalOpen":{String p=a.optString("path",getFilesDir().getPath());runOnUiThread(()->openTerminal(p));result=true;break;}
                     case "terminalClose":runOnUiThread(()->closeTerminal());result=true;break;
+                    case "mediaImage":result=mediaImage(a);break;
+                    case "mediaPlay":{String p=a.getString("path");File f=new File(p);if(!f.isFile())throw new IOException("媒体文件未找到");if(!f.canRead())throw new IOException("无法读取媒体文件");String kind=a.optString("kind","audio"),name=a.optString("name",f.getName());runOnUiThread(()->openMediaOverlay(p,kind,name));result=true;break;}
+                    case "mediaClose":runOnUiThread(()->closeMedia());result=true;break;
+                    case "mediaExternal":{File f=new File(a.getString("path"));if(!f.isFile())throw new IOException("文件未找到");File shared=shareCopy(f);String mime=mediaMime(f.getPath());runOnUiThread(()->openExternalMedia(shared,mime));result=true;break;}
                     default:result=engine.call(action,a);
                 }
                 response.put("id",id);response.put("ok",true);response.put("data",result==null?JSONObject.NULL:result);
@@ -107,6 +124,290 @@ public class MainActivity extends Activity {
             final String json=response.toString();runOnUiThread(()->{if(web!=null)web.evaluateJavascript("window.receive&&window.receive("+json+")",null);});
             });
         }
+    }
+
+    private Object mediaImage(JSONObject a)throws Exception{
+        String path=a.getString("path");
+        File f=new File(path);
+        if(!f.isFile())throw new IOException("图片文件未找到");
+        if(!f.canRead())throw new IOException("无法读取此图片");
+        boolean thumb=a.optBoolean("thumb",false);
+        int max=Math.max(160,Math.min(a.optInt("max",thumb?360:2048),4096));
+        String name=f.getName(),lower=name.toLowerCase(Locale.US);
+        String mime=mediaMime(path);
+        JSONObject out=new JSONObject().put("name",name).put("path",path).put("size",f.length());
+        if(mime.equals("image/svg+xml")){
+            if(f.length()>2L*1024*1024)throw new IOException("SVG 文件过大，无法预览");
+            byte[] raw=FileOps.read(f,2L*1024*1024);
+            return out.put("data",dataUrl(mime,raw)).put("width",0).put("height",0).put("mime",mime);
+        }
+        if(!thumb&&lower.endsWith(".gif")&&f.length()<=6L*1024*1024){
+            byte[] raw=FileOps.read(f,6L*1024*1024);
+            BitmapFactory.Options sizes=new BitmapFactory.Options();
+            sizes.inJustDecodeBounds=true;
+            BitmapFactory.decodeByteArray(raw,0,raw.length,sizes);
+            return out.put("data",dataUrl("image/gif",raw)).put("width",sizes.outWidth).put("height",sizes.outHeight).put("mime","image/gif");
+        }
+        BitmapFactory.Options bounds=new BitmapFactory.Options();
+        bounds.inJustDecodeBounds=true;
+        BitmapFactory.decodeFile(path,bounds);
+        if(bounds.outWidth<=0||bounds.outHeight<=0)throw new IOException("无法解码此图片");
+        int sample=1;
+        while(Math.max(bounds.outWidth,bounds.outHeight)/sample>max*2)sample*=2;
+        BitmapFactory.Options opts=new BitmapFactory.Options();
+        opts.inSampleSize=sample;
+        Bitmap bitmap=BitmapFactory.decodeFile(path,opts);
+        if(bitmap==null)throw new IOException("无法解码此图片");
+        int orientation=ExifInterface.ORIENTATION_NORMAL;
+        try{orientation=new ExifInterface(path).getAttributeInt(ExifInterface.TAG_ORIENTATION,ExifInterface.ORIENTATION_NORMAL);}catch(Throwable ignored){}
+        bitmap=orient(bitmap,orientation);
+        float scale=Math.min(1f,(float)max/Math.max(bitmap.getWidth(),bitmap.getHeight()));
+        if(scale<1f){
+            Bitmap scaled=Bitmap.createScaledBitmap(bitmap,Math.max(1,Math.round(bitmap.getWidth()*scale)),Math.max(1,Math.round(bitmap.getHeight()*scale)),true);
+            if(scaled!=bitmap)bitmap.recycle();
+            bitmap=scaled;
+        }
+        boolean png=bitmap.hasAlpha();
+        ByteArrayOutputStream buffer=new ByteArrayOutputStream();
+        if(png)bitmap.compress(Bitmap.CompressFormat.PNG,100,buffer);
+        else bitmap.compress(Bitmap.CompressFormat.JPEG,thumb?78:90,buffer);
+        int width=bitmap.getWidth(),height=bitmap.getHeight();
+        bitmap.recycle();
+        String outMime=png?"image/png":"image/jpeg";
+        return out.put("data",dataUrl(outMime,buffer.toByteArray())).put("width",width).put("height",height).put("mime",outMime);
+    }
+    private static Bitmap orient(Bitmap source,int orientation){
+        Matrix matrix=new Matrix();
+        switch(orientation){
+            case ExifInterface.ORIENTATION_FLIP_HORIZONTAL:matrix.setScale(-1,1);break;
+            case ExifInterface.ORIENTATION_ROTATE_180:matrix.setRotate(180);break;
+            case ExifInterface.ORIENTATION_FLIP_VERTICAL:matrix.setScale(1,-1);break;
+            case ExifInterface.ORIENTATION_TRANSPOSE:matrix.setRotate(90);matrix.postScale(-1,1);break;
+            case ExifInterface.ORIENTATION_ROTATE_90:matrix.setRotate(90);break;
+            case ExifInterface.ORIENTATION_TRANSVERSE:matrix.setRotate(-90);matrix.postScale(-1,1);break;
+            case ExifInterface.ORIENTATION_ROTATE_270:matrix.setRotate(-90);break;
+            default:return source;
+        }
+        try{
+            Bitmap rotated=Bitmap.createBitmap(source,0,0,source.getWidth(),source.getHeight(),matrix,true);
+            if(rotated!=source)source.recycle();
+            return rotated;
+        }catch(Throwable ignored){return source;}
+    }
+    private static String dataUrl(String mime,byte[] bytes){return "data:"+mime+";base64,"+Base64.encodeToString(bytes,Base64.NO_WRAP);}
+    private static String mediaMime(String path){
+        String name=path.toLowerCase(Locale.US);
+        int dot=name.lastIndexOf('.');
+        String ext=dot>=0?name.substring(dot+1):"";
+        switch(ext){
+            case "jpg":case "jpeg":case "jpe":return "image/jpeg";
+            case "png":return "image/png";
+            case "gif":return "image/gif";
+            case "webp":return "image/webp";
+            case "bmp":return "image/bmp";
+            case "heic":case "heif":return "image/heic";
+            case "avif":return "image/avif";
+            case "svg":return "image/svg+xml";
+            case "mp4":case "m4v":return "video/mp4";
+            case "mkv":return "video/x-matroska";
+            case "webm":return "video/webm";
+            case "mov":return "video/quicktime";
+            case "avi":return "video/x-msvideo";
+            case "3gp":return "video/3gpp";
+            case "ts":return "video/mp2t";
+            case "flv":return "video/x-flv";
+            case "wmv":return "video/x-ms-wmv";
+            case "mpg":case "mpeg":return "video/mpeg";
+            case "ogv":return "video/ogg";
+            case "mp3":return "audio/mpeg";
+            case "wav":return "audio/wav";
+            case "flac":return "audio/flac";
+            case "aac":case "m4a":return "audio/mp4";
+            case "ogg":case "oga":case "opus":return "audio/ogg";
+            case "wma":return "audio/x-ms-wma";
+            case "amr":return "audio/amr";
+            case "mid":case "midi":return "audio/midi";
+            case "ape":return "audio/x-ape";
+            case "aiff":case "aif":return "audio/aiff";
+            case "mka":return "audio/x-matroska";
+        }
+        return "application/octet-stream";
+    }
+    private void openExternalMedia(File file,String mime){
+        try{
+            Intent intent=new Intent(Intent.ACTION_VIEW).setDataAndType(shareUri(file),mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(intent,"打开方式"));
+        }catch(Exception error){toast(error.getMessage()==null?"没有可处理此文件的应用":error.getMessage());}
+    }
+    private void openMediaOverlay(String path,String kind,String name){
+        if(mediaOverlay!=null)closeMedia();
+        if(terminalOverlay!=null)closeTerminal();
+        if(root==null)return;
+        try{
+            File file=new File(path);
+            if(!file.isFile())throw new IOException("媒体文件未找到");
+            if(!file.canRead())throw new IOException("无法读取媒体文件");
+            mediaLoop=false;mediaUserSeeking=false;
+            mediaOverlay=new FrameLayout(this);
+            mediaOverlay.setBackgroundColor(0xff000000);
+            mediaOverlay.setKeepScreenOn(true);
+            LinearLayout column=new LinearLayout(this);
+            column.setOrientation(LinearLayout.VERTICAL);
+            column.setBackgroundColor(0xff000000);
+            LinearLayout top=new LinearLayout(this);
+            top.setOrientation(LinearLayout.HORIZONTAL);
+            top.setGravity(Gravity.CENTER_VERTICAL);
+            top.setPadding(dp(10),0,dp(4),0);
+            top.setBackgroundColor(0xff111111);
+            TextView title=new TextView(this);
+            title.setText(name);title.setTextSize(15);title.setTextColor(0xfff2f2f2);title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+            top.addView(title,new LinearLayout.LayoutParams(0,dp(52),1));
+            TextView close=new TextView(this);
+            close.setText("关闭");close.setTextSize(14);close.setTextColor(0xff7fb3ff);close.setGravity(Gravity.CENTER);close.setPadding(dp(16),0,dp(16),0);close.setClickable(true);
+            close.setOnClickListener(v->closeMedia());
+            top.addView(close,new LinearLayout.LayoutParams(-2,dp(52)));
+            column.addView(top,new LinearLayout.LayoutParams(-1,dp(52)));
+            if("video".equals(kind)){
+                VideoView video=new VideoView(this);
+                mediaVideo=video;
+                MediaController controller=new MediaController(this);
+                controller.setAnchorView(video);
+                video.setMediaController(controller);
+                video.setVideoPath(path);
+                video.setOnPreparedListener(player->{if(mediaVideo!=video)return;player.setLooping(mediaLoop);video.start();});
+                video.setOnCompletionListener(player->{if(mediaVideo==video)toast("视频播放结束");});
+                video.setOnErrorListener((player,what,extra)->{toast("无法播放此视频");return true;});
+                column.addView(video,new LinearLayout.LayoutParams(-1,0,1));
+            }else{
+                TextView art=new TextView(this);
+                art.setText("♪");art.setTextSize(76);art.setTextColor(0xff4a8ad6);art.setGravity(Gravity.CENTER);
+                column.addView(art,new LinearLayout.LayoutParams(-1,0,1));
+                mediaTime=new TextView(this);
+                mediaTime.setText("00:00 / 00:00");mediaTime.setTextSize(13);mediaTime.setTextColor(0xffa8a8a8);mediaTime.setGravity(Gravity.CENTER);
+                column.addView(mediaTime,new LinearLayout.LayoutParams(-1,-2));
+                mediaSeek=new SeekBar(this);
+                mediaSeek.setMax(1000);
+                mediaSeek.setPadding(dp(16),dp(8),dp(16),dp(6));
+                mediaSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+                    public void onProgressChanged(SeekBar bar,int progress,boolean fromUser){
+                        MediaPlayer mp=mediaPlayer;
+                        if(fromUser&&mp!=null&&mediaTime!=null){
+                            int duration=mp.getDuration();
+                            if(duration>0)mediaTime.setText(mediaClock((int)((long)progress*duration/1000))+" / "+mediaClock(duration));
+                        }
+                    }
+                    public void onStartTrackingTouch(SeekBar bar){mediaUserSeeking=true;}
+                    public void onStopTrackingTouch(SeekBar bar){
+                        mediaUserSeeking=false;
+                        MediaPlayer mp=mediaPlayer;
+                        if(mp!=null&&mp.getDuration()>0)mp.seekTo((int)((long)bar.getProgress()*mp.getDuration()/1000));
+                    }
+                });
+                column.addView(mediaSeek,new LinearLayout.LayoutParams(-1,-2));
+                LinearLayout controls=new LinearLayout(this);
+                controls.setOrientation(LinearLayout.HORIZONTAL);
+                controls.setPadding(dp(10),0,dp(10),dp(12));
+                TextView rewind=mediaButton("−10 秒",v->seekMedia(-10000));
+                controls.addView(rewind,mediaControlParams());
+                mediaPlayButton=mediaButton("暂停",v->toggleMedia());
+                controls.addView(mediaPlayButton,mediaControlParams());
+                TextView forward=mediaButton("+10 秒",v->seekMedia(10000));
+                controls.addView(forward,mediaControlParams());
+                TextView loop=mediaButton("循环：关",null);
+                loop.setOnClickListener(v->{mediaLoop=!mediaLoop;loop.setText(mediaLoop?"循环：开":"循环：关");MediaPlayer lp=mediaPlayer;if(lp!=null)lp.setLooping(mediaLoop);});
+                controls.addView(loop,mediaControlParams());
+                column.addView(controls,new LinearLayout.LayoutParams(-1,-2));
+                MediaPlayer player=new MediaPlayer();
+                mediaPlayer=player;
+                player.setAudioStreamType(AudioManager.STREAM_MUSIC);
+                player.setDataSource(path);
+                player.setOnPreparedListener(ready->{
+                    if(mediaPlayer!=player)return;
+                    try{
+                        ready.start();
+                        if(mediaPlayButton!=null)mediaPlayButton.setText("暂停");
+                        updateMediaTime();
+                    }catch(Throwable ignored){}
+                });
+                player.setOnCompletionListener(done->{
+                    if(mediaPlayer!=player)return;
+                    if(mediaLoop){done.seekTo(0);done.start();}
+                    else if(mediaPlayButton!=null)mediaPlayButton.setText("播放");
+                });
+                player.setOnErrorListener((failed,what,extra)->{toast("无法播放此音频");return true;});
+                player.prepareAsync();
+                mediaAudioManager=(AudioManager)getSystemService(AUDIO_SERVICE);
+                if(mediaAudioManager!=null){try{mediaAudioManager.requestAudioFocus(null,AudioManager.STREAM_MUSIC,AudioManager.AUDIOFOCUS_GAIN);}catch(Throwable ignored){}}
+                mediaTicker=new Runnable(){
+                    public void run(){
+                        if(mediaPlayer==null)return;
+                        updateMediaTime();
+                        mediaHandler.postDelayed(this,500);
+                    }
+                };
+                mediaHandler.post(mediaTicker);
+            }
+            mediaOverlay.addView(column,new FrameLayout.LayoutParams(-1,-1));
+            root.addView(mediaOverlay,new FrameLayout.LayoutParams(-1,-1));
+        }catch(Throwable error){
+            closeMedia();
+            toast(error.getMessage()==null?"无法打开媒体":error.getMessage());
+        }
+    }
+    private LinearLayout.LayoutParams mediaControlParams(){
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,dp(48),1);
+        params.setMargins(dp(4),dp(4),dp(4),dp(4));
+        return params;
+    }
+    private TextView mediaButton(String label,View.OnClickListener listener){
+        TextView button=new TextView(this);
+        button.setText(label);button.setTextSize(14);button.setTextColor(0xfff2f2f2);button.setGravity(Gravity.CENTER);
+        button.setBackgroundColor(0xff232323);button.setClickable(true);button.setFocusable(true);button.setPadding(dp(6),0,dp(6),0);
+        button.setOnClickListener(listener);
+        return button;
+    }
+    private void toggleMedia(){
+        MediaPlayer player=mediaPlayer;
+        if(player==null)return;
+        try{
+            if(player.isPlaying()){player.pause();if(mediaPlayButton!=null)mediaPlayButton.setText("播放");}
+            else{player.start();if(mediaPlayButton!=null)mediaPlayButton.setText("暂停");}
+        }catch(Throwable error){toast("无法控制播放");}
+    }
+    private void seekMedia(int delta){
+        MediaPlayer player=mediaPlayer;
+        if(player==null)return;
+        try{
+            int duration=player.getDuration();
+            int position=Math.max(0,Math.min(duration>0?duration:Integer.MAX_VALUE,player.getCurrentPosition()+delta));
+            player.seekTo(position);
+            updateMediaTime();
+        }catch(Throwable ignored){}
+    }
+    private void updateMediaTime(){
+        MediaPlayer player=mediaPlayer;
+        if(player==null)return;
+        try{
+            int position=player.getCurrentPosition(),duration=player.getDuration();
+            if(mediaSeek!=null&&duration>0&&!mediaUserSeeking)mediaSeek.setProgress((int)((long)position*1000/duration));
+            if(mediaTime!=null)mediaTime.setText(mediaClock(position)+" / "+mediaClock(duration));
+        }catch(Throwable ignored){}
+    }
+    private static String mediaClock(int milliseconds){
+        if(milliseconds<0)milliseconds=0;
+        int total=milliseconds/1000,hours=total/3600,minutes=(total%3600)/60,seconds=total%60;
+        return hours>0?String.format(Locale.US,"%d:%02d:%02d",hours,minutes,seconds):String.format(Locale.US,"%02d:%02d",minutes,seconds);
+    }
+    private void closeMedia(){
+        FrameLayout overlay=mediaOverlay;
+        mediaOverlay=null;
+        if(mediaTicker!=null){mediaHandler.removeCallbacks(mediaTicker);mediaTicker=null;}
+        if(mediaVideo!=null){try{mediaVideo.stopPlayback();}catch(Throwable ignored){}mediaVideo=null;}
+        if(mediaPlayer!=null){try{if(mediaPlayer.isPlaying())mediaPlayer.pause();}catch(Throwable ignored){}try{mediaPlayer.release();}catch(Throwable ignored){}mediaPlayer=null;}
+        if(mediaAudioManager!=null){try{mediaAudioManager.abandonAudioFocus(null);}catch(Throwable ignored){}mediaAudioManager=null;}
+        mediaSeek=null;mediaTime=null;mediaPlayButton=null;mediaUserSeeking=false;mediaLoop=false;
+        if(overlay!=null&&root!=null)root.removeView(overlay);
+        if(web!=null){web.requestFocus();web.evaluateJavascript("window.mediaClosed&&window.mediaClosed()",null);}
     }
     private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
     private String[] terminalEnv(String home,String cwd){
@@ -432,6 +733,6 @@ public class MainActivity extends Activity {
         }
     }
     @Override protected void onResume(){super.onResume();if(web!=null)web.evaluateJavascript("window.onNativeResume&&window.onNativeResume()",null);}
-    @Override public void onBackPressed(){if(terminalOverlay!=null){closeTerminal();return;}if(web!=null)web.evaluateJavascript("window.goBack&&window.goBack()",null);}
-    @Override protected void onDestroy(){closeTerminal();if(engine!=null)engine.close();worker.shutdownNow();thumbnails.shutdownNow();if(web!=null){web.removeJavascriptInterface("CyberNative");web.destroy();web=null;}super.onDestroy();}
+    @Override public void onBackPressed(){if(mediaOverlay!=null){closeMedia();return;}if(terminalOverlay!=null){closeTerminal();return;}if(web!=null)web.evaluateJavascript("window.goBack&&window.goBack()",null);}
+    @Override protected void onDestroy(){closeMedia();closeTerminal();if(engine!=null)engine.close();worker.shutdownNow();thumbnails.shutdownNow();if(web!=null){web.removeJavascriptInterface("CyberNative");web.destroy();web=null;}super.onDestroy();}
 }
