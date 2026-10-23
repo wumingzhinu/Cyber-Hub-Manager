@@ -7,15 +7,17 @@ android {
     buildTypes { debug { signingConfig signingConfigs.development } }
     defaultConfig { applicationId 'com.cyberhub.manager'; minSdk 26; targetSdk 34; versionCode 12; versionName '0.1.11' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
-    packaging { resources { excludes += ['META-INF/DEPENDENCIES','META-INF/INDEX.LIST','META-INF/*.SF','META-INF/*.RSA','META-INF/*.DSA','META-INF/versions/**']; pickFirsts += ['META-INF/LICENSE*','META-INF/NOTICE*'] } }
+    packaging { resources { excludes += ['META-INF/DEPENDENCIES','META-INF/INDEX.LIST','META-INF/*.SF','META-INF/*.RSA','META-INF/*.DSA','META-INF/versions/**','META-INF/LICENSE*','META-INF/NOTICE*','okhttp3/internal/publicsuffix/NOTICE']; pickFirsts += [] } }
 }
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation('dev.rikka.shizuku:api:13.1.5') { exclude group: 'androidx.annotation', module: 'annotation' }
-    implementation('dev.rikka.shizuku:provider:13.1.5') { exclude group: 'androidx.annotation', module: 'annotation' }
+    // 本地 libs 已携带 jsch/okhttp/jcifs/shizuku 的 jar，远程坐标仅用于传递依赖解析，
+    // 排除自身类以避免 checkDebugDuplicateClasses 与本地 jar 冲突。
+    implementation('dev.rikka.shizuku:api:13.1.5') { exclude group: 'androidx.annotation', module: 'annotation'; exclude group: 'dev.rikka.shizuku', module: 'api' }
+    implementation('dev.rikka.shizuku:provider:13.1.5') { exclude group: 'androidx.annotation', module: 'annotation'; exclude group: 'dev.rikka.shizuku', module: 'provider' }
     // Classes are vendored in app/libs; the AAR's 4 KB-aligned libtermux.so must not be packaged.
     implementation('com.github.termux.termux-app:terminal-view:v0.118.3') { exclude group: 'com.github.termux.termux-app', module: 'terminal-emulator' }
-    implementation 'com.github.mwiede:jsch:0.2.20'
-    implementation 'com.squareup.okhttp3:okhttp:3.14.9'
-    implementation('eu.agno3.jcifs:jcifs-ng:2.1.10') { exclude group: 'org.slf4j', module: 'slf4j-api' }
+    implementation('com.github.mwiede:jsch:0.2.20') { exclude group: 'com.github.mwiede', module: 'jsch' }
+    implementation('com.squareup.okhttp3:okhttp:3.14.9') { exclude group: 'com.squareup.okhttp3', module: 'okhttp'; exclude group: 'com.squareup.okio', module: 'okio' }
+    implementation('eu.agno3.jcifs:jcifs-ng:2.1.10') { exclude group: 'eu.agno3.jcifs', module: 'jcifs-ng'; exclude group: 'org.slf4j', module: 'slf4j-api' }
 }
