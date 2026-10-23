@@ -5,9 +5,9 @@ from pathlib import Path
 P=Path(__file__).resolve().parents[1];B=P/'.build';B.mkdir(exist_ok=True);ROOT=P.parent
 ap=argparse.ArgumentParser();ap.add_argument('--sdk',default=os.environ.get('ANDROID_HOME',os.environ.get('ANDROID_SDK_ROOT','')));ap.add_argument('--tools',default='');args=ap.parse_args()
 if args.sdk:
- SDK=Path(args.sdk);ANDROID=SDK/'platforms/android-34/android.jar';BT=Path(args.tools) if args.tools else SDK/'build-tools/34.0.0'
+ SDK=Path(args.sdk);ANDROID=SDK/'platforms/android-34/android.jar';BT=Path(args.tools) if args.tools else SDK/'build-tools/35.0.0'
 else:ANDROID=ROOT/'toolchain/android-34/android.jar';BT=ROOT/'toolchain/android-14'
-if not ANDROID.exists() or not BT.exists():sys.exit('Install Android platform 34 and build-tools 34.0.0, then set ANDROID_HOME or pass --sdk.')
+if not ANDROID.exists() or not BT.exists():sys.exit('Install Android platform 34 and build-tools 35.0.0, then set ANDROID_HOME or pass --sdk.')
 e=dict(os.environ);jvm=Path('/usr/lib/jvm/java-17-openjdk-amd64')
 if jvm.exists():e['LD_LIBRARY_PATH']=str(jvm/'lib')+':'+str(jvm/'lib/server')+(':'+e['LD_LIBRARY_PATH'] if e.get('LD_LIBRARY_PATH') else '')
 (B/'tmp').mkdir(exist_ok=True)
@@ -20,8 +20,9 @@ def native(tool,*args):
  loader=Path('/lib64/ld-linux-x86-64.so.2')
  return [str(loader),str(exe),*map(str,args)] if loader.exists() else [str(exe),*map(str,args)]
 def java(*a):return ['java','-Xmx2g','-Djava.io.tmpdir='+str(B/'tmp'),*map(str,a)]
-LIB=sorted((P/'app/libs').glob('*.jar'))
-if not LIB:run([sys.executable,P/'tools/dependencies.py']);LIB=sorted((P/'app/libs').glob('*.jar'))
+LIB=sorted((P/'app/libs').glob('*.jar'));VIEW_LIB=sorted((P/'tools/termux/libs').glob('*.jar'))
+if not LIB or not VIEW_LIB:run([sys.executable,P/'tools/dependencies.py']);LIB=sorted((P/'app/libs').glob('*.jar'));VIEW_LIB=sorted((P/'tools/termux/libs').glob('*.jar'))
+LIB=sorted(LIB+VIEW_LIB)
 api=B/'android-api.jar'
 if not api.exists():
  with zipfile.ZipFile(ANDROID) as src,zipfile.ZipFile(api,'w',zipfile.ZIP_DEFLATED) as out:
@@ -38,7 +39,7 @@ key=P/'app/src/main/assets/development-signing.p12'
 if not key.exists():
  run(['keytool','-J-Dkeystore.pkcs12.legacy','-genkeypair','-keystore',key,'-storetype','PKCS12','-storepass','cyberhub-development','-keypass','cyberhub-development','-alias','cyberhub-dev','-keyalg','RSA','-keysize','2048','-validity','3650','-dname','CN=Cyber Hub Manager Development, O=Cyber Hub, C=IN'])
 resources=B/'resources.zip';run(native('aapt2','compile','--dir',P/'app/src/main/res','-o',resources))
-base=B/'base.apk';run(native('aapt2','link','-o',base,'-I',ANDROID,'--manifest',P/'app/src/main/AndroidManifest.xml','-A',P/'app/src/main/assets','--auto-add-overlay','--version-code','11','--version-name','0.1.10',resources))
+base=B/'base.apk';run(native('aapt2','link','-o',base,'-I',ANDROID,'--manifest',P/'app/src/main/AndroidManifest.xml','-A',P/'app/src/main/assets','--auto-add-overlay','--version-code','12','--version-name','0.1.11',resources))
 classjar=B/'app-classes.jar'
 with zipfile.ZipFile(classjar,'w',zipfile.ZIP_DEFLATED) as z:
  for f in classes.rglob('*.class'):z.write(f,f.relative_to(classes))
@@ -59,11 +60,40 @@ for jar in LIB:
    elif n not in entries:entries[n]=z.read(n)
 with zipfile.ZipFile(unsigned,'a',zipfile.ZIP_DEFLATED) as z:
  for f in dex.glob('*.dex'):z.write(f,f.name)
- for f in (P/'app/src/main/jniLibs').rglob('*.so'):z.write(f,'lib/'+str(f.relative_to(P/'app/src/main/jniLibs')))
+ for f in (P/'app/src/main/jniLibs').rglob('*.so'):z.write(f,'lib/'+str(f.relative_to(P/'app/src/main/jniLibs')),compress_type=zipfile.ZIP_STORED)
  for n,b in entries.items():z.writestr(n,b)
  for n,lines in services.items():z.writestr(n,'\n'.join(sorted(lines))+'\n')
-aligned=B/'aligned.apk';run(native('zipalign','-f','4',unsigned,aligned))
-output=P/'dist';output.mkdir(exist_ok=True);apk=output/'Cyber-Hub-Manager-0.1.10.apk'
+aligned=B/'aligned.apk';run(native('zipalign','-P','16','-f','4',unsigned,aligned))
+def verify_native_alignment(apk):
+ import struct
+ page=16384
+ with zipfile.ZipFile(apk) as z:
+  for info in z.infolist():
+   if not (info.filename.startswith('lib/') and info.filename.endswith('.so')):continue
+   if info.compress_type!=zipfile.ZIP_STORED:raise RuntimeError('Native library must be stored uncompressed: '+info.filename)
+   z.fp.seek(info.header_offset);h=z.fp.read(30)
+   if h[:4]!=b'PK\x03\x04':raise RuntimeError('Bad local header: '+info.filename)
+   n,e=struct.unpack_from('<HH',h,26);dataoff=info.header_offset+30+n+e
+   if dataoff%page:raise RuntimeError(f'{info.filename} zip data offset {dataoff:#x} is not 16 KB aligned')
+   d=z.read(info)
+   if d[:4]!=b'\x7fELF':raise RuntimeError('Not an ELF file: '+info.filename)
+   if d[4]==2:
+    phoff=struct.unpack_from('<Q',d,32)[0];entsize=struct.unpack_from('<H',d,54)[0];count=struct.unpack_from('<H',d,56)[0];fmt='<Q';po,pv,pm,pa=8,16,40,48
+   else:
+    phoff=struct.unpack_from('<I',d,28)[0];entsize=struct.unpack_from('<H',d,42)[0];count=struct.unpack_from('<H',d,44)[0];fmt='<I';po,pv,pm,pa=4,8,20,28
+   loads=0;relro_end=0
+   for i in range(count):
+    o=phoff+i*entsize;t=struct.unpack_from('<I',d,o)[0]
+    if t==1:
+     off=struct.unpack_from(fmt,d,o+po)[0];va=struct.unpack_from(fmt,d,o+pv)[0];align=struct.unpack_from(fmt,d,o+pa)[0]
+     if align<page or off%align!=va%align:raise RuntimeError(f'{info.filename} LOAD off={off:#x} va={va:#x} align={align:#x} fails 16 KB alignment')
+     loads+=1
+    elif t==0x6474e552:relro_end=struct.unpack_from(fmt,d,o+pv)[0]+struct.unpack_from(fmt,d,o+pm)[0]
+   if not loads:raise RuntimeError('No LOAD segments: '+info.filename)
+   if relro_end and relro_end%page:raise RuntimeError(f'{info.filename} RELRO ends at {relro_end:#x}, not 16 KB-aligned')
+   print('16 KB OK',info.filename,'zip',hex(dataoff),'loads',loads)
+verify_native_alignment(aligned)
+output=P/'dist';output.mkdir(exist_ok=True);apk=output/'Cyber-Hub-Manager-0.1.11.apk'
 signed=B/('signed-'+uuid.uuid4().hex+'.apk')
 run(java('-jar',BT/'lib/apksigner.jar','sign','--ks',key,'--ks-pass','pass:cyberhub-development','--key-pass','pass:cyberhub-development','--out',signed,aligned))
 run(java('-jar',BT/'lib/apksigner.jar','verify','--verbose',signed))

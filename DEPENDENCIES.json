@@ -213,5 +213,15 @@
     "group": "org.bouncycastle",
     "artifact": "bcprov-jdk18on",
     "version": "1.76"
+  },
+  {
+    "group": "com.github.termux.termux-app",
+    "artifact": "terminal-emulator",
+    "version": "v0.118.3"
+  },
+  {
+    "group": "com.github.termux.termux-app",
+    "artifact": "terminal-view",
+    "version": "v0.118.3"
   }
 ]

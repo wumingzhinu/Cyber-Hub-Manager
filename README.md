@@ -100,6 +100,16 @@ No physical Android device/emulator was available. Installation, actual WebView 
 
 The signing certificate is a **public development key** bundled to make local signing work. It cannot update an app signed by a different developer; use your own key for a production identity. APK size includes the offline Java compiler, compile-only Android API library and resource-aware APKS merge engine. The API library is copied to cache only on the first Java compilation.
 
+## 16 KB page size support
+
+Android 16/17 on 16 KB-page devices warns when an APK contains native libraries that are not 16 KB aligned. Both native dependencies are covered:
+
+- `libtermux.so` is rebuilt with `-Wl,-z,max-page-size=16384` (NDK r28c) so every LOAD segment uses `p_align = 0x4000`; the original AAR library is excluded.
+- `libzstd-jni-1.5.7-6.so` is already 16 KB ELF-aligned.
+- Native libraries are stored uncompressed in the APK and the archive is aligned with `zipalign -P 16 -f 4` (build-tools 35.0.0 or newer).
+
+`tools/build.py` refuses to publish an APK whose native libraries are compressed, whose ZIP data offsets are not 16 KB aligned, or whose ELF LOAD segments fail the 16 KB check. The 16 KB rebuild itself can be regenerated with `tools/build-libtermux.sh`.
+
 ## Build
 
 JDK 17, Android SDK 34 and build-tools 35.0.0:
@@ -114,13 +124,13 @@ All runtime JARs, four Zstandard Android ABIs and local UI assets are included. 
 python tools/build.py --sdk /absolute/path/to/android-sdk
 ```
 
-Its default build-tools selection is 34.0.0; pass `--tools` for another installed build-tools directory. Output: `dist/Cyber-Hub-Manager-0.1.11.apk`. It compiles with desktop ECJ, converts with D8, aligns, signs, verifies signatures and checks packaged assets before publishing.
+Its default build-tools selection is 35.0.0 (required for `zipalign -P 16`); pass `--tools` for another installed build-tools directory. It stores native libraries uncompressed, aligns them to 16 KB, then verifies every packaged ELF LOAD segment and ZIP data offset before publishing. Output: `dist/Cyber-Hub-Manager-0.1.11.apk`. It compiles with desktop ECJ, converts with D8, aligns, signs, verifies signatures and checks packaged assets before publishing.
 
 `python tools/dependencies.py` recreates pinned runtime JARs. `python tools/compiler-api.py /path/to/platforms/android-34/android.jar` recreates the compile-only classpath asset. Dependency/source/license information is in `THIRD-PARTY-NOTICES.txt`, `DEPENDENCIES.json` and `licenses/`.
 
 ## Terminal component
 
-The embedded terminal uses the Termux `terminal-emulator` and `terminal-view` libraries (GPLv3), resolved from JitPack. Native PTY support is provided by `libtermux.so`, packaged for arm64-v8a, armeabi-v7a, x86 and x86_64. The session runs the device's `/system/bin/sh`; no Termux bootstrap or package repository is bundled. The screen is a black full-screen terminal with a two-row key bar (`Esc`/`Tab`/`PgUp`/`Home`/arrows/`End` and `Ctrl`/`Alt`/`PgDn`/arrows/keyboard toggle); the `⋮` menu provides paste, clear and close, and the system Back button also closes the terminal.
+The embedded terminal uses the Termux `terminal-emulator` and `terminal-view` libraries (GPLv3); their Java APIs are vendored for both build paths (`terminal-emulator` in `app/libs`, `terminal-view` in `tools/termux/libs`), while the Gradle build also resolves `terminal-view` from JitPack for its resources; the native PTY library is rebuilt locally. Native PTY support is provided by `libtermux.so`, packaged for arm64-v8a, armeabi-v7a, x86 and x86_64. The Termux AAR ships a 4 KB-aligned library, so the project vendors a rebuild produced from the same v0.118.3 `termux.c` with NDK r28c and 16 KB `max-page-size`; `tools/build-libtermux.sh` reproduces it. The session runs the device's `/system/bin/sh`; no Termux bootstrap or package repository is bundled. The screen is a black full-screen terminal with a two-row key bar (`Esc`/`Tab`/`PgUp`/`Home`/arrows/`End` and `Ctrl`/`Alt`/`PgDn`/arrows/keyboard toggle); the `⋮` menu provides paste, clear and close, and the system Back button also closes the terminal.
 
 ## Source and tests
 

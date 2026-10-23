@@ -61,7 +61,14 @@ def jar(item):
 with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:list(pool.map(jar,seen.items()))
 (ROOT/'DEPENDENCIES.json').write_text(json.dumps([{'group':g,'artifact':a,'version':v} for (g,a),v in seen.items()],indent=2)+'\n')
 
+def fetch(url):
+ for _ in range(3):
+  try:return urllib.request.urlopen(url,timeout=120).read()
+  except Exception as e:last=e
+ raise last
+
 # Android Zstandard JNI AAR; package its Java API and four Android ABIs.
+# zstd-jni 1.5.7-6 is already 16 KB ELF-aligned and the build stores .so uncompressed.
 import zipfile, io
 g,a,v='com.github.luben','zstd-jni','1.5.7-6'
 with zipfile.ZipFile(io.BytesIO(download(g,a,v,'aar'))) as z:
@@ -69,4 +76,48 @@ with zipfile.ZipFile(io.BytesIO(download(g,a,v,'aar'))) as z:
   if n=='classes.jar':(LIB/f'{a}-{v}.jar').write_bytes(z.read(n))
   elif n.startswith('jni/') and n.endswith('.so'):
    p=ROOT/'app/src/main/jniLibs'/n[4:];p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(z.read(n))
-p=ROOT/'DEPENDENCIES.json';deps=json.loads(p.read_text());deps.append({'group':g,'artifact':a,'version':v});p.write_text(json.dumps(deps,indent=2)+'\n')
+
+# Termux terminal-view/terminal-emulator Java APIs. The AAR's libtermux.so is
+# 4 KB-aligned, so it is intentionally not extracted; the 16 KB rebuild is
+# vendored in app/src/main/jniLibs and reproduced by tools/build-libtermux.sh.
+# terminal-emulator jars go to app/libs (its AAR is excluded from Gradle);
+# terminal-view's jar goes to tools/termux/libs for tools/build.py only, so it
+# does not duplicate the classes and resources merged from the Gradle AAR.
+VIEW_LIB=ROOT/'tools/termux/libs';VIEW_LIB.mkdir(parents=True,exist_ok=True)
+for a,lib in (('terminal-emulator',LIB),('terminal-view',VIEW_LIB)):
+ g,v='com.github.termux.termux-app','v0.118.3'
+ url=f'https://jitpack.io/{g.replace(".","/")}/{a}/{v}/{a}-{v}.aar'
+ with zipfile.ZipFile(io.BytesIO(fetch(url))) as z:
+  (lib/f'{a}-{v}.jar').write_bytes(z.read('classes.jar'))
+ print('Fetched',f'{a}-{v}.jar',flush=True)
+# The four vendored libtermux.so files must stay 16 KB ELF-aligned.
+import struct
+PT_LOAD,PT_GNU_RELRO=1,0x6474e552
+def _verify_elf(path):
+ d=path.read_bytes()
+ if d[:4]!=b'\x7fELF':raise RuntimeError(f'Not an ELF file: {path}')
+ if d[4]==2:
+  phoff=struct.unpack_from('<Q',d,32)[0];entsize=struct.unpack_from('<H',d,54)[0];count=struct.unpack_from('<H',d,56)[0];po,pv,pm,pa=8,16,40,48;fmt='<Q'
+ else:
+  phoff=struct.unpack_from('<I',d,28)[0];entsize=struct.unpack_from('<H',d,42)[0];count=struct.unpack_from('<H',d,44)[0];po,pv,pm,pa=4,8,20,28;fmt='<I'
+ loads=0;relro_end=0
+ for i in range(count):
+  o=phoff+i*entsize;t=struct.unpack_from('<I',d,o)[0]
+  if t==PT_LOAD:
+   off=struct.unpack_from(fmt,d,o+po)[0];va=struct.unpack_from(fmt,d,o+pv)[0];align=struct.unpack_from(fmt,d,o+pa)[0]
+   if align<16384 or off%align!=va%align:raise RuntimeError(f'{path} has a LOAD segment below 16 KB alignment or not congruent')
+   loads+=1
+  elif t==PT_GNU_RELRO:
+   relro_end=struct.unpack_from(fmt,d,o+pv)[0]+struct.unpack_from(fmt,d,o+pm)[0]
+ if not loads:raise RuntimeError(f'No LOAD segment: {path}')
+ if relro_end and relro_end%16384:raise RuntimeError(f'{path} RELRO ends at {relro_end:#x}, not 16 KB-aligned')
+for p in (ROOT/'app/src/main/jniLibs').rglob('*.so'):_verify_elf(p)
+for abi in ('arm64-v8a','armeabi-v7a','x86','x86_64'):
+ if not (ROOT/'app/src/main/jniLibs'/abi/'libtermux.so').exists():raise RuntimeError(f'Missing libtermux.so for {abi}; run tools/build-libtermux.sh')
+p=ROOT/'DEPENDENCIES.json';deps=json.loads(p.read_text())
+deps=[d for d in deps if (d['group'],d['artifact'])!=('com.github.luben','zstd-jni')]
+deps.append({'group':'com.github.luben','artifact':'zstd-jni','version':'1.5.7-6'})
+for a in ('terminal-emulator','terminal-view'):
+ deps=[d for d in deps if (d['group'],d['artifact'])!=('com.github.termux.termux-app',a)]
+ deps.append({'group':'com.github.termux.termux-app','artifact':a,'version':'v0.118.3'})
+p.write_text(json.dumps(deps,indent=2)+'\n')
