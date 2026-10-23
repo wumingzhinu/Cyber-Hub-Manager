@@ -596,6 +596,8 @@ body.light .cm-s-cyber .cm-number,body.light .cm-s-cyber .cm-atom{color:#9a6700}
 .listrow .main{font-size:14px}
 .listrow small{font-size:11px;color:var(--muted);font-family:var(--mono);letter-spacing:-.02em}
 .listrow svg{width:20px;height:20px;color:var(--muted)}
+.mini{flex:none;color:var(--accent);border:1px solid var(--control);border-radius:var(--radius-pill);padding:5px 12px;font-size:12px;font-weight:600}
+.mini:active{background:var(--raised)}
 .searchline{padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface)}
 .searchline input{height:36px;font-size:13px}
 .searchline button{color:var(--accent);font-size:12px;font-weight:600;padding:8px 10px;border-radius:6px}
