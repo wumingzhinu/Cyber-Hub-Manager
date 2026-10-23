@@ -1,0 +1,21 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.cyberhub.manager'
+    compileSdk 34
+    buildToolsVersion '35.0.0'
+    signingConfigs { development { storeFile file('src/main/assets/development-signing.p12'); storePassword 'cyberhub-development'; keyAlias 'cyberhub-dev'; keyPassword 'cyberhub-development'; storeType 'PKCS12' } }
+    buildTypes { debug { signingConfig signingConfigs.development } }
+    defaultConfig { applicationId 'com.cyberhub.manager'; minSdk 26; targetSdk 34; versionCode 12; versionName '0.1.11' }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
+    packaging { resources { excludes += ['META-INF/DEPENDENCIES','META-INF/INDEX.LIST','META-INF/*.SF','META-INF/*.RSA','META-INF/*.DSA','META-INF/versions/**']; pickFirsts += ['META-INF/LICENSE*','META-INF/NOTICE*'] } }
+}
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation('dev.rikka.shizuku:api:13.1.5') { exclude group: 'androidx.annotation', module: 'annotation' }
+    implementation('dev.rikka.shizuku:provider:13.1.5') { exclude group: 'androidx.annotation', module: 'annotation' }
+    // Classes are vendored in app/libs; the AAR's 4 KB-aligned libtermux.so must not be packaged.
+    implementation('com.github.termux.termux-app:terminal-view:v0.118.3') { exclude group: 'com.github.termux.termux-app', module: 'terminal-emulator' }
+    implementation 'com.github.mwiede:jsch:0.2.20'
+    implementation 'com.squareup.okhttp3:okhttp:3.14.9'
+    implementation('eu.agno3.jcifs:jcifs-ng:2.1.10') { exclude group: 'org.slf4j', module: 'slf4j-api' }
+}
