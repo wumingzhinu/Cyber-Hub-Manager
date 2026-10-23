@@ -10,14 +10,11 @@ android {
     packaging { resources { excludes += ['META-INF/DEPENDENCIES','META-INF/INDEX.LIST','META-INF/*.SF','META-INF/*.RSA','META-INF/*.DSA','META-INF/versions/**','META-INF/LICENSE*','META-INF/NOTICE*','okhttp3/internal/publicsuffix/NOTICE']; pickFirsts += [] } }
 }
 dependencies {
+    // 本地 app/libs 携带全部运行时类（jsch、okhttp/okio、jcifs-ng、shizuku、bouncycastle、termux 等）。
+    // 不要同时声明它们的远程 Maven 坐标，否则 checkDebugDuplicateClasses 会因同一 jar 出现两次而失败。
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    // 本地 libs 已携带 jsch/okhttp/jcifs/shizuku 的 jar，远程坐标仅用于传递依赖解析，
-    // 排除自身类以避免 checkDebugDuplicateClasses 与本地 jar 冲突。
-    implementation('dev.rikka.shizuku:api:13.1.5') { exclude group: 'androidx.annotation', module: 'annotation'; exclude group: 'dev.rikka.shizuku', module: 'api' }
-    implementation('dev.rikka.shizuku:provider:13.1.5') { exclude group: 'androidx.annotation', module: 'annotation'; exclude group: 'dev.rikka.shizuku', module: 'provider' }
-    // Classes are vendored in app/libs; the AAR's 4 KB-aligned libtermux.so must not be packaged.
+    // 仅保留传递依赖解析所需的坐标，并排除已被本地 libs 提供的模块类。
+    implementation('dev.rikka.shizuku:api:13.1.5') { exclude group: 'androidx.annotation', module: 'annotation' }
+    implementation('dev.rikka.shizuku:provider:13.1.5') { exclude group: 'androidx.annotation', module: 'annotation' }
     implementation('com.github.termux.termux-app:terminal-view:v0.118.3') { exclude group: 'com.github.termux.termux-app', module: 'terminal-emulator' }
-    implementation('com.github.mwiede:jsch:0.2.20') { exclude group: 'com.github.mwiede', module: 'jsch' }
-    implementation('com.squareup.okhttp3:okhttp:3.14.9') { exclude group: 'com.squareup.okhttp3', module: 'okhttp'; exclude group: 'com.squareup.okio', module: 'okio' }
-    implementation('eu.agno3.jcifs:jcifs-ng:2.1.10') { exclude group: 'eu.agno3.jcifs', module: 'jcifs-ng'; exclude group: 'org.slf4j', module: 'slf4j-api' }
 }
