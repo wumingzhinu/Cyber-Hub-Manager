@@ -11,9 +11,12 @@ android {
 }
 dependencies {
     // 本地 app/libs 携带全部运行时类（jsch、okhttp/okio、jcifs-ng、shizuku api/provider、
-    // bouncycastle、termux 等）。不要再声明它们的远程坐标：
-    //   - shizuku provider 已在 AndroidManifest.xml 直接声明，无需 AAR 的 manifest 合并
-    //   - termux terminal-view 的类与本地 libs 重复
-    // 因此这里仅保留本地 fileTree。
+    // bouncycastle、termux 等）。不要再声明它们的远程坐标，否则会重复打包同一份类。
+    // ShizukuProvider 已在 AndroidManifest.xml 直接声明，无需远程 AAR 的 manifest 合并。
     implementation fileTree(dir: 'libs', include: ['*.jar'])
+    // terminal-view 的 jar 只在 tools/build.py 的桌面 classpath（tools/termux/libs）里，
+    // 没有放进 app/libs，所以 Gradle 构建仍需远程 AAR 来提供 com.termux.view.TerminalView 类。
+    implementation('com.github.termux.termux-app:terminal-view:v0.118.3') {
+        exclude group: 'com.github.termux.termux-app', module: 'terminal-emulator'
+    }
 }
