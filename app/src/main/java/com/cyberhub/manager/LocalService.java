@@ -3,6 +3,7 @@ package com.cyberhub.manager;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.*;
 import java.util.concurrent.*;
@@ -58,6 +59,11 @@ public final class LocalService {
         clients.shutdownNow();
     }
 
+    private static boolean same(String a, String b) {
+        if (a == null || b == null) return false;
+        return MessageDigest.isEqual(a.getBytes(StandardCharsets.UTF_8), b.getBytes(StandardCharsets.UTF_8));
+    }
+
     class Server {
         final String kind, protocol, code, token;
         final File root;
@@ -66,6 +72,8 @@ public final class LocalService {
         final FtpShareServer ftp;
         final Map<String, Device> devices = new LinkedHashMap<>();
         final Set<String> blocked = new LinkedHashSet<>();
+        final Map<String, int[]> failures = new HashMap<>();
+        final Map<String, Long> lockedUntil = new HashMap<>();
         volatile boolean active = true;
 
         Server(String k, File f, String p, int requestedPort, String c) throws Exception {
@@ -160,6 +168,28 @@ public final class LocalService {
 
         synchronized boolean isBlocked(String ip) { return blocked.contains(ip); }
 
+        synchronized boolean throttled(String ip) {
+            Long until = lockedUntil.get(ip);
+            if (until == null) return false;
+            if (until > System.currentTimeMillis()) return true;
+            lockedUntil.remove(ip);
+            failures.remove(ip);
+            return false;
+        }
+
+        synchronized void failed(String ip) {
+            int[] count = failures.computeIfAbsent(ip, k -> new int[1]);
+            if (++count[0] >= 5) {
+                lockedUntil.put(ip, System.currentTimeMillis() + 60000L);
+                count[0] = 0;
+            }
+        }
+
+        synchronized void succeeded(String ip) {
+            failures.remove(ip);
+            lockedUntil.remove(ip);
+        }
+
         synchronized String device(String ip, String protocol, String agent, Socket s) {
             String id = s == null ? "http:" + ip : "ftp:" + ip + ":" + s.getPort();
             Device d = devices.get(id);
@@ -227,17 +257,23 @@ public final class LocalService {
                     reply(client, 403, "text/plain", "已断开".getBytes(StandardCharsets.UTF_8));
                     return;
                 }
+                if (throttled(ip)) {
+                    reply(client, 429, "text/plain", "尝试次数过多，请稍后重试".getBytes(StandardCharsets.UTF_8));
+                    return;
+                }
                 URI uri = URI.create(req[1]);
                 Map<String, String> q = query(uri.getRawQuery());
                 String auth = headers.getOrDefault("authorization", "");
                 boolean authorized = kind.equals("mcp")
-                        ? auth.equals("Bearer " + token)
-                        : auth.equals("Bearer " + code) || code.equals(q.get("code")) || code.equals(q.get("token"))
-                                || code.equals(headers.getOrDefault("x-pairing-code", ""));
+                        ? same(auth, "Bearer " + token)
+                        : same(auth, "Bearer " + code) || same(q.get("code"), code) || same(q.get("token"), code)
+                                || same(headers.get("x-pairing-code"), code);
                 if (!authorized) {
+                    failed(ip);
                     reply(client, 401, "text/plain", (kind.equals("mcp") ? "需要 token" : "需要配对码").getBytes(StandardCharsets.UTF_8));
                     return;
                 }
+                succeeded(ip);
                 if (!kind.equals("mcp")) device(ip, "HTTP", headers.getOrDefault("user-agent", ""), null);
 
                 if (kind.equals("mcp")) {
@@ -380,7 +416,10 @@ public final class LocalService {
     static void reply(Socket c, int status, String type, byte[] data) throws IOException {
         OutputStream out = c.getOutputStream();
         out.write(("HTTP/1.1 " + status + " Response\r\nContent-Type: " + type + "\r\nContent-Length: " + data.length
-                + "\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+                + "\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff"
+                + "\r\nX-Frame-Options: DENY\r\nReferrer-Policy: no-referrer"
+                + "\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src data:"
+                + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
         out.write(data);
         out.flush();
     }

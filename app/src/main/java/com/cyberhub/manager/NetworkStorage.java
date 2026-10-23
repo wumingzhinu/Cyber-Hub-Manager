@@ -1,8 +1,11 @@
 package com.cyberhub.manager;
 
 import com.jcraft.jsch.ChannelSftp;
+import com.jcraft.jsch.HostKey;
+import com.jcraft.jsch.HostKeyRepository;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
+import com.jcraft.jsch.UserInfo;
 import jcifs.CIFSContext;
 import jcifs.context.SingletonContext;
 import jcifs.smb.NtlmPasswordAuthenticator;
@@ -45,8 +48,10 @@ import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Deque;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -56,11 +61,16 @@ import java.util.Properties;
 import java.util.TimeZone;
 import java.util.TreeMap;
 import java.util.Vector;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 /** Remote file access for the saved network storage entries. */
 public final class NetworkStorage {
+    private static volatile File knownHosts;
     private NetworkStorage(){}
+
+    /** Optional trust store location; without it SFTP falls back to in-memory pinning only. */
+    public static void init(File dir){ knownHosts=dir; }
 
     public static Object call(JSONObject a)throws Exception{
         JSONObject c=a.optJSONObject("connection");
@@ -85,10 +95,21 @@ public final class NetworkStorage {
     }
 
     private static String clean(String value){
-        String s=value==null?"":value.trim();
+        String s=value==null?"":value.trim().replace('\\','/');
         while(s.startsWith("/"))s=s.substring(1);
         while(s.endsWith("/"))s=s.substring(0,s.length()-1);
-        return s;
+        if(s.isEmpty())return s;
+        Deque<String> parts=new ArrayDeque<>();
+        for(String part:s.split("/")){
+            if(part.isEmpty()||part.equals("."))continue;
+            if(part.equals("..")){
+                if(parts.isEmpty())throw new IllegalArgumentException("远程路径不能超出根目录");
+                parts.removeLast();
+                continue;
+            }
+            parts.addLast(part);
+        }
+        return String.join("/",parts);
     }
 
     private static String join(String parent,String child){
@@ -272,6 +293,10 @@ public final class NetworkStorage {
     }
 
     private static Object webdav(JSONObject c,JSONObject a,String op)throws Exception{
+        String base=c.optString("url","").trim().toLowerCase(Locale.ROOT);
+        boolean creds=!c.optString("user","").isEmpty()||!c.optString("password","").isEmpty();
+        if(creds&&base.startsWith("http://")&&!c.optBoolean("allowInsecure",false))
+            throw new IOException("WebDAV 密码不能经明文 HTTP 发送，请改用 https://");
         String path=clean(a.optString("path",""));
         switch(op){
             case "test":{
@@ -447,7 +472,8 @@ public final class NetworkStorage {
         if(!key.isEmpty())jsch.addIdentity(key,c.optString("passphrase",""));
         Session session=jsch.getSession(c.optString("user",""),host,port);
         session.setPassword(c.optString("password",""));
-        session.setConfig("StrictHostKeyChecking",c.optBoolean("strictHostKey",false)?"yes":"no");
+        session.setHostKeyRepository(new HostKeys(knownHosts,c.optString("hostKeyFingerprint","").trim()));
+        session.setConfig("StrictHostKeyChecking",c.optBoolean("strictHostKey",true)?"yes":"no");
         session.setConfig("PreferredAuthentications",key.isEmpty()?"password,keyboard-interactive,publickey":"publickey,password,keyboard-interactive");
         session.connect(20000);
         ChannelSftp channel=null;
@@ -913,5 +939,59 @@ public final class NetworkStorage {
             out.append(Character.forDigit(b&15,16));
         }
         return out.toString();
+    }
+
+    /**
+     * Host-key pinning for SFTP. First contact is recorded (accept-new), every later
+     * connection must present the same key; hostKeyFingerprint pins out of band.
+     */
+    private static final class HostKeys implements HostKeyRepository {
+        private static final Map<String,String> MEMORY=new ConcurrentHashMap<>();
+        private final File file;
+        private final String fingerprint;
+        HostKeys(File dir,String fingerprint){this.file=dir==null?null:new File(dir,"known_hosts");this.fingerprint=fingerprint;}
+        private Map<String,String> load(){
+            Map<String,String> map=new TreeMap<>(MEMORY);
+            if(file==null||!file.isFile())return map;
+            Properties p=new Properties();
+            try(InputStream in=new FileInputStream(file)){p.load(in);}catch(Exception ignored){return map;}
+            for(String name:p.stringPropertyNames())map.put(name,p.getProperty(name));
+            return map;
+        }
+        private void store(String host,String value){
+            if(file==null){MEMORY.put(host,value);return;}
+            Map<String,String> map=load();map.put(host,value);
+            Properties p=new Properties();p.putAll(map);
+            try(OutputStream out=new FileOutputStream(file)){p.store(out,"cyberhub known hosts");}catch(Exception ignored){}
+        }
+        @Override public int check(String host,byte[] key){
+            String id=host==null?"":host.toLowerCase(Locale.ROOT);
+            if(!fingerprint.isEmpty()){
+                String actual=sha256Base64(key);
+                if(!MessageDigest.isEqual(actual.getBytes(StandardCharsets.UTF_8),fingerprint.getBytes(StandardCharsets.UTF_8)))return CHANGED;
+            }
+            String known=load().get(id);
+            if(known==null){store(id,Base64.getEncoder().encodeToString(key));return OK;}
+            byte[] expected;
+            try{expected=Base64.getDecoder().decode(known);}catch(Exception e){return CHANGED;}
+            return MessageDigest.isEqual(expected,key)?OK:CHANGED;
+        }
+        @Override public void add(HostKey hostkey,UserInfo ui){
+            if(hostkey!=null)store(hostkey.getHost().toLowerCase(Locale.ROOT),Base64.getEncoder().encodeToString(hostkey.getKey()));
+        }
+        @Override public void remove(String host,String type){
+            if(file==null){MEMORY.remove(host==null?"":host.toLowerCase(Locale.ROOT));return;}
+            Map<String,String> map=load();
+            if(host!=null)map.remove(host.toLowerCase(Locale.ROOT));
+            Properties p=new Properties();p.putAll(map);
+            try(OutputStream out=new FileOutputStream(file)){p.store(out,"cyberhub known hosts");}catch(Exception ignored){}
+        }
+        @Override public String getKnownHostsRepositoryID(){return file==null?"memory":file.getPath();}
+        @Override public HostKey[] getHostKey(){return new HostKey[0];}
+        @Override public HostKey[] getHostKey(String host,String type){return new HostKey[0];}
+        private static String sha256Base64(byte[] data){
+            try{return Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256").digest(data));}
+            catch(Exception e){return "";}
+        }
     }
 }
