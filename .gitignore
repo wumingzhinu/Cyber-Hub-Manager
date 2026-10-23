@@ -7,5 +7,3 @@ dist/
 .idea/
 __pycache__/
 *.pyc
-/home/nvdadmin/Cyber-Hub-Manager/.build/
-/home/nvdadmin/Cyber-Hub-Manager/tests/fixtures/

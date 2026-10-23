@@ -56,42 +56,6 @@ Ten formerly-placeholder features are now functional. Each is reachable from the
 
 All ten tools write a new signed APK via `DataEngine.publishApk`. The signing key is the bundled development certificate; replace it for production use.
 
-## Machine translation
-
-**Drawer → Tools → Translation service** picks the provider, target language and credentials. Requests go out from the device; keys are kept in the app's private storage and never leave it except to the chosen provider.
-
-| Provider | Credentials | Notes |
-| --- | --- | --- |
-| Tencent Cloud TMT | SecretId, SecretKey, project ID, optional region | TC3-HMAC-SHA256 signed `TextTranslate` call against `tmt.tencentcloudapi.com`. |
-| Baidu Translate | AppID, App Key | `api/trans/vip/translate` with the salted MD5 signature. |
-| Microsoft Translator | subscription key, optional resource region | `api.cognitive.microsofttranslator.com/translate` (API 3.0). |
-| AI model | base URL, API key, model, custom prompt | OpenAI-compatible `/chat/completions`. The prompt may use `{lang}` (target language) and `{text}` (source). |
-
-- **Translate** appears in the DEX string dialog and in the ARSC translation dialog; it fills the target field so the result can be edited before it is applied.
-- **Translate all** in the DEX *Strings* tab and in the ARSC translation mode translates the visible strings, writes them into the project or the target language configuration, and keeps the normal save flow (DEX: save project; ARSC: save resource table).
-- The source language is detected automatically. The target language follows the settings page, or the ARSC configuration qualifier (`en-rUS` → English).
-- Each provider uses its own language codes; the shared list covers 19 languages including Simplified and Traditional Chinese.
-
-Translation quality depends on the provider. Machine output still needs review, especially for product names, placeholders (`%1$s`) and format specifiers.
-
-## Edit → save → sign
-
-1. Grant file access, tap an APK, choose **View**, then open `classes.dex` and select the DEX files needed by the project.
-2. Open a class. Edit Smali directly or use **Editor menu → View Java**. Java opens the enclosing class when you select a nested class.
-3. Edit the source and tap Save. Returning from a dirty DEX editor also attempts to compile; an error keeps you in the editor. Save changes the temporary project, not the original APK yet.
-4. Use **Editor/DEX menu → Save and sign APK**. This writes the verified signed result to the source path and keeps its previous contents as a backup. The result dialog offers Install.
-5. Alternatively, **Save project / Save and exit** writes unsigned changes with a backup; **Export DEX / APK** creates a separate copy. Use APK **Function → Sign a copy** when signing an exported APK. Repeat sign-copy uses a unique output name.
-6. A `.bak` file can be restored from its Rename dialog. Existing backups are retained with unique suffixes.
-
-Java compilation requires valid, compilable source. Decompiled Java is not guaranteed to reconstruct the original source or behavior. Obfuscated names, unresolved dependencies, incomplete JADX output or unsupported language constructs can require manual correction or Smali editing. Incomplete-method placeholders are rejected. Package/class renaming is rejected. The compiler targets Java 8 syntax and Android API 34 signatures; lambdas/method references needing desugaring are rejected rather than emitting unsafe bytecode. New APIs still need the appropriate runtime Android version. These limits do not make the Java editor read-only.
-
-## Available tools
-
-| Area | Working implementation |
-| --- | --- |
-| Files | Two side-by-side panes on phones and tablets. Folder/history navigation, selection, copy/move, batch rename, bookmarks, recycle/restore, backup restore, create, filter, properties/SHA-256, share. The recycle bin opens only in the pane that was active last and leaves the other pane untouched; entries are grouped by date (today, yesterday, 7 days, 30 days, older), the header shows folder/file counts plus total size, and the pane keeps the file manager’s bottom shortcut bar. Swipe rows for multi-select, then restore or permanently delete the selected entries in one action. |
-| Archives | ZIP, 7z, TAR, TAR.GZ/XZ/ZST/BZ2/LZ4, GZIP; format-appropriate compression, ZIP/7z AES passwords, split archives, extraction. Entries inside an archive can be renamed: the archive is rewritten as an `-edited` copy with the new name, the original package is left untouched, and stale JAR signatures are dropped so the copy can be signed again. |
-| APK | Metadata/icon, signature verification, browse/extract, edited archive output, signing, Android install intent. **Protection assessment** with scoring and hardening/anti-debug/anti-hook detection. **XML batch replace/translate** on AXML entries. **Signature check bypass** (scan and patch signature verification methods). **Log probe injection** (zero-register DEX probe). **File provider injection** (adds a `ContentProvider` to the manifest and DEX). **Resource slimming** (unused resource removal). **Resource obfuscation** (shortens resource entry names). **Resource deobfuscation** (restores readable resource names). **Resource deduplication** (merges SHA-256-identical resource files). **DEX repartitioning** (rebalances classes across `classes*.dex` with reference-budget limits). |
 | APKS | Convert base/config/feature split sets; select bundletool variants; preserve signed standalone APKs; sign and verify merged APKs; install output. |
 | Binary XML | Decode/edit/encode; preserve existing typed values and resource IDs. New symbolic resources need a separate resource compiler. |
 | DEX | MultiDex tree/history/search, string occurrences, member navigation, usages/subclasses/overrides, Smali/Java editing, compile/save/export/sign. |

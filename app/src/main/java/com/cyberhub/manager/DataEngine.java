@@ -75,42 +75,15 @@ public final class DataEngine {
    case "resDeobfuscate":{File src=apkSource(a),dst=outputApk(src,"_resdeobf");JSONObject r=ResTools.deobfuscate(src,dst,a);record("RES 反混淆："+r.optInt("entries")+" 个资源名");return publishApk(dst).put("stats",r);}
    case "resDedupe":{File src=apkSource(a),dst=outputApk(src,"_dedupe");JSONObject r=ResTools.dedupe(src,dst);record("数据复用：合并 "+r.optInt("removed")+" 个重复资源");return publishApk(dst).put("stats",r);}
    case "dexRepartition":{File src=apkSource(a),dst=outputApk(src,"_split");JSONObject r=DexTools.repartition(src,dst,a);record("DEX 重新划分："+r.optInt("dexes")+" 个 DEX");return publishApk(dst).put("stats",r);}
-   case "dexFiles":return dexFiles(resolve(a));
-   case "dexProperties":return dex.properties();
-   case "dexRepair":{JSONObject r=dex.repair();record("已修复 DEX："+r.getInt("count")+" 个");return r;}
-   case "dexToSmali":{File out=new File(a.getString("destination"));JSONObject r=dex.toSmali(out);record("已导出 Smali："+r.getString("path"));return r;}
-   case "dexToJar":{File out=new File(a.getString("destination"));JSONObject r=dex.toJar(out);record("已生成 JAR："+r.getString("path"));return r;}
-   case "dexDirectProperties":{File src=resolve(a);DexEngine t=dex.scratch(src,new JSONArray().put(dexEntryName(a,src)));try{JSONObject r=t.properties().put("path",dexLabel(a,src));return r;}finally{t.dispose();}}
-   case "dexDirectRepair":{File src=resolve(a);String name=dexEntryName(a,src);DexEngine t=dex.scratch(src,new JSONArray().put(name));try{JSONObject r=t.repair();byte[] data=FileOps.read(t.files.get(name),256L*1024*1024);JSONObject p=publishDex(a,name,data);record("已修复 DEX："+dexLabel(a,src));return r.put("path",p.getString("path")).put("backup",p.getString("backup")).put("signed",p.getBoolean("signed"));}finally{t.dispose();}}
-   case "dexDirectToSmali":{File src=resolve(a);File out=new File(a.getString("destination"));DexEngine t=dex.scratch(src,new JSONArray().put(dexEntryName(a,src)));try{JSONObject r=t.toSmali(out).put("source",dexLabel(a,src));record("已导出 Smali："+r.getString("path"));return r;}finally{t.dispose();}}
-   case "dexDirectToJar":{File src=resolve(a);File out=new File(a.getString("destination"));DexEngine t=dex.scratch(src,new JSONArray().put(dexEntryName(a,src)));try{JSONObject r=t.toJar(out).put("source",dexLabel(a,src));record("已生成 JAR："+r.getString("path"));return r;}finally{t.dispose();}}
-   case "dexDirectReplaceStrings":{File src=resolve(a);String name=dexEntryName(a,src);DexEngine t=dex.scratch(src,new JSONArray().put(name));try{JSONObject r=t.replaceStrings(a).put("path",dexLabel(a,src));if(r.optInt("replaced",0)==0)return r.put("changed",false);byte[] data=FileOps.read(t.files.get(name),256L*1024*1024);JSONObject p=publishDex(a,name,data);record("已替换 DEX 字符串 "+r.getInt("replaced")+" 处");return r.put("changed",true).put("backup",p.getString("backup")).put("signed",p.getBoolean("signed"));}finally{t.dispose();}}
-   case "dexMerge":{File out=new File(a.getString("destination"));JSONObject r=dex.mergeDex(a,out);record("已合并 DEX："+r.getInt("classes")+" 个类");return r;}
-   case "dexReplaceStrings":{JSONObject r=dex.replaceStrings(a);record("已替换 DEX 字符串 "+r.getInt("replaced")+" 处");return r;}
-   case "dexOpen":return dex.open(resolve(a),a.getJSONArray("entries"));
-   case "dexTree":return dex.tree(a.optString("prefix"));
-   case "dexCode":return dex.code(a.getString("class"),a.optString("mode","smali"),a.optString("decompiler","auto"));
-   case "dexSave":{Object out=dex.save(a.getString("class"),a.getString("text"));record("已保存 Smali "+a.getString("class"));return out;}
-   case "dexJavaSave":{File api=new File(activity.getCacheDir(),"compiler-api-34.jar");if(!api.isFile())try(InputStream in=activity.getAssets().open("compiler/android-api.jar")){FileOps.writeAtomic(api,FileOps.bytes(in,16L*1024*1024),false);}Object out=dex.saveJava(a.getString("class"),a.getString("text"),api);record("已编译 Java "+a.getString("class"));return out;}
-   case "dexExport":{File output=new File(a.getString("destination"));Object out=dex.export(output);record("已导出 DEX 更改");return out;}
-   case "dexQuery":return dex.query(a);
-   case "dexSaveSign":{try(InputStream key=activity.getAssets().open("development-signing.p12")){JSONObject r=dex.commit(key);record("已保存、签名并校验 "+r.getString("path"));return r;}}
-   case "dexCommit":{JSONObject r=dex.commit();record("已保存 DEX 工程到 "+r.getString("path"));return r;}
-   case "restoreBackup":{File f=FileOps.restoreBackup(new File(a.getString("path")));record("已还原备份 "+f);return f.getPath();}
-   case "dexStrings":return dex.strings(a.optString("query"));
-   case "dexSearch":return dex.search(a.optString("query"));
-    case "dexDecrypt":{File f=new File(a.getString("path"));DexStringDecryptor.Report r=DexStringDecryptor.run(f,a.optString("custom",""),null);record("DEX 字符串解密：候选 "+r.candidates+"，调用点 "+r.callSites+"，解出 "+r.decrypted);JSONObject o=new JSONObject();o.put("candidates",r.candidates);o.put("callSites",r.callSites);o.put("decrypted",r.decrypted);o.put("skipped",r.skipped);JSONArray s=new JSONArray();for(String x:r.samples)s.put(x);o.put("samples",s);JSONArray er=new JSONArray();for(String x:r.errors)er.put(x);o.put("errors",er);o.put("output",f.getName().replaceFirst("(\\.apk|\\.dex)$","_dec$1"));return o;}
-    case "dexDeobfuscate":{File f=new File(a.getString("path"));JSONArray tc=new JSONArray();if(a.has("targetClasses")){JSONArray cl=a.getJSONArray("targetClasses");for(int i=0;i<cl.length();i++)tc.put(cl.getString(i));}List<String> targetList=new ArrayList<>();for(int i=0;i<tc.length();i++)targetList.add(tc.getString(i));DexDeobfuscator.Report r=DexDeobfuscator.run(f,a.optString("custom",""),targetList,null);record("DEX 混淆对抗：类 "+r.classesRenamed+"，方法 "+r.methodsRenamed+"，字段 "+r.fieldsRenamed);JSONObject o=new JSONObject();o.put("classesRenamed",r.classesRenamed);o.put("methodsRenamed",r.methodsRenamed);o.put("fieldsRenamed",r.fieldsRenamed);JSONArray rn=new JSONArray();for(String x:r.renamedClasses)rn.put(x);o.put("renamedClasses",rn);JSONArray er=new JSONArray();for(String x:r.errors)er.put(x);o.put("errors",er);o.put("output",f.getName().replaceFirst("(\\.apk|\\.dex)$","_deobf$1"));return o;}
-   case "apps":return apps();
-   case "log":return new JSONArray(activity.getPreferences(0).getString("log","[]"));
-   case "terminal":return terminal(a.getString("command"),a.optString("path",workspace.getPath()));
-   case "plugins":return plugins(a);
    case "service":return services.action(a);
    case "ftp":return FtpTools.call(a);
    case "netStorage":return NetworkStorage.call(a);
    default:throw new IOException("未知操作："+action);
   }
  }
+  File resolve(JSONObject a)throws Exception{
+   String archive=a.optString("archive");if(archive.isEmpty())return new File(a.getString("path"));String entry=a.getString("entry");String token=Integer.toHexString((archive+"|"+entry).hashCode());File dir=new File(cache,token);dir.mkdirs();File f=FileOps.child(dir,new File(entry).getName());byte[] bytes=FileOps.zipEntry(new File(archive),entry,256L*1024*1024);FileOps.writeAtomic(f,bytes,false);return f;
+  }
   static String strip(String name){int p=name.lastIndexOf('.');return p>0?name.substring(0,p):name;}
   File apkSource(JSONObject a)throws Exception{File f=resolve(a);if(!f.isFile()||!f.getName().toLowerCase(Locale.ROOT).endsWith(".apk"))throw new IOException("请选择一个 APK 文件");return f;}
   File outputApk(File source,String suffix)throws Exception{
@@ -134,9 +107,6 @@ public final class DataEngine {
     throw error;
    }
   }
- File resolve(JSONObject a)throws Exception{
-  String archive=a.optString("archive");if(archive.isEmpty())return new File(a.getString("path"));String entry=a.getString("entry");String token=Integer.toHexString((archive+"|"+entry).hashCode());File dir=new File(cache,token);dir.mkdirs();File f=FileOps.child(dir,new File(entry).getName());byte[] bytes=FileOps.zipEntry(new File(archive),entry,256L*1024*1024);FileOps.writeAtomic(f,bytes,false);return f;
- }
  JSONArray list(JSONObject a)throws Exception{
   JSONArray out=new JSONArray();String archive=a.optString("archive");if(!archive.isEmpty()){
    String prefix=a.optString("entry");if(!prefix.isEmpty()&&!prefix.endsWith("/"))prefix+="/";Map<String,JSONObject>items=new TreeMap<>();
@@ -228,8 +198,8 @@ public final class DataEngine {
  void sign(File src,File dst)throws Exception{sign(src,dst,true,true,true);}
   void sign(File src,File dst,boolean v1,boolean v2,boolean v3)throws Exception{try(InputStream key=activity.getAssets().open("development-signing.p12")){ApkSigning.sign(src,dst,key,v1,v2,v3);}}
  JSONArray dexFiles(File f)throws Exception{JSONArray a=new JSONArray();if(f.getName().endsWith(".dex"))return a.put(f.getName());try(ZipFile z=new ZipFile(f)){Enumeration<? extends ZipEntry>en=z.entries();while(en.hasMoreElements()){String n=en.nextElement().getName();if(n.matches("classes[0-9]*\\.dex"))a.put(n);}}return a;}
-  static String dexEntryName(JSONObject a,File src)throws Exception{return a.optString("archive").isEmpty()?src.getName():a.getString("entry");}
-  static String dexLabel(JSONObject a,File src){String archive=a.optString("archive");return archive.isEmpty()?src.getPath():archive+"!"+a.optString("entry");}
+   static String dexEntryName(JSONObject a,File src)throws Exception{return a.optString("archive").isEmpty()?src.getName():a.getString("entry");}
+   static String dexLabel(JSONObject a,File src){String archive=a.optString("archive");return archive.isEmpty()?src.getPath():archive+"!"+a.optString("entry");}
   JSONObject publishDex(JSONObject a,String entry,byte[] data)throws Exception{
    String archive=a.optString("archive");
    if(archive.isEmpty()){
