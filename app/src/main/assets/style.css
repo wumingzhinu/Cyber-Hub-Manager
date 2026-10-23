@@ -769,3 +769,76 @@ body.list-large .filename{font-size:16px;line-height:21px}
 body.list-large .fileicon{width:34px;height:34px}
 body.list-large .fileicon svg{width:24px;height:24px}
 body.list-large .filemeta{font-size:11px;line-height:15px}
+
+/* Global UI polish — keep this block last so legacy screens share one rhythm. */
+:root{
+  --radius-card:12px;--radius-control:10px;--tap:44px;
+  --shadow-1:0 1px 2px #0006,0 10px 30px #0005;
+  --shadow-2:0 20px 56px #0008;
+  color-scheme:dark;
+}
+body.light{
+  --shadow-1:0 1px 2px #0000000f,0 10px 28px #0000000a;
+  --shadow-2:0 20px 56px #0000001f;
+  color-scheme:light;
+}
+body{text-rendering:optimizeLegibility}
+button,a,[role=button]{touch-action:manipulation}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#content,.toolpage,.drawer,.dialog,.settingsScroll,.pane,.tree{scrollbar-width:thin;scrollbar-color:var(--control) transparent}
+#content::-webkit-scrollbar,.toolpage::-webkit-scrollbar,.drawer::-webkit-scrollbar,.dialog::-webkit-scrollbar,.settingsScroll::-webkit-scrollbar,.pane::-webkit-scrollbar{width:6px;height:6px}
+#content::-webkit-scrollbar-thumb,.toolpage::-webkit-scrollbar-thumb,.drawer::-webkit-scrollbar-thumb,.dialog::-webkit-scrollbar-thumb,.settingsScroll::-webkit-scrollbar-thumb,.pane::-webkit-scrollbar-thumb{background:var(--control);border-radius:999px}
+
+/* Surfaces, sheets and the drawer */
+.drawer{border-radius:0 16px 16px 0;overflow-x:hidden}
+.drawerHead{position:sticky;top:0;z-index:3;background:var(--surface)}
+.sectionLabel{background:var(--surface)}
+.drawerRow{min-height:var(--tap);transition:background-color .15s,color .15s}
+.dialog{box-shadow:var(--shadow-2);border-radius:var(--radius-card)}
+.dialog .actions button{min-height:40px}
+#toast{bottom:max(66px,calc(env(safe-area-inset-bottom) + 62px));border-radius:12px;box-shadow:var(--shadow-1);text-align:center}
+#progress{height:2px;box-shadow:0 0 8px #4a8ad6aa}
+
+/* Rows, controls and storage */
+.file,.treeRow,.actionGrid button,.options .option,.listrow,.settingsRow{transition:background-color .15s,color .15s}
+.fileicon{transition:color .15s,background-color .15s,transform .15s}
+.listrow{border-radius:8px}
+.primary{min-height:40px;display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:filter .15s,transform .15s}
+.primary:active{transform:scale(.98)}
+.mini{min-height:32px;padding:5px 13px;transition:background-color .15s,transform .15s}
+.mini:active{transform:scale(.98)}
+.pill{border-radius:999px;padding:3px 8px}
+.meter{height:4px;border-radius:999px;overflow:hidden}
+.meter span{border-radius:999px;transition:width .3s ease}
+.storage .small{font-size:11px}
+.banner{padding:12px 14px;line-height:1.55;margin-bottom:14px;box-shadow:var(--shadow-1)}
+.toolpage{padding-bottom:max(28px,calc(18px + env(safe-area-inset-bottom)))}
+
+/* Pointer-only affordances, keyboard focus stays above */
+@media(hover:hover) and (pointer:fine){
+  .iconbtn:hover,.bottom-key:hover{background:var(--raised);color:var(--text)}
+  .file:hover:not(.selected),.treeRow:hover,.drawerRow:hover,.listrow:hover{background:var(--raised)}
+  .dialog .actions button:hover{background:var(--surface);color:var(--text)}
+  .primary:hover{filter:brightness(1.06)}
+  .mini:hover{background:var(--raised)}
+  .actionGrid button:hover{background:var(--surface)}
+}
+@media(min-width:720px){
+  .dialog{max-width:520px}
+  .drawer{max-width:380px}
+  .fileActionMenu{max-width:560px}
+  .settingsScroll{max-width:760px}
+}
+@media(max-width:360px){
+  .dialog{padding:16px 14px 6px}
+  .toolpage{padding-left:14px;padding-right:14px}
+  .banner{padding:10px 12px}
+}
+@media(prefers-reduced-motion:reduce){
+  .primary:active,.mini:active{transform:none}
+  .meter span{transition:none}
+}
+body.light .pane:not(.active){background:var(--surface)}
+body.light .listrow:active{background:var(--active)}
+body.light .shade,body.light .drawerShade{background:#00000055}
+body.light .sheetShade{background:#00000040}
