@@ -4,6 +4,7 @@ import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.*;
@@ -23,6 +24,8 @@ final class FtpShareServer implements Closeable {
     private final ServerSocket server;
     private final ExecutorService clients;
     private final Set<Socket> sessions = Collections.newSetFromMap(new ConcurrentHashMap<Socket, Boolean>());
+    private final Map<String, int[]> failures = new ConcurrentHashMap<>();
+    private final Map<String, Long> lockedUntil = new ConcurrentHashMap<>();
     private volatile boolean active = true;
 
     FtpShareServer(File root, String code, int port, Events events) throws IOException {
@@ -73,6 +76,28 @@ final class FtpShareServer implements Closeable {
         clients.shutdownNow();
     }
 
+    private boolean throttled(String ip) {
+        Long until = lockedUntil.get(ip);
+        if (until == null) return false;
+        if (until > System.currentTimeMillis()) return true;
+        lockedUntil.remove(ip);
+        failures.remove(ip);
+        return false;
+    }
+
+    private void failed(String ip) {
+        int[] count = failures.computeIfAbsent(ip, k -> new int[1]);
+        if (++count[0] >= 5) {
+            lockedUntil.put(ip, System.currentTimeMillis() + 60000L);
+            count[0] = 0;
+        }
+    }
+
+    private static boolean same(String a, String b) {
+        if (a == null || b == null) return false;
+        return MessageDigest.isEqual(a.getBytes(StandardCharsets.UTF_8), b.getBytes(StandardCharsets.UTF_8));
+    }
+
     private void session(Socket socket) {
         String ip = socket.getInetAddress().getHostAddress();
         String id = null;
@@ -81,6 +106,7 @@ final class FtpShareServer implements Closeable {
             BufferedReader in = new BufferedReader(new InputStreamReader(control.getInputStream(), StandardCharsets.UTF_8));
             BufferedWriter out = new BufferedWriter(new OutputStreamWriter(control.getOutputStream(), StandardCharsets.UTF_8));
             reply(out, 220, "赛博中枢管家 FTP 就绪");
+            if (throttled(ip)) { reply(out, 421, "尝试次数过多，请稍后重试"); return; }
             File cwd = root;
             boolean user = false, authed = false;
             while (active) {
@@ -100,7 +126,7 @@ final class FtpShareServer implements Closeable {
                 }
                 if (command.equals("PASS")) {
                     if (!user) { reply(out, 503, "请先发送 USER"); continue; }
-                    if (!code.equals(arg)) { authed = false; reply(out, 530, "配对码错误"); continue; }
+                    if (!same(code, arg)) { failed(ip); authed = false; reply(out, 530, "配对码错误"); continue; }
                     authed = true;
                     id = events.opened(ip, "FTP", control);
                     reply(out, 230, "登录成功");

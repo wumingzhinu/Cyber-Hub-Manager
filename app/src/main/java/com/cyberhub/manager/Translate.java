@@ -29,14 +29,17 @@ public final class Translate {
   {"zhTW","繁體中文","zh-TW","cht","zh-Hant","Traditional Chinese"}
  };
  final Context context;
- Translate(Context c){context=c;}
+ final SecretStore secrets;
+ static final String[] SECRET_KEYS={"tencentSecretId","tencentSecretKey","baiduAppKey","microsoftKey","aiApiKey"};
+ Translate(Context c){context=c;secrets=new SecretStore(c);}
  // ---------- configuration ----------
  SharedPreferences prefs(){return context.getSharedPreferences(PREFS,Context.MODE_PRIVATE);}
+ static boolean secretKey(String key){for(String k:SECRET_KEYS)if(k.equals(key))return true;return false;}
  JSONObject config()throws Exception{
   SharedPreferences p=prefs();JSONObject o=new JSONObject();
   o.put("provider",p.getString("provider","tencent"));
   o.put("target",p.getString("target","en"));
-  for(String k:new String[]{"tencentSecretId","tencentSecretKey","tencentProjectId","tencentRegion","baiduAppId","baiduAppKey","microsoftKey","microsoftRegion","aiBaseUrl","aiApiKey","aiModel","aiPrompt"})o.put(k,p.getString(k,""));
+  for(String k:new String[]{"tencentSecretId","tencentSecretKey","tencentProjectId","tencentRegion","baiduAppId","baiduAppKey","microsoftKey","microsoftRegion","aiBaseUrl","aiApiKey","aiModel","aiPrompt"})o.put(k,secretKey(k)?secrets.get(k):p.getString(k,""));
   o.put("configured",configured(o));
   return o;
  }
@@ -50,7 +53,10 @@ public final class Translate {
  }
  void saveConfig(JSONObject a)throws Exception{
   SharedPreferences.Editor e=prefs().edit();
-  for(String k:new String[]{"provider","target","tencentSecretId","tencentSecretKey","tencentProjectId","tencentRegion","baiduAppId","baiduAppKey","microsoftKey","microsoftRegion","aiBaseUrl","aiApiKey","aiModel","aiPrompt"})if(a.has(k))e.putString(k,a.optString(k,""));
+  for(String k:new String[]{"provider","target","tencentSecretId","tencentSecretKey","tencentProjectId","tencentRegion","baiduAppId","baiduAppKey","microsoftKey","microsoftRegion","aiBaseUrl","aiApiKey","aiModel","aiPrompt"})if(a.has(k)){
+   if(secretKey(k))secrets.put(k,a.optString(k,""));
+   else e.putString(k,a.optString(k,""));
+  }
   e.apply();
  }
  JSONObject languages()throws Exception{
