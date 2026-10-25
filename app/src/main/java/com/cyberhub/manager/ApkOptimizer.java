@@ -38,16 +38,19 @@ public final class ApkOptimizer {
      boolean isManifest=name.equals("AndroidManifest.xml");
      boolean isArsc=name.equals("resources.arsc");
      boolean isResXml=name.startsWith("res/")&&name.endsWith(".xml");
-     boolean store=isManifest||isArsc||(!isResXml&&name.startsWith("res/"));
+     boolean isNativeLib=name.startsWith("lib/")&&name.endsWith(".so");
+     // native 库必须 STORED + 16KB 对齐，否则系统无法加载（extractNativeLibs 失败）
+     boolean store=isManifest||isArsc||isNativeLib||(!isResXml&&name.startsWith("res/"));
      if(store){
       n.setMethod(ZipEntry.STORED);
       byte[] data=FileOps.zipEntry(source,name,512L*1024*1024);
       CRC32 crc=new CRC32();crc.update(data);
       n.setSize(data.length);n.setCompressedSize(data.length);n.setCrc(crc.getValue());
-      int align=(name.startsWith("lib/")&&name.endsWith(".so"))?16384:4;
-      int already=30+name.getBytes(java.nio.charset.StandardCharsets.UTF_8).length+(int)(out.count%4);
-      int pad=(align-(already%align))%align;
-      if(pad>0){if(pad<4)pad+=align;byte[] extra=new byte[pad];extra[0]=0x35;extra[1]=(byte)0xd9;extra[2]=(byte)(pad-4);extra[3]=(byte)((pad-4)>>>8);n.setExtra(extra);}
+       int align=isNativeLib?16384:4;
+       int nameLen=name.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+       int already=(int)((out.count+30+nameLen)%align);
+       int pad=(align-already)%align;
+       if(pad>0){if(pad<4)pad+=align;byte[] extra=new byte[pad];extra[0]=0x35;extra[1]=(byte)0xd9;extra[2]=(byte)(pad-4);extra[3]=(byte)((pad-4)>>>8);n.setExtra(extra);}
       zo.putNextEntry(n);
       zo.write(data);
       zo.closeEntry();

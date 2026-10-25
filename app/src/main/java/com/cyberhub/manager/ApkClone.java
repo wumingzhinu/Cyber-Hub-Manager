@@ -91,7 +91,10 @@ public final class ApkClone {
    try(ZipFile z=new ZipFile(src)){Enumeration<? extends ZipEntry>en=z.entries();while(en.hasMoreElements()){ZipEntry e=en.nextElement();String n=e.getName();if(n.matches("classes[0-9]*\\.dex")){byte[] d=FileOps.zipEntry(src,n,512L*1024*1024);byte[] r=replacePackageInDex(d,oldPkg,newPackage);if(r!=d)edits.put(n,r);}}}
   }
   FileOps.rewriteZip(src,out,edits);
-  if(signingKey!=null)ApkSigning.sign(out,out,signingKey);else return out.getPath();
+  if(signingKey!=null){
+   File signed=new File(out.getParentFile(),out.getName()+".signed");
+   try{ApkSigning.sign(out,signed,signingKey);FileOps.replace(signed,out);}finally{signed.delete();}
+  }
   return out.getPath();
  }
 
