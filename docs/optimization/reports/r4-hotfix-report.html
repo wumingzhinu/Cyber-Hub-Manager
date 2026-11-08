@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cyber-Hub-Manager · r4 修复报告</title>
+<style>
+  :root { --bg:#0f1420; --card:#171e2e; --line:#2a3448; --fg:#e6ecf7; --dim:#93a1bb; --ok:#4ade80; --accent:#5b9cff; --warn:#fbbf24; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:32px 20px 64px; background:var(--bg); color:var(--fg);
+         font:15px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; }
+  .wrap { max-width:940px; margin:0 auto; }
+  h1 { font-size:26px; margin:0 0 6px; letter-spacing:.5px; }
+  .sub { color:var(--dim); margin:0 0 28px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px 24px; margin-bottom:18px; }
+  h2 { font-size:17px; margin:0 0 14px; color:var(--accent); border-left:3px solid var(--accent); padding-left:10px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--dim); font-weight:500; width:170px; white-space:nowrap; }
+  tr:last-child td, tr:last-child th { border-bottom:none; }
+  code, .mono { font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace; font-size:13px; word-break:break-all; }
+  .badge { display:inline-block; padding:2px 9px; border-radius:999px; font-size:12px;
+           background:rgba(74,222,128,.13); color:var(--ok); border:1px solid rgba(74,222,128,.3); }
+  ul { margin:0; padding-left:20px; } li { margin:5px 0; }
+  a { color:var(--accent); text-decoration:none; } a:hover { text-decoration:underline; }
+  .warn { background:rgba(251,191,36,.07); border-color:rgba(251,191,36,.35); }
+  .warn h2 { color:var(--warn); border-left-color:var(--warn); }
+  .key { background:#121a29; border:1px solid var(--line); border-left:3px solid var(--warn); border-radius:8px; padding:14px 18px; margin-top:12px; }
+  .foot { color:var(--dim); font-size:12px; text-align:center; margin-top:26px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>r4 修复报告 <span class="badge">已构建并发布</span></h1>
+  <p class="sub">「代码全是黑色」根因定位与修复 · 提交 <span class="mono">8369fea</span> · CI run 42472596502</p>
+
+  <div class="card">
+    <h2>结论：不是配色问题，是资源被 404 拦截</h2>
+    <p>既不是没装新 APK，也不是 CSS 没写。<strong>Java 层 <span class="mono">MainActivity.localAsset()</span> 里有一份只放行 9 个文件的固定白名单</strong>：</p>
+    <p class="mono" style="color:var(--dim);background:#121a29;padding:10px 12px;border-radius:6px">Arrays.asList("app.html","app.js","boot.js","style.css","vendor/codemirror.js","vendor/codemirror.css","vendor/clike.js","vendor/xml.js","vendor/searchcursor.js")</p>
+    <p>前三轮新增的 <strong>30 个 CodeMirror 语法模式</strong>、<span class="mono">lang/packs.js</span>、<span class="mono">vendor/katex/*</span>、JetBrains Mono 字体、<span class="mono">ninepatch.js</span>、<span class="mono">markdown-preview.js</span> 等全部返回 404。因此真机上 <span class="mono">python.js</span> 从未加载，<span class="mono">CodeMirror.modes.python</span> 不存在，<span class="mono">editorModeFor()</span> 返回 <span class="mono">null</span>，所有 token 不着色。同理，语言切换、KaTeX 预览、九宫格编辑等新功能此前也不可用。</p>
+  </div>
+
+  <div class="card">
+    <h2>证据链</h2>
+    <table>
+      <tr><th>浏览器渲染</th><td>用真实 Chromium 加载同款 CSS + CodeMirror + python mode，浅色主题下关键字紫 <span class="mono">rgb(130,80,223)</span>、字符串绿 <span class="mono">rgb(10,123,69)</span>、注释灰、数字棕 —— 前端代码本身完全正常</td></tr>
+      <tr><th>打包核对</th><td>APK 内 33 个 <span class="mono">vendor/*.js</span> 一个不少，<span class="mono">python.js</span> 存在，<span class="mono">app.html</span> 引用的脚本无缺失</td></tr>
+      <tr><th>新旧对比</th><td>旧版 <span class="mono">app.html</span> 只加载 4 个脚本；新版加载 38 个，但 Java 白名单仍只放行 9 个 → 新脚本全部 404</td></tr>
+      <tr><th>CI 盲区</th><td>CI 只跑 JS 语法与 JVM 冒烟，不启动真机 WebView，所以这个拦截一直没被自动测试发现</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>修复内容（5 个文件，+70 / −6）</h2>
+    <table>
+      <tr><th>资源放行</th><td><span class="mono">isStaticAsset()</span> 安全目录放行：拒绝 <span class="mono">..</span> / 绝对路径 / <span class="mono">%</span> / <span class="mono">:</span> / 反斜杠；显式排除 <span class="mono">development-signing.p12</span> 与 jar/dex/apk/p12/jks/keystore；仅允许静态资源扩展名。新增 <span class="mono">assetMime()</span> 返回正确 MIME（含 <span class="mono">font/woff2</span>）</td></tr>
+      <tr><th>缓存</th><td><span class="mono">WebSettings.LOAD_NO_CACHE</span> + 升级后清一次 WebView 缓存（<span class="mono">assetEpoch=4</span>），避免旧 <span class="mono">app.html</span> 被复用</td></tr>
+      <tr><th>编码字段</th><td><span class="mono">DataEngine.read()</span> 返回 <span class="mono">encoding</span></td></tr>
+      <tr><th>可见诊断</th><td>编辑器信息栏显示「编码 · 语法模式 · 构建标记 <span class="mono">r4</span>」，一眼可确认资源是否已更新</td></tr>
+      <tr><th>编辑器增强</th><td>当前行高亮 <span class="mono">cm-activeLine</span>；补齐浅色 / 深色主题下 def、builtin、variable、type、property、operator、meta、tag、attribute 等 token 配色</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>验证结果</h2>
+    <ul>
+      <li>CI <a href="https://github.com/wumingzhinu/Cyber-Hub-Manager/actions/runs/42472596502" target="_blank">run 42472596502</a>：<span class="badge">success</span> 2m48s，ECJ 编译、前端 3 套冒烟、核心 JVM 全套、v2/v3 签名与 16KB 对齐全部通过</li>
+      <li>放行规则模拟：<span class="mono">app.html</span> 的 38 个引用全部放行；67 个 assets 文件只有 <span class="mono">development-signing.p12</span> 与 <span class="mono">compiler/android-api.jar</span> 被拒</li>
+      <li>前端冒烟：file-icons 8 / open-with 12 / media-player 11 全 PASS；另两项失败与改动前基线逐项一致（英文文案 mock 差异，非回归）</li>
+      <li>新 APK 抽查：含 <span class="mono">UI_BUILD='r4'</span>、<span class="mono">cm-activeLine</span>、<span class="mono">isStaticAsset</span>、<span class="mono">assetEpoch</span>、<span class="mono">encoding</span></li>
+      <li>SHA256 <span class="mono">84c4ed43…ca7b</span> 与 <a href="https://github.com/wumingzhinu/Cyber-Hub-Manager/releases/tag/build-55" target="_blank">Release build-55</a> 公布的 digest 一致；签名证书仍是 <span class="mono">BF:E0:C2:7B…95:04</span>，与旧版相同，<strong>可直接覆盖安装</strong></li>
+    </ul>
+  </div>
+
+  <div class="card warn">
+    <h2>安装后如何确认已生效</h2>
+    <div class="key">
+      <strong>先把应用从最近任务里彻底划掉</strong>（只按返回键不会重新加载 WebView 页面），再覆盖安装 <span class="mono">Cyber-Hub-Manager-0.1.59-r4.apk</span>，然后打开任意 <span class="mono">.py</span> 文件。
+    </div>
+    <ul style="margin-top:12px">
+      <li>编辑器信息栏应显示 <span class="mono">1:1 | UTF-8 · PYTHON · r4</span></li>
+      <li>关键字紫、字符串绿、注释灰、函数名蓝、运算符红；当前行有淡蓝底</li>
+      <li>如果信息栏<strong>没有 <span class="mono">r4</span></strong>，说明设备仍在跑旧资源 → 卸载后重装，或在系统设置里清除该应用数据（新版本已强制禁用缓存并在升级后清缓存）</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>产物</h2>
+    <table>
+      <tr><th>本地 APK</th><td class="mono">/workspace/Cyber-Hub-Manager-0.1.59-r4.apk（21,366,028 B）</td></tr>
+      <tr><th>在线下载</th><td><a href="https://github.com/wumingzhinu/Cyber-Hub-Manager/releases/download/build-55/Cyber-Hub-Manager-0.1.59.apk" target="_blank">Release build-55 直链</a> · <a href="https://github.com/wumingzhinu/Cyber-Hub-Manager/commit/8369fea" target="_blank">提交 8369fea</a></td></tr>
+      <tr><th>说明</th><td>旧版 build-53 APK 已从工作区移除，避免误装</td></tr>
+    </table>
+  </div>
+
+  <p class="foot">生成时间 2026-11-08 18:53 GMT+8 · 由 WorkBuddy 执行</p>
+</div>
+</body>
+</html>

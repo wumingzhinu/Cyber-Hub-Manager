@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>r5 版本核对卡 · Shizuku 诊断</title>
+<style>
+  :root{--bg:#0e1116;--card:#171c24;--line:#28303c;--fg:#e6edf3;--dim:#9aa7b4;--ok:#3fb950;--warn:#d29922;--bad:#f85149;--accent:#58a6ff}
+  @media(prefers-color-scheme:light){:root{--bg:#f6f8fa;--card:#fff;--line:#d8dee4;--fg:#1f2328;--dim:#57606a;--ok:#1a7f37;--warn:#9a6700;--bad:#cf222e;--accent:#0969da}}
+  *{box-sizing:border-box}
+  body{margin:0;padding:18px;background:var(--bg);color:var(--fg);font:15px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:780px;margin:0 auto}
+  h1{font-size:21px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:18px}
+  .banner{background:linear-gradient(135deg,rgba(248,81,73,.14),rgba(210,153,34,.10));border:1px solid var(--warn);border-radius:10px;padding:14px 16px;margin-bottom:18px}
+  .banner b{color:var(--warn);font-size:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:16px}
+  h2{font-size:16px;margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--dim);font-weight:600;white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;background:rgba(127,140,160,.14);padding:1px 5px;border-radius:4px}
+  pre{background:rgba(127,140,160,.10);border:1px solid var(--line);border-radius:8px;padding:12px;overflow-x:auto;font:13px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0}
+  ol{padding-left:20px;margin:0}li{margin:6px 0}
+  .ok{color:var(--ok);font-weight:600}.bad{color:var(--bad);font-weight:600}.warn{color:var(--warn);font-weight:600}
+  .tag{display:inline-block;font-size:12px;padding:1px 7px;border:1px solid var(--line);border-radius:20px;color:var(--dim);margin-left:6px}
+  .foot{color:var(--dim);font-size:12.5px;margin-top:18px;line-height:1.8}
+  a{color:var(--accent)}
+</style>
+</head>
+<body><div class="wrap">
+<h1>r5 版本核对卡</h1>
+<div class="sub">针对刚发来的「提权诊断」截图 · 2026-11-08</div>
+
+<div class="banner">
+  <b>结论：这张诊断来自旧版 APK，不是 r5（build-56）</b><br>
+  设备上运行的仍是 r4 / build-55 或更早版本，所以 <code>shizukuRunning: false</code> 属预期——旧版 Manifest 没有 <code>API_V23</code> 声明，Shizuku 服务端不会推 binder。r5 的修复已经过 CI 与 AXML 元素树校验，是正确的，本轮无需再改代码。
+</div>
+
+<div class="card">
+<h2>三条判断依据</h2>
+<table>
+<tr><th>证据</th><th>说明</th></tr>
+<tr><td>文件哈希相同</td><td>本次截图与上一轮那张 SHA256 完全一致（<code>1280b570…8d32761</code>），是同一张图重发，不是装了新版后重新截的。</td></tr>
+<tr><td>缺 4 个新字段</td><td>r5 的诊断弹窗会打印 <code>apiV23Declared</code>、<code>v3SupportDeclared</code>、<code>binderSeen</code>、<code>shizukuUid</code> 四行；截图里一行都没有。</td></tr>
+<tr><td>npErr 是旧文案</td><td>截图为「Shizuku 服务未启动或 binder 未送达…请确认…若仍连不上，请…停止并重新启动服务」；r5 会改成「<span class="warn">客户端未声明 API_V23 权限（根因）</span>」或带「<b>在 Shizuku「应用管理」里允许本应用</b>」的新措辞。旧文案在 r5 APK 内计数为 <b>0</b>。</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>装好 r5 后，诊断应该长这样</h2>
+<pre>rootGranted: false
+rootAvailable: false
+shizukuInstalled: true
+shizukuProviderRegistered: true
+apiV23Declared（已声明API_V23权限）: true      ← 新增
+v3SupportDeclared（v3客户端标记）: true        ← 新增
+shizukuRunning（服务运行中）: true             ← 目标
+binderSeen（曾收到binder）: true               ← 新增
+shizukuGranted（已授权）: false → 点申请后 true
+shizukuVersion: 13
+shizukuUid（0=root / 2000=adb）: 2000          ← 新增
+elevatedId: uid=2000(shell) ...
+rootListCount: 正数</pre>
+<p style="margin:10px 0 0;color:var(--dim);font-size:13.5px">只要诊断里出现 <code>apiV23Declared</code> 这一行，就说明 r5 已经装对了；看不到就还是旧包（或从最近任务没彻底划掉，WebView 没重新加载）。</p>
+</div>
+
+<div class="card">
+<h2>请按这个顺序做一遍</h2>
+<ol>
+<li>安装 <code>Cyber-Hub-Manager-0.1.59-r5.apk</code>（Release <b>build-56</b>）。签名证书未变，<b>可直接覆盖安装</b>，不用卸载。</li>
+<li><b>从最近任务里把本应用彻底划掉</b>（只按返回键不会重新加载页面）。</li>
+<li>打开 Shizuku 应用：<b>停止服务 → 重新启动服务</b>，并在「应用管理」里允许本应用。服务端用 UID 列表记住已推送对象，覆盖安装后必须重启才会重推 binder。</li>
+<li>重新打开本应用 → 设置 → 启动 → 诊断，把<b>新截图</b>发我。</li>
+</ol>
+</div>
+
+<div class="card">
+<h2>新诊断的结果判读</h2>
+<table>
+<tr><th>看到的结果</th><th>含义 / 下一步</th></tr>
+<tr><td><span class="ok">apiV23Declared: true<br>shizukuRunning: true</span></td><td>已修好。回到授权页点「申请 Shizuku 授权」即可。</td></tr>
+<tr><td><span class="warn">apiV23Declared: true<br>shizukuRunning: false<br>binderSeen: false</span></td><td>代码侧没问题，是<b>设备侧 Shizuku 服务没真正运行</b>。无 Root 设备靠无线调试启动，每次开机或调试断开后服务都会停，需在 Shizuku 应用内重新启动；重启服务后仍不推，就卸载本应用重装一次（触发 PACKAGE_ADDED）。</td></tr>
+<tr><td><span class="bad">看不到 apiV23Declared 这一行</span></td><td>装的还不是 r5 / 页面被缓存。核对关于页是否写有「r5 修复」，必要时清应用数据后重装。</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>不依赖 Shizuku 的兜底方案</h2>
+<p style="margin:0">如果只是要访问 <code>Android/data</code> 等受限目录，用 <b>设置 → 启动 → 授权 Android/data</b>（系统文件访问框架 SAF）即可，<b>不需要 Root 也不需要 Shizuku</b>。Shizuku/Root 是为了浏览更上层的 <code>/data</code> 等目录。</p>
+</div>
+
+<div class="foot">
+APK：<code>/workspace/Cyber-Hub-Manager-0.1.59-r5.apk</code> · 21,366,028 字节<br>
+SHA256 <code>8658c24343a6957cefd00bfe752019bceeae29aea8e052cb1892d15ffa462020</code>（与 Release build-56 官方 digest 一致）<br>
+versionCode 55、签名密钥未变；Web 管理器只读安全模型仍未改动。
+</div>
+</div></body></html>

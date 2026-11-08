@@ -40,3 +40,19 @@
 验证：`aapt2` 打包由 CI 完成；本地集成自检通过、Manifest XML 解析出 `API_V23` 与 `V3_SUPPORT=true`、`app.js`/`boot.js` 语法通过、`javac` 全量 134 个 class 零错误（新增 2 个 listener 内部类）、前端冒烟 8 / 12 / 11 全 PASS，`video-ui-smoke` 与 `java-edit-ui-smoke` 两项失败与改动前基线逐项一致。versionCode 仍为 55、签名密钥未变，可直接覆盖安装。
 
 覆盖安装后需在 Shizuku 应用内**停止并重新启动服务**（服务端的 `PID_LIST`/`UID_LIST` 会记住已推送过的 UID），再从最近任务划掉本应用重新打开；诊断里 `apiV23Declared=true`、`shizukuRunning=true` 即表示通道已打通。
+
+真机复测时收到的一张「提权诊断」截图与 r4 阶段的截图 SHA256 完全相同，且缺少 r5 新增的 `apiV23Declared` / `v3SupportDeclared` / `binderSeen` / `shizukuUid` 四个字段、`npErr` 仍为 r4 旧文案——据此判定该截图来自未升级到 build-56 的旧包，并非 r5 修复失效。核对清单见 `reports/r5-verify-checklist.html`。
+
+## 交付与修复报告（`reports/`）
+
+本目录归档面向用户的 HTML 交付说明，均为只读记录，不参与构建：
+
+| 文件 | 内容 |
+| --- | --- |
+| `github-submit-report.html` | `de9400d` 首次提交记录：73 个文件、+26,218 / −258，远程校验与 CI 状态 |
+| `apk-build-report.html` | GitHub Actions 首次编译打包结果：两次运行 success、签名 APK 校验、Release `build-53` |
+| `r4-hotfix-report.html` | WebView 静态资源白名单根因与修复（提交 `8369fea`、Release `build-55`） |
+| `shizuku-fix-report.html` | Shizuku 授权根因（`API_V23` / `V3_SUPPORT`）与修复（提交 `4af1a97`、Release `build-56`） |
+| `r5-verify-checklist.html` | r5 版本核对卡：旧版诊断与 r5 诊断的字段对照、安装步骤、结果判读与 SAF 兜底方案 |
+
+正式签名 APK 请以仓库 Release `build-56` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。

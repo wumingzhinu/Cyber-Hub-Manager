@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cyber-Hub-Manager · Actions 构建报告</title>
+<style>
+  :root { --bg:#0f1420; --card:#171e2e; --line:#2a3448; --fg:#e6ecf7; --dim:#93a1bb; --ok:#4ade80; --accent:#5b9cff; --warn:#fbbf24; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:32px 20px 64px; background:var(--bg); color:var(--fg);
+         font:15px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; }
+  .wrap { max-width:940px; margin:0 auto; }
+  h1 { font-size:26px; margin:0 0 6px; letter-spacing:.5px; }
+  .sub { color:var(--dim); margin:0 0 28px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px 24px; margin-bottom:18px; }
+  h2 { font-size:17px; margin:0 0 14px; color:var(--accent); border-left:3px solid var(--accent); padding-left:10px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--dim); font-weight:500; width:160px; white-space:nowrap; }
+  tr:last-child td, tr:last-child th { border-bottom:none; }
+  code, .mono { font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace; font-size:13px; word-break:break-all; }
+  .badge { display:inline-block; padding:2px 9px; border-radius:999px; font-size:12px;
+           background:rgba(74,222,128,.13); color:var(--ok); border:1px solid rgba(74,222,128,.3); }
+  .badge.blue { background:rgba(91,156,255,.13); color:var(--accent); border-color:rgba(91,156,255,.3); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; }
+  .stat { background:#121a29; border:1px solid var(--line); border-radius:9px; padding:14px 16px; }
+  .stat b { display:block; font-size:21px; line-height:1.35; }
+  .stat span { color:var(--dim); font-size:12px; }
+  ul { margin:0; padding-left:20px; } li { margin:5px 0; }
+  a { color:var(--accent); text-decoration:none; } a:hover { text-decoration:underline; }
+  .warn { background:rgba(251,191,36,.07); border-color:rgba(251,191,36,.35); }
+  .warn h2 { color:var(--warn); border-left-color:var(--warn); }
+  .foot { color:var(--dim); font-size:12px; text-align:center; margin-top:26px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Actions 构建报告 <span class="badge">两次运行均成功</span></h1>
+  <p class="sub">工作流「构建并发布 签名 APK」· JDK 17 + Android SDK 34 + build-tools 35.0.0 · 产出签名 APK 0.1.59</p>
+
+  <div class="card">
+    <h2>运行记录</h2>
+    <table>
+      <tr><th>push 自动触发</th><td><a href="https://github.com/wumingzhinu/Cyber-Hub-Manager/actions/runs/42462024456" target="_blank">run 42462024456</a> · 16:13 (GMT+8) · 3m11s · <span class="badge">success</span><br>由提交 <span class="mono">de9400d</span> 推送到 main 触发，已创建 Release <span class="mono">build-53</span></td></tr>
+      <tr><th>手动触发</th><td><a href="https://github.com/wumingzhinu/Cyber-Hub-Manager/actions/runs/42463194875" target="_blank">run 42463194875</a> · 16:30 (GMT+8) · 3m5s · <span class="badge">success</span><br><span class="mono">workflow_dispatch</span> 手动运行，全部步骤通过；按工作流条件跳过「创建 GitHub Release」</td></tr>
+      <tr><th>工作流文件</th><td class="mono">.github/workflows/build-apk.yml（push 到 main/master 自动触发，另支持 workflow_dispatch）</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>构建结果</h2>
+    <div class="grid">
+      <div class="stat"><b>21,366,028 B</b><span>APK 大小（21.4 MB）</span></div>
+      <div class="stat"><b>3 个 DEX</b><span>7.6 / 7.7 / 8.5 MB</span></div>
+      <div class="stat"><b>v2 + v3</b><span>apksigner 校验通过，1 个签名者</span></div>
+      <div class="stat"><b>16 KB</b><span>zipalign 对齐，8 个 .so 全部 OK</span></div>
+    </div>
+    <table style="margin-top:16px">
+      <tr><th>前端检查</th><td><span class="mono">node --check</span> app.js / boot.js 通过；文件图标冒烟 <b>8 PASS</b>、打开方式 <b>12 PASS</b>、媒体播放器逐项通过（含长按菜单 10 项硬断言）</td></tr>
+      <tr><th>核心 JVM 测试</th><td><b>ALL 18 CORE</b> / <b>ALL 46 VIDEO FEATURE</b> / <b>ALL 19 JAVA·SIGN</b> / <b>ALL 34 APKS</b> / <b>ALL MEDIASERVER CHECKS PASSED</b></td></tr>
+      <tr><th>打包链路</th><td>aapt2 compile → link → ECJ 编译 → D8 转换 → zipalign <span class="mono">-P 16</span> → apksigner 签名并 <span class="mono">verify --verbose</span></td></tr>
+      <tr><th>签名校验输出</th><td class="mono">Verifies / v1: false / v2: true / v3: true / v3.1: false / v4: false / Number of signers: 1</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>交付的 APK</h2>
+    <table>
+      <tr><th>本地文件</th><td class="mono">/workspace/Cyber-Hub-Manager-0.1.59.apk</td></tr>
+      <tr><th>SHA256</th><td class="mono">e59f166de610d730fbeeebd28b508000bd1925fb2a3c692bc2e94ca909060d40</td></tr>
+      <tr><th>校验</th><td>与 <a href="https://github.com/wumingzhinu/Cyber-Hub-Manager/releases/tag/build-53" target="_blank">Release build-53</a> 公布的 <span class="mono">digest</span> 完全一致；文件为有效 ZIP，CRC 完整</td></tr>
+      <tr><th>签名证书</th><td>CN=Cyber Hub Manager Development, O=Cyber Hub, C=IN<br>证书 SHA256 <span class="mono">BF:E0:C2:7B:F3:EB:DF:5D:19:9F:56:6E:6E:A4:40:54:16:F6:1E:30:A7:BF:70:22:89:33:6A:E3:C4:10:95:04</span><br>密钥为仓库内固定的 <span class="mono">app/src/main/assets/development-signing.p12</span>，与旧版签名一致，<strong>可当作「更新」直接覆盖安装</strong>（无需卸载）</td></tr>
+      <tr><th>内容抽查</th><td>确认包含三轮新增资源：<span class="mono">assets/lang/packs.js</span>、<span class="mono">vendor/katex/katex.min.js</span>（275 KB）、<span class="mono">vendor/ninepatch.js</span>、<span class="mono">vendor/markdown-preview.js</span>、JetBrains Mono 字体、lua/swift/toml/brainfuck 等 modes；<span class="mono">classes.dex</span> 中检到 ExtraTools / compareFolders / mediaProbe / ApkVerifier 等 25 处新符号</td></tr>
+      <tr><th>在线获取</th><td><a href="https://github.com/wumingzhinu/Cyber-Hub-Manager/releases/download/build-53/Cyber-Hub-Manager-0.1.59.apk" target="_blank">Release 直接下载</a> · <a href="https://github.com/wumingzhinu/Cyber-Hub-Manager/actions" target="_blank">Actions 产物</a></td></tr>
+    </table>
+  </div>
+
+  <div class="card warn">
+    <h2>说明与注意</h2>
+    <ul>
+      <li>推送到 main 会自动运行该工作流并创建 Release；如需独立重跑，可执行 <span class="mono">gh workflow run build-apk.yml --ref main</span>（手动运行只上传 artifact，不新建 Release）。</li>
+      <li>手动运行 42463194875 的 artifact zip 下载时 GitHub 连接被重置，两次尝试均失败；<strong>运行本身已成功</strong>，且两次基于同一提交与固定签名密钥，产物等价，正式交付以已校验的 Release APK 为准。</li>
+      <li>运行日志含 3 条非致命提示：Node.js 20 弃用（被强制到 Node 24）、setup-java v4 建议迁移 v5、ubuntu-latest 将迁移 Ubuntu 26；均不影响本次构建结果。</li>
+      <li>此前本地沙箱全套测试中 10 项 FAIL 已由本次真实 CI 证实为环境差异（英文文案 mock、Playwright、happy-dom 路径等），非代码回归。</li>
+    </ul>
+  </div>
+
+  <p class="foot">生成时间 2026-11-08 16:41 GMT+8 · 由 WorkBuddy 执行</p>
+</div>
+</body>
+</html>

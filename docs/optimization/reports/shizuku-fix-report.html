@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shizuku 授权修复报告 · r5</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1f2328;--muted:#5b6570;--line:#e3e7ec;--accent:#0969da;--ok:#1a7f37;--warn:#9a6700;--code:#f2f4f7}
+@media(prefers-color-scheme:dark){:root{--bg:#0d1117;--card:#161b22;--fg:#e6edf3;--muted:#9198a1;--line:#30363d;--accent:#58a6ff;--ok:#3fb950;--warn:#d29922;--code:#1c2128}}
+*{box-sizing:border-box}
+body{margin:0;padding:28px 18px 60px;background:var(--bg);color:var(--fg);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:960px;margin:0 auto}
+h1{font-size:26px;margin:0 0 6px;letter-spacing:.2px}
+.sub{color:var(--muted);margin:0 0 24px;font-size:14px}
+h2{font-size:19px;margin:30px 0 12px;padding-left:11px;border-left:4px solid var(--accent)}
+h3{font-size:16px;margin:20px 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:14px 0}
+table{width:100%;border-collapse:collapse;font-size:14px;margin:10px 0}
+th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+th{background:var(--code);font-weight:600;white-space:nowrap}
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+code{background:var(--code);padding:2px 5px;border-radius:4px;word-break:break-all}
+pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:14px;overflow:auto;line-height:1.55;margin:10px 0}
+.bad{color:#cf222e;font-weight:600}
+.good{color:var(--ok);font-weight:600}
+.warn{color:var(--warn)}
+.pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;background:rgba(9,105,218,.12);color:var(--accent)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.kv{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.kv b{display:block;font-size:12px;color:var(--muted);font-weight:500;margin-bottom:4px}
+.kv span{font-size:14px;word-break:break-all}
+ul{padding-left:22px;margin:8px 0}li{margin:5px 0}
+blockquote{margin:12px 0;padding:10px 14px;border-left:3px solid var(--accent);background:var(--code);border-radius:0 8px 8px 0;color:var(--muted)}
+a{color:var(--accent)}
+.foot{margin-top:34px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Shizuku 授权修复报告 <span class="pill">r5</span></h1>
+<p class="sub">对照 MT 管理器 2.26.11 · 提交 <code>4af1a97</code> · Release <code>build-56</code> · 2026-11-08</p>
+
+<div class="grid">
+  <div class="kv"><b>根因</b><span>Manifest 缺少 <code>API_V23</code> 权限声明，Shizuku 服务端拒绝推送 binder</span></div>
+  <div class="kv"><b>新 APK</b><span>Cyber-Hub-Manager-0.1.59-r5.apk（21,366,028 字节）</span></div>
+  <div class="kv"><b>SHA256</b><span>8658c24343a6957cefd00bfe752019bceeae29aea8e052cb1892d15ffa462020</span></div>
+  <div class="kv"><b>构建结果</b><span class="good">Actions run 42476624360 · success（2m46s）</span></div>
+</div>
+
+<h2>一、截图里的症状</h2>
+<div class="card">
+<table>
+<tr><th>诊断项</th><th>值</th><th>说明</th></tr>
+<tr><td>rootGranted / rootAvailable</td><td class="bad">false / false</td><td>设备未 Root，Shizuku 只能经无线调试（adb）启动</td></tr>
+<tr><td>shizukuInstalled</td><td class="good">true</td><td>Shizuku 应用已安装</td></tr>
+<tr><td>shizukuProviderRegistered</td><td class="good">true</td><td>本应用 Manifest 里的 <code>.shizuku</code> provider 声明正确</td></tr>
+<tr><td>shizukuRunning</td><td class="bad">false</td><td><code>Shizuku.pingBinder()</code> 为 false —— 客户端从未收到 binder</td></tr>
+<tr><td>shizukuGranted / shizukuVersion</td><td class="bad">false / -1</td><td>binder 未送达的典型表现</td></tr>
+<tr><td>elevatedId / rootListCount</td><td class="bad">null / -1</td><td>提权通道完全不可用，Android/data 只能走 SAF</td></tr>
+<tr><td>npErr</td><td class="warn">IllegalStateException</td><td>反射调用 <code>newProcess</code> 时 binder 不存在</td></tr>
+</table>
+<blockquote>关键矛盾：接入组件已注册、Shizuku 已安装，服务端却在「运行中」被判为 false。此前几版把原因归到「服务未启动」或「binder 只在进程启动时送达（时序）」，都不成立。</blockquote>
+</div>
+
+<h2>二、根因（官方源码 + MT 对照）</h2>
+<div class="card">
+<p>Shizuku 服务端 <code>server/src/main/java/rikka/shizuku/server/BinderSender.java</code> 的 <code>sendBinder()</code> 在应用进程启动 / 回到前台时决定是否推送 binder，筛选逻辑是：</p>
+<pre>private static final String PERMISSION = "moe.shizuku.manager.permission.API_V23";
+
+PackageInfo pi = PackageManagerApis.getPackageInfoNoThrow(
+        packageName, PackageManager.GET_PERMISSIONS, userId);
+if (pi == null || pi.requestedPermissions == null)
+    continue;                                    // 没有任何权限声明 → 直接跳过
+
+if (ArraysKt.contains(pi.requestedPermissions, PERMISSION_MANAGER)) { ... }
+else if (ArraysKt.contains(pi.requestedPermissions, PERMISSION)) {
+    ShizukuService.sendBinderToUserApp(sShizukuService, packageName, userId);
+    return;                                      // 只有声明了 API_V23 才推
+}</pre>
+<p>也就是说 <b>Shizuku 只向 Manifest 里声明了 <code>API_V23</code> 权限的客户端推送 binder</b>，与服务是否运行、provider 是否注册无关。</p>
+<p>MT 管理器 2.26.11 的清单明确同时声明了三项：</p>
+<pre>&lt;uses-permission android:name="moe.shizuku.manager.permission.API_V23" /&gt;
+&lt;meta-data android:name="moe.shizuku.client.V3_SUPPORT" android:value="true" /&gt;
+&lt;provider android:name="…" android:authorities="bin.mt.plus.shizuku"
+          android:exported="true" android:multiprocess="false"
+          android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" /&gt;</pre>
+<p>本项目用 <code>aapt2</code> 直接打包、<b>没有 Gradle manifest merger</b>：官方 <code>dev.rikka.shizuku:provider</code> AAR 本该自动合并进来的 <code>&lt;uses-permission&gt;</code> 与 <code>V3_SUPPORT</code> 元数据从未进入 Manifest（只用了裸 jar）。这与 0.1.54 的 <code>${applicationId}</code> 占位符未替换属于同一类「手搓打包丢配置」问题。Shizuku Manager 也因此不会把本应用列入「应用管理」授权列表。</p>
+</div>
+
+<h2>三、修复内容（5 个文件，+123 / −10）</h2>
+<div class="card">
+<table>
+<tr><th>文件</th><th>改动</th></tr>
+<tr><td><code>AndroidManifest.xml</code></td><td>补 <code>API_V23</code> uses-permission 与 <code>V3_SUPPORT</code> meta-data；provider 原有 authorities / exported / multiprocess / permission 属性本已正确，保持不变</td></tr>
+<tr><td><code>ElevatedAccess.java</code></td><td>新增 <code>apiV23Declared()</code> / <code>v3SupportDeclared()</code> 运行时自检、<code>binderSeen</code> 标志、<code>addBinderReceivedListenerSticky</code> / <code>addBinderDeadListener</code> 生命周期监听；<code>diag()</code> / <code>status()</code> 输出 <code>apiV23Declared</code>、<code>v3SupportDeclared</code>、<code>binderSeen</code>、<code>shizukuUid</code>；<code>npErr</code> 在缺声明时直接指出根因</td></tr>
+<tr><td><code>app.js</code></td><td>授权页在 <code>apiV23Declared=false</code> 时提示升级并说明真实原因；「Shizuku 未运行」改为正确引导；诊断弹窗新增四个字段；关于页补 r5 说明</td></tr>
+<tr><td><code>tests/shizuku-integration-check.py</code></td><td>把两项声明、运行时自检字段与 binder 监听纳入硬断言防回归（原 6 项扩到 12 项）</td></tr>
+<tr><td><code>docs/optimization/README.md</code></td><td>归档 r5 根因分析、复现与验证步骤</td></tr>
+</table>
+<p><b>保持不变</b>：versionCode 55、<code>build.gradle</code>、签名密钥、默认中文文案、长按菜单 / 打开方式硬断言，以及 Web 管理器只读安全模型。</p>
+</div>
+
+<h2>四、验证结果</h2>
+<div class="card">
+<h3>本地</h3>
+<ul>
+<li>集成自检 <span class="good">PASS</span>；Manifest XML 解析出 <code>API_V23</code> 与 <code>V3_SUPPORT=true</code></li>
+<li><code>app.js</code> / <code>boot.js</code> 语法通过；<code>javac</code> 全量 <span class="good">134 个 class 零错误</span>（新增 2 个 listener 内部类）</li>
+<li>前端冒烟：file-icons <b>8 PASS</b>、open-with <b>12 PASS</b>、media-player <b>11 PASS</b></li>
+<li><code>video-ui-smoke</code> / <code>java-edit-ui-smoke</code> 两项失败与改动前基线逐项一致（沙箱英文文案 mock 差异），<b>无回归</b></li>
+</ul>
+<h3>CI（run 42476624360）</h3>
+<ul>
+<li>前端语法检查 + 3 套 UI 冒烟 ✓、ECJ 编译 ✓、D8 ✓、zipalign 16KB 对齐 ✓、apksigner v2+v3 签名校验 ✓、核心 JVM 冒烟 ✓</li>
+<li><code>aapt2 link</code> 成功，证明新权限与元数据声明可被正常编译</li>
+</ul>
+<h3>APK 二进制校验</h3>
+<ul>
+<li>SHA256 <code>8658c243…462020</code> 与 Release <code>build-56</code> 公布的 digest 完全一致</li>
+<li>解析二进制 AXML 元素树，确认节点值真实写入（不只是字符串池里出现）：<br>
+<code>&lt;uses-permission&gt; → moe.shizuku.manager.permission.API_V23</code><br>
+<code>&lt;meta-data&gt; → moe.shizuku.client.V3_SUPPORT</code><br>
+<code>&lt;provider&gt; → rikka.shizuku.ShizukuProvider | INTERACT_ACROSS_USERS_FULL | com.cyberhub.manager.shizuku</code></li>
+<li>DEX 内含 <code>apiV23Declared</code> / <code>v3SupportDeclared</code> / <code>binderSeen</code> / <code>ensureBinderListeners</code>；assets/app.js 含新诊断字段</li>
+<li>签名证书 <code>CN=Cyber Hub Manager Development</code>，SHA256 <code>BF:E0:C2:7B:…:95:04</code>，与 r4 一致 → <b>可直接覆盖安装</b></li>
+</ul>
+</div>
+
+<h2>五、请这样验证</h2>
+<div class="card">
+<ol>
+<li>安装 <code>Cyber-Hub-Manager-0.1.59-r5.apk</code>（覆盖安装即可，不必卸载）。</li>
+<li>打开 <b>Shizuku 应用 → 停止服务 → 重新启动服务</b>。服务端 <code>BinderSender</code> 用 <code>PID_LIST</code> / <code>UID_LIST</code> 记住已推送过的 UID，覆盖安装后必须重启服务才会重新推送；设备无 Root，请确认服务是通过无线调试启动并显示「正在运行」。</li>
+<li>在 Shizuku 的「应用管理」里允许本应用（v3 客户端标记现已声明）。</li>
+<li>从最近任务里划掉本应用（或系统设置里强制停止），重新打开。</li>
+<li>设置 → 启动 → Root / Shizuku 授权 → 诊断提权链路，预期：<code>apiV23Declared: true</code>、<code>v3SupportDeclared: true</code>、<code>shizukuRunning: true</code>、<code>shizukuVersion: 13</code>、<code>shizukuUid: 2000</code>（adb 身份）、<code>elevatedId: uid=2000(shell)…</code>。随后轻点「Shizuku：未授权 · 轻点申请」完成授权。</li>
+</ol>
+<blockquote>若重启服务后仍为 false，说明设备侧 Shizuku 服务本身没起来（无线调试每次开机都需重新启动），这不是本应用能修的；此时 <code>apiV23Declared</code> 为 true 可以把两类问题明确区分开。</blockquote>
+</div>
+
+<h2>六、备注</h2>
+<div class="card">
+<ul>
+<li>本次只补齐客户端声明，未改 Shizuku API 版本（仍 13.1.5 四个构件）、未引入新依赖、未复制 MT 的任何代码或资源。</li>
+<li>CI 的测试步骤目前尚未运行 <code>tests/shizuku-integration-check.py</code>；若希望每次构建都自动锁死这类清单配置缺失，可在 workflow 的「前端语法检查」步骤加一行 <code>python3 tests/shizuku-integration-check.py</code>（本次未改动 workflow，避免多产生一个 Release 标签）。</li>
+<li>仍未实施：<code>LocalService</code> Web 管理器「只读 → 读写」安全模型变更，需配对码、CSRF token、可写根目录白名单、二次确认与活动记录配套设计。</li>
+<li>CI 有 3 条非致命弃用提示（Node 20、setup-java v4、ubuntu-latest 迁移），不影响结果。</li>
+</ul>
+</div>
+
+<p class="foot">仓库：<a href="https://github.com/wumingzhinu/Cyber-Hub-Manager">wumingzhinu/Cyber-Hub-Manager</a> · 提交 <a href="https://github.com/wumingzhinu/Cyber-Hub-Manager/commit/4af1a9780698">4af1a97</a> · Release <a href="https://github.com/wumingzhinu/Cyber-Hub-Manager/releases/tag/build-56">build-56</a> · Actions <a href="https://github.com/wumingzhinu/Cyber-Hub-Manager/actions/runs/42476624360">42476624360</a></p>
+</div>
+</body>
+</html>
