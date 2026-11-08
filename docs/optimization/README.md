@@ -68,5 +68,6 @@
 | `r4-hotfix-report.html` | WebView 静态资源白名单根因与修复（提交 `8369fea`、Release `build-55`） |
 | `shizuku-fix-report.html` | Shizuku 授权根因（`API_V23` / `V3_SUPPORT`）与修复（提交 `4af1a97`、Release `build-56`） |
 | `r5-verify-checklist.html` | r5 版本核对卡：旧版诊断与 r5 诊断的字段对照、安装步骤、结果判读与 SAF 兜底方案 |
+| `r6-startup-direct-report.html` | 启动直达管理器（r6）：去掉整页启动提示、首屏即双窗格管理器的根因与修复（提交 `d2b581d`、Release `build-57`） |
 
-正式签名 APK 请以仓库 Release `build-56` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。
+正式签名 APK 请以仓库 Release `build-57` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。

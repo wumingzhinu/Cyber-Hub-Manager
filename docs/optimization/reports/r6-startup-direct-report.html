@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>启动直达管理器修复报告 · r6</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1f2328;--muted:#5b6570;--line:#e3e7ec;--accent:#0969da;--ok:#1a7f37;--warn:#9a6700;--code:#f2f4f7}
+@media(prefers-color-scheme:dark){:root{--bg:#0d1117;--card:#161b22;--fg:#e6edf3;--muted:#9198a1;--line:#30363d;--accent:#58a6ff;--ok:#3fb950;--warn:#d29922;--code:#1c2128}}
+*{box-sizing:border-box}
+body{margin:0;padding:28px 18px 60px;background:var(--bg);color:var(--fg);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:960px;margin:0 auto}
+h1{font-size:26px;margin:0 0 6px;letter-spacing:.2px}
+.sub{color:var(--muted);margin:0 0 24px;font-size:14px}
+h2{font-size:19px;margin:30px 0 12px;padding-left:11px;border-left:4px solid var(--accent)}
+h3{font-size:16px;margin:20px 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:14px 0}
+table{width:100%;border-collapse:collapse;font-size:14px;margin:10px 0}
+th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+th{background:var(--code);font-weight:600;white-space:nowrap}
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+code{background:var(--code);padding:2px 5px;border-radius:4px;word-break:break-all}
+pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:14px;overflow:auto;line-height:1.55;margin:10px 0}
+.bad{color:#cf222e;font-weight:600}
+.good{color:var(--ok);font-weight:600}
+.warn{color:var(--warn)}
+.pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;background:rgba(9,105,218,.12);color:var(--accent)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.kv{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.kv b{display:block;font-size:12px;color:var(--muted);font-weight:500;margin-bottom:4px}
+.kv span{font-size:14px;word-break:break-all}
+ul{padding-left:22px;margin:8px 0}li{margin:5px 0}
+blockquote{margin:12px 0;padding:10px 14px;border-left:3px solid var(--accent);background:var(--code);border-radius:0 8px 8px 0;color:var(--muted)}
+a{color:var(--accent)}
+.foot{margin-top:34px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>启动直达管理器修复报告 <span class="pill">r6</span></h1>
+<p class="sub">真机启动反馈「直接进入管理器」 · 提交 <code>d2b581d</code> · Release <code>build-57</code> · 2026-11-08</p>
+
+<div class="grid">
+  <div class="kv"><b>根因</b><span>首屏是静态整页启动提示，<code>init()</code> 要等原生数据返回后才渲染管理器</span></div>
+  <div class="kv"><b>新 APK</b><span>Cyber-Hub-Manager-0.1.59-r6.apk（21,366,028 字节）</span></div>
+  <div class="kv"><b>SHA256</b><span>950c8994286d81de8838a51cf0e49baffc33c676d1f4df0c7b4ea6b121f495bb</span></div>
+  <div class="kv"><b>构建结果</b><span class="good">Actions run 42490791814 · success（3m1s）</span></div>
+</div>
+
+<h2>一、反馈的症状</h2>
+<div class="card">
+<p>真机冷启动截图显示：应用打开后先出现一整页启动提示「<b>正在打开您的工作区…</b> / 文件管理器正在加载。」并带一个「<b>重试</b>」按钮，需要等待甚至手动点击才能进入文件管理器。用户明确要求「<b>改一下，直接进入管理器</b>」。</p>
+<blockquote>这不是资源加载失败，而是界面结构本身：WebView 渲染的第一帧就是这张提示页，与管理器的双窗格无关。</blockquote>
+</div>
+
+<h2>二、根因</h2>
+<div class="card">
+<table>
+<tr><th>环节</th><th>原实现</th><th>后果</th></tr>
+<tr><td><code>app.html</code></td><td><code>&lt;section id="content"&gt;</code> 内写死整页 <code>.bootStatus</code>（含静态 <code>#bootRetry</code>），工具栏副标题为「正在启动…」</td><td>WebView 首帧必然是提示页</td></tr>
+<tr><td><code>app.js · init()</code></td><td>先 <code>await rpc('init')</code> → <code>await refresh()</code> 拉到目录 → 才 <code>renderFiles()</code> 替换成双窗格</td><td>冷启动 / 授权弹窗等待越久，提示页停留越久</td></tr>
+<tr><td><code>boot.js</code></td><td>20 秒 watchdog 超时后 <code>report()</code> 把页面变成错误兜底页</td><td>慢启动还会额外出现「重试」错误页</td></tr>
+</table>
+<p>因此「直接进入管理器」需要让<b>静态首屏本身就是管理器骨架</b>，并在脚本加载后、任何异步等待之前就把工具栏与底栏补齐；数据返回只是把文件内容填进已有骨架。</p>
+</div>
+
+<h2>三、改动清单</h2>
+<div class="card">
+<table>
+<tr><th>文件</th><th>改动</th></tr>
+<tr><td><code>app.html</code></td><td>删除 <code>.bootStatus</code> 整页提示与 <code>#bootRetry</code>；首屏直接给出 <code>.filepanes</code> 双窗格骨架（左右各一个 <code>.pane</code> + <code>.bootPlaceholder</code>「正在读取文件…」）；副标题改为「文件管理器」；保留 <code>&lt;noscript&gt;</code> 兜底</td></tr>
+<tr><td><code>app.js</code></td><td>新增 <code>renderBootFrame()</code>，并让 <code>init()</code> 在<b>第一个 <code>await</code> 之前</b>同步调用它补齐工具栏按钮与底栏（<code>header()</code> + <code>renderFileBottom()</code>）；目录数据随后异步回填；<code>UI_BUILD</code> 更新为 <code>r6</code>，关于页追加版本说明</td></tr>
+<tr><td><code>boot.js</code></td><td>移除静态 <code>#bootRetry</code> 绑定；完整保留 20 秒 watchdog 与 <code>report()</code>——脚本真正崩溃 / 加载超时时仍会整页重建出带「重试」（<code>window.location.reload()</code>）的错误兜底页</td></tr>
+<tr><td><code>style.css</code></td><td>追加 <code>.bootPlaceholder</code> 轻量占位样式（浅 / 深主题）</td></tr>
+<tr><td><code>tests/startup-direct-check.py</code></td><td>新增防回归硬断言，固定「首屏双窗格 / 无提示页与静态重试按钮 / <code>renderBootFrame()</code> 在 await 前调用 / 错误兜底保留 / 占位文案」等 12 项约束，并加入 CI 前端测试步骤</td></tr>
+<tr><td><code>docs/optimization/README.md</code></td><td>追加 r6 章节，记录根因、改动、验证与兼容边界</td></tr>
+</table>
+<pre>async function init(){renderBootFrame();try{state.info=await rpc('init');
+  state.panes[0].path=startPath(pref.startLeft);
+  state.panes[1].path=startPath(pref.startRight);
+  await refresh();initialized=true;window.CyberBoot.ready();
+  maybeRequestElevated();maybeAutoService();maybeCleanRecycle();
+}catch(e){window.CyberBoot.fail(e);}}</pre>
+</div>
+
+<h2>四、验证</h2>
+<div class="card">
+<table>
+<tr><th>项目</th><th>结果</th></tr>
+<tr><td><code>tests/startup-direct-check.py</code></td><td class="good">PASS · 12 项全部通过（首屏双窗格 / 无提示页 / 同步渲染 / 错误兜底 / 占位文案），已接入 CI</td></tr>
+<tr><td><code>node --check app.js</code> / <code>boot.js</code></td><td class="good">通过</td></tr>
+<tr><td>CI 前端冒烟三套</td><td class="good">file-icons 8 PASS · open-with 12 PASS · media-player 11 PASS</td></tr>
+<tr><td>真实 Chromium 场景 A（正常启动）</td><td class="good"><code>sync-after-appjs</code> 瞬间即 <code>panes:2</code>、<code>filepanes:1</code>、<code>bootStatus:0</code>、<code>bootRetry:0</code>、<code>toolbarBtns:2</code>、<code>bottomBtns:5</code>；<code>after-data</code> 为 <code>fileRows:6</code>、标题 <code>/sdcard/</code>、占位清零</td></tr>
+<tr><td>真实 Chromium 场景 B（纯静态首屏）</td><td class="good">旧提示文案与 <code>.bootStatus</code> 均已消失，工具栏显示「赛博中枢管家 / 文件管理器」</td></tr>
+<tr><td>全套 <code>.cjs</code> 测试基线对照</td><td>改动前后逐项一致（10 项 PASS / 10 项 FAIL 均为沙箱环境限制，如英文文案 mock、Playwright、happy-dom 路径差异），<b>无回归</b>；CI 实际只运行其中三套，均 PASS</td></tr>
+<tr><td>Actions 全步骤</td><td class="good">run 42490791814 · 15 个步骤全部 ✓（含新加入的启动直达自检、ECJ + D8 打包、apksigner 签名、核心 JVM 冒烟、创建 Release）</td></tr>
+</table>
+</div>
+
+<h2>五、签名 APK 校验</h2>
+<div class="card">
+<table>
+<tr><th>校验项</th><th>结果</th></tr>
+<tr><td>SHA256 与 Release 摘要</td><td class="good"><code>950c8994…f495bb</code> 完全一致</td></tr>
+<tr><td>大小</td><td>21,366,028 字节，与 Release 资产一致</td></tr>
+<tr><td>APK 内 <code>app.html</code></td><td class="good">1 个 <code>.filepanes</code>、左右窗格各 1、2 个 <code>.bootPlaceholder</code>；废弃提示元素 0 个；副标题「文件管理器」</td></tr>
+<tr><td>APK 内 <code>app.js</code></td><td class="good"><code>UI_BUILD='r6'</code>、1 处 <code>renderBootFrame()</code>、<code>init()</code> 首个 await 前调用；r5 的 Shizuku 诊断字段 13 处完整保留</td></tr>
+<tr><td>APK 内 <code>boot.js</code></td><td class="good"><code>report()</code> / 「重试」/ <code>window.location.reload()</code> / <code>setTimeout</code> 全在；静态 <code>bootRetry</code> 绑定 0 个</td></tr>
+<tr><td>与 r5 版 ZIP 条目对比</td><td class="good">460 / 460 条目，仅 7 个不同：<code>assets/app.html</code>、<code>app.js</code>、<code>boot.js</code>、<code>style.css</code> 与 3 个 <code>META-INF/*</code> 签名清单；<code>AndroidManifest.xml</code> 与全部 <code>classes*.dex</code> 字节级一致</td></tr>
+<tr><td>v2 / v3 签名块与证书</td><td class="good">两版签名块 ID 均为 <code>0x7109871a, 0xf05368c0, 0x42726577</code>；v2 / v3 各 1 张证书，SHA256 前缀 <code>bfe0c27b…</code> 两版完全相同</td></tr>
+</table>
+<blockquote>签名密钥与 r5 相同、versionCode 仍为 55，可直接<b>覆盖安装</b>，不会丢失应用数据或授权状态。</blockquote>
+</div>
+
+<h2>六、保持未改的边界</h2>
+<div class="card">
+<ul>
+<li><b>versionCode 55 / versionName 0.1.59</b>、签名密钥未变。</li>
+<li><b>默认中文文案</b>逐字保持；长按菜单 10 项 / 打开方式 13 项等硬断言未受影响。</li>
+<li><b>r4 / r5 修复全部保留</b>：WebView 静态资源安全放行、语法高亮、Shizuku 的 <code>API_V23</code> / <code>V3_SUPPORT</code> 声明与诊断字段。</li>
+<li><b>错误兜底没有削弱</b>：脚本崩溃、资源加载失败、20 秒超时仍会显示带「重试」的错误页。</li>
+<li><b>Web 管理器只读安全模型</b>仍未改动（涉及配对码、CSRF、白名单、二次确认、活动记录，需另行设计确认）。</li>
+</ul>
+</div>
+
+<h2>七、交付物</h2>
+<div class="card">
+<ul>
+<li>签名 APK：<code>/workspace/Cyber-Hub-Manager-0.1.59-r6.apk</code>（Release <code>build-57</code>）</li>
+<li>源码提交：<code>d2b581d</code> 已推送 <code>wumingzhinu/Cyber-Hub-Manager</code> 的 <code>main</code></li>
+<li>本报告归档：<code>docs/optimization/reports/r6-startup-direct-report.html</code>（文档提交使用 <code>[skip ci]</code>，避免重复打包）</li>
+</ul>
+</div>
+
+<p class="foot">本报告为只读交付说明，不参与构建。正式签名 APK 以仓库 Release <code>build-57</code> 为准；归档目录内不含 .apk 与密钥文件。</p>
+</div>
+</body>
+</html>
