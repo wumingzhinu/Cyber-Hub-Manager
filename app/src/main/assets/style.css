@@ -101,7 +101,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--blue)}
 .breadcrumbs{padding:9px 13px;color:#aebdcc;font-size:12px;background:#252525;overflow-wrap:anywhere}
 .editorInfo{height:22px;display:flex;align-items:center;justify-content:space-between;padding:0 15px;font-size:12px;line-height:20px;background:var(--bar);border-bottom:1px solid var(--line)}
 .editorInfo span:first-child{max-width:75%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.CodeMirror{height:100%;font-family:'Droid Sans Mono',monospace;font-size:12px;line-height:1.4;background:var(--code);color:#b4bec8}
+.CodeMirror{height:100%;font-family:"JetBrains Mono","Droid Sans Mono",monospace;font-size:12px;line-height:1.4;background:var(--code);color:#b4bec8}
 .CodeMirror-gutters{background:var(--gutter);border-right:1px solid #4b4b4b}
 .CodeMirror-linenumber{color:#888;min-width:0;padding:0 3px 0 2px}
 .CodeMirror-lines{padding:0}
@@ -402,7 +402,7 @@ body.light .pane:not(.active){background:#f2f2f2}
   --text:#f2f2f3;--muted:#9a9ca3;--faint:#8a8c92;
   --accent:#4a8ad6;--positive:#5fc39c;--negative:#e5566f;--warning:#d9a441;
   --radius-card:6px;--radius-control:8px;--radius-pill:999px;
-  --mono:monospace;
+  --mono:"JetBrains Mono","Droid Sans Mono",monospace;
   --bg:var(--ground);--bar:var(--ground);--code:#131217;--dialog:var(--raised);
   --line:var(--border);--blue:var(--accent);--icon:transparent;--hover:var(--raised);--gutter:#1b1b20;
 }
@@ -692,6 +692,10 @@ body.light .multidexDialog .dexPickIcon,body.light .optionIcon{color:var(--muted
 .dialog.dangerDialog:not(.stackedActions) .actions button:last-child{background:var(--negative);border-color:var(--negative);color:#fff}
 /* bundled face + file list as a two-line table row */
 @font-face{font-family:"Public Sans";src:url("fonts/PublicSans.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
+/* Bundled monospace face: identical code alignment on every ROM (MT ships Mono.ttf). */
+@font-face{font-family:"JetBrains Mono";src:url("fonts/JetBrainsMono-Regular.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}
+.findOpts{margin:6px 0 2px}
+.findOpts .toggleRow{min-height:36px;font-size:13px!important}
 body{font-family:"Public Sans",Roboto,"Noto Sans SC","Noto Sans CJK SC",system-ui,-apple-system,sans-serif}
 h1.title,h1.editorTitle{margin:0}
 .fileline{display:flex;align-items:baseline;gap:8px;min-width:0}
@@ -1053,3 +1057,45 @@ body.list-large .fileicon.apks svg,body.list-large .fileicon.dex svg{width:32px;
 body.list-large .fileicon.archive svg,body.list-large .fileicon.bak svg,body.list-large .fileicon.text svg{width:28px;height:28px}
 body.list-large .fileicon.xml svg,body.list-large .fileicon.arec svg,body.list-large .fileicon.image svg,body.list-large .fileicon.video svg,body.list-large .fileicon.audio svg{width:29px;height:29px}
 @media(max-width:600px){.fileicon.apks svg{width:22px;height:22px}.fileicon.dex svg{width:21px;height:21px}.fileicon.archive svg,.fileicon.bak svg,.fileicon.text svg{width:19px;height:19px}.fileicon.xml svg,.fileicon.arec svg,.fileicon.image svg,.fileicon.video svg,.fileicon.audio svg{width:20px;height:20px}}
+
+/* ---- Round 3: preview / comparison / probe styles ---- */
+.kvRow{display:flex;justify-content:space-between;gap:12px;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px}
+.kvRow span{color:var(--muted);flex:none;max-width:44%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kvRow b{font-weight:500;word-break:break-all;text-align:right}
+.kvHead{background:var(--hover);font-weight:600}
+.toolpage h3{font-size:14px;margin:14px 10px 8px;color:var(--blue)}
+.cmpBar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--hover);font-size:13px}
+.cmpToggle{border:1px solid var(--line);border-radius:4px;padding:6px 10px;font-size:12px;color:var(--blue)}
+.cmpRow small{display:block;color:var(--muted);font-size:11px}
+/* Markdown preview + outline */
+.mdLayout{display:flex;height:100%;overflow:hidden}
+.mdOutline{width:32%;max-width:220px;min-width:110px;overflow:auto;border-right:1px solid var(--line);padding:8px 0;background:var(--bar);flex:none}
+.mdOutline h3{font-size:12px;color:var(--muted);margin:4px 10px 8px}
+.mdOutlineItem{display:block;width:100%;text-align:left;padding:5px 8px;font-size:12px;line-height:1.3;border-left:2px solid transparent;color:var(--text)}
+.mdOutlineItem:hover,.mdOutlineItem:active{background:var(--hover);border-left-color:var(--blue)}
+.mdBody{flex:1;overflow:auto;padding:12px 14px;font-size:14px;line-height:1.65}
+.mdBody .mdH{margin:18px 0 8px;line-height:1.3;color:var(--text)}
+.mdBody h1.mdH{font-size:22px}.mdBody h2.mdH{font-size:19px}.mdBody h3.mdH{font-size:16px}
+.mdP{margin:8px 0}
+.mdPre{background:var(--code);border:1px solid var(--line);border-radius:4px;padding:10px;overflow:auto;font-family:var(--mono,monospace);font-size:12px}
+.mdCode{background:var(--code);border-radius:3px;padding:1px 4px;font-family:var(--mono,monospace);font-size:12px}
+.mdQuote{border-left:3px solid var(--blue);margin:8px 0;padding:4px 12px;background:var(--hover)}
+.mdList{margin:8px 0;padding-left:22px}.mdLi{margin:3px 0}
+.mdTable{border-collapse:collapse;width:100%;margin:10px 0;font-size:13px}
+.mdTable th,.mdTable td{border:1px solid var(--line);padding:6px 8px;text-align:left}
+.mdTable th{background:var(--hover)}
+.mdHr{border:0;border-top:1px solid var(--line);margin:16px 0}
+.mdImage{max-width:100%}
+.mdMath{overflow-x:auto;margin:10px 0}
+.math{color:var(--blue);font-family:var(--mono,monospace)}
+.math-block{display:block;padding:6px 0}
+.katex{font-size:1.05em}
+/* Font specimen */
+.fontSample{padding:10px 14px}
+.fontLine{margin:10px 0;line-height:1.5;word-break:break-word}
+/* Nine-patch viewer */
+.npCanvas{position:relative;display:inline-block;max-width:100%;margin:10px;border:1px solid var(--line);background:repeating-conic-gradient(#555 0% 25%,#333 0% 50%) 50%/16px 16px}
+.npImage{display:block;max-width:100%;image-rendering:pixelated}
+.npMarkV{position:absolute;top:0;bottom:0;width:2px;background:#ff5252;opacity:.8;pointer-events:none}
+.probeOut{background:var(--code);border:1px solid var(--line);padding:10px;overflow:auto;max-height:280px;font-family:var(--mono,monospace);font-size:11px;white-space:pre-wrap}
+@media(max-width:520px){.mdOutline{width:38%;min-width:96px}.mdBody{padding:10px}}

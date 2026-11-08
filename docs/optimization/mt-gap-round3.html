@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cyber Hub Manager · 第三轮优化报告（P1/P2 全量落地）</title>
+<style>
+:root{--bg:#0f1319;--card:#171d26;--card2:#1d2530;--line:#2b3541;--tx:#d8e0ea;--mut:#8d9bab;--acc:#55b2f5;--ok:#58c98a;--warn:#d9a441;--red:#e5566f}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","PingFang SC",sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:32px 22px 70px}
+header{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:26px}
+h1{font-size:27px;margin:0 0 8px;line-height:1.3}h1 span{color:var(--acc)}
+.sub{color:var(--mut);font-size:14px}
+.badges{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px}
+.badge{background:var(--card2);border:1px solid var(--line);border-radius:20px;padding:4px 12px;font-size:12px;color:var(--mut)}
+.badge b{color:var(--ok)}
+h2{font-size:20px;margin:34px 0 12px;padding-left:11px;border-left:3px solid var(--acc)}
+h3{font-size:16px;margin:22px 0 8px;color:var(--acc)}
+p{margin:9px 0}ul{margin:9px 0;padding-left:22px}li{margin:5px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 20px;margin:14px 0}
+.card.hi{border-color:#2e5673;background:linear-gradient(180deg,#182635,#171d26)}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}
+th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+th{background:var(--card2);color:var(--tx);font-weight:600}td{color:var(--tx)}
+tr:nth-child(even) td{background:#141a22}
+code{background:#0c1016;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-family:"JetBrains Mono",Consolas,monospace;font-size:12px;color:#a9d4f5}
+pre{background:#0c1016;border:1px solid var(--line);border-radius:8px;padding:14px;overflow:auto;font-family:"JetBrains Mono",Consolas,monospace;font-size:12px;line-height:1.6;color:#b9c9d9}
+.mut{color:var(--mut)}.ok{color:var(--ok)}.warn{color:var(--warn)}.red{color:var(--red)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 18px}
+.kpi b{display:block;font-size:24px;color:var(--acc);line-height:1.3}
+.kpi span{font-size:12px;color:var(--mut)}
+a{color:var(--acc)}
+.tag{display:inline-block;font-size:11px;border-radius:4px;padding:1px 7px;margin-right:5px;border:1px solid var(--line);color:var(--mut)}
+.tag.p1{color:var(--ok);border-color:#2c5a3e}.tag.p2{color:var(--warn);border-color:#5a4a26}
+footer{margin-top:40px;border-top:1px solid var(--line);padding-top:16px;color:var(--mut);font-size:12px}
+</style></head><body><div class="wrap">
+
+<header>
+<h1>Cyber Hub Manager · <span>第三轮优化报告</span></h1>
+<div class="sub">P1 / P2 全量落地 · 基于 craft-anything 0.5.0 Deep 模式对 MT 管理器 2.26.11 的静态证据 · 2026-11-08</div>
+<div class="badges"><span class="badge">项目版本 <b>0.1.59 / versionCode 55（未改）</b></span><span class="badge">新增文件 <b>29</b></span><span class="badge">补丁 <b>37 files / +1296 −247</b></span><span class="badge">专项验证 <b>31/31</b></span><span class="badge">回归 <b>10/10 与基线一致</b></span></div>
+</header>
+
+<div class="card hi">
+<b>结论：</b>上一轮列出的 <b>P1 三项</b>（外置语言包、Markdown/KaTeX 预览与大纲、SVG/字体/.9.png 预览）与 <b>P2 四项</b>（文件夹对比 UI、动态图标别名、本地 ffmpeg/MIDI、签名指纹自检）已全部落地。本轮新增一个 <code>ExtraTools.java</code> 统一承载原生能力，前端新增 5 个自包含资源文件，并把入口收拢到「工具」对话框、设置页与关于页 —— 刻意<b>不增加长按菜单和「打开方式」网格的项数</b>，因为现有冒烟测试对二者有硬断言。
+</div>
+
+<h2 id="evidence">一、MT 侧的对照证据（本轮沿用）</h2>
+<p>craft-anything 对 <code>MT2.26.11.apk</code>（<code>bin.mt.plus</code>，37 MB）的静态分析结论，仍是本轮差距判断的依据：</p>
+<table><tr><th>MT 资产 / 结构</th><th>观测值</th><th>对应本轮实现</th></tr>
+<tr><td><code>assets/lang-*.mtl</code> + <code>strings-*.mtl</code></td><td>11 套语言包，UI 文案与字符串分离</td><td>外置 <code>lang/packs.js</code>（zh-CN / en，129 key）</td></tr>
+<tr><td><code>assets/preview/</code></td><td>Markdown + KaTeX 预览资源</td><td>自写离线渲染器 + KaTeX 0.16.11 完整离线包</td></tr>
+<tr><td><code>assets/syntax/nine_patch_region.mtsx</code></td><td>九宫格区域定义</td><td>npTc chunk 解析 + 拉伸区编辑导出</td></tr>
+<tr><td><code>Mono.ttf</code>（上一轮已对齐）</td><td>内置等宽字体</td><td>JetBrains Mono（第二轮已落地，本轮沿用）</td></tr>
+<tr><td><code>assets/web-manager/</code></td><td>17 文件完整读写 SPA，支持正则搜索替换</td><td>本轮<b>未改动</b>（见第六节 · 需你拍板）</td></tr>
+<tr><td>21 个 <code>activity-alias</code></td><td>换图标 / 多入口</td><td>3 个默认互斥的 alias，避免选择器重复行</td></tr>
+<tr><td>内置 ffmpeg / zstd / libmtprotect</td><td>媒体转码与加固</td><td>ffmpeg 探测（不打包二进制）、签名自检；不照搬加固</td></tr>
+</table>
+
+<h2 id="p1">二、P1 落地明细</h2>
+
+<div class="card"><span class="tag p1">P1-1</span><h3 style="display:inline">外置语言包与 i18n 框架</h3>
+<ul>
+<li><code>app/src/main/assets/lang/packs.js</code>：<code>zh-CN</code> / <code>en</code> 共 <b>129 个 key</b>（common 37、preview 27、media 18、compare 16、settings 14、sign 13、editor 2、toast 2）。中文包的值与现有 UI 文案<b>逐字一致</b>。</li>
+<li><code>t(key, fallback)</code> 缺包 / 缺 key 时回退原文；<code>tr(text)</code> 在 <code>dialog / menu / options / toast</code> 四个渲染入口对标签做精确匹配翻译。默认语言为 <code>zh-CN</code> 时 <code>tr</code> 直接原样返回，因此<b>现有界面与测试看到的文本完全不变</b>；只有显式选择 English 才翻译。</li>
+<li>设置 → 其它 → <b>语言</b>（原占位「当前仅提供简体中文」）改为 <code>自动检测 / 简体中文 / English</code> 选择器，切换后重绘设置页并持久化到 <code>cyber-preferences</code>。</li>
+<li>本轮所有新工具页、对话框与提示均通过 <code>t()</code> 双语化。</li>
+</ul></div>
+
+<div class="card"><span class="tag p1">P1-2</span><h3 style="display:inline">Markdown / KaTeX 预览 + 大纲</h3>
+<ul>
+<li><code>vendor/markdown-preview.js</code>：零依赖离线渲染器，支持 1–6 级标题、粗斜体、行内代码、围栏代码块、有序/无序/任务列表、表格与对齐、引用、分隔线、链接与图片、<code>$…$</code> / <code>$$…$$</code> 公式。<b>全部文本 HTML 转义、URL 白名单</b>（<code>https? / mailto / # / 相对路径 / data:image</code>），<code>javascript:</code> 与相对图片被安全降级。</li>
+<li><code>vendor/katex/</code>：KaTeX 0.16.11 的 <code>katex.min.js</code> + <code>katex.min.css</code> + <b>20 个 woff2 字体</b>，共 592 KB。<b>按需动态加载</b>（不写进 app.html 的静态 script），加载完成后重渲染公式；未加载时公式以转义代码块显示，不会失败。</li>
+<li>预览页为「大纲侧栏 + 正文」双栏，大纲按层级缩进、点击平滑滚动到锚点。入口：工具 → Markdown 预览、编辑器菜单（<code>.md</code> 文件）。</li>
+</ul></div>
+
+<div class="card"><span class="tag p1">P1-3</span><h3 style="display:inline">SVG / 字体 / .9.png 预览</h3>
+<ul>
+<li><b>SVG</b>：项目原本就通过 <code>mediaImage</code> 返回 <code>data:image/svg+xml</code> 并用 <code>&lt;img&gt;</code> 隔离渲染（脚本不执行），本轮补上「查看 SVG 源码」入口与 CSP 说明，不重复造轮子。</li>
+<li><b>字体预览</b>：新增通用 <code>fileData</code> RPC（≤16 MB，base64），前端以 <code>@font-face</code> data URL 渲染 12/16/20/28/40 px 的拉丁字母、中文、标点样张；CSP 相应新增 <code>font-src 'self' data:</code>，<code>script-src 'self'</code> 未放松。</li>
+<li><b>.9.png</b>：<code>vendor/ninepatch.js</code> 解析 PNG chunk（IHDR / npTc / npOl / npOr / npLb / npRb），读出拉伸区、内容边距、光学边界并叠加红色标线；<b>可编辑拉伸区并导出</b>新的 <code>*_edited.9.png</code>（重建 npTc、重算全部 chunk CRC，绝不覆盖原文件）。</li>
+</ul></div>
+
+<h2 id="p2">三、P2 落地明细</h2>
+
+<div class="card"><span class="tag p2">P2-1</span><h3 style="display:inline">文件夹对比 UI</h3>
+<p><code>ExtraTools.compareFolders</code> 递归枚举两棵树（深度 ≤24、条目 ≤20000），按名称/大小或 SHA-256 内容比较，统计 新增 / 已删除 / 已修改 / 未变化，结果上限 2000 条。入口：<b>工具 → 对比文件夹</b>（选中两个文件夹）、<b>工具 → 对比两个窗格</b>；结果页可一键在「仅名称大小」与「内容哈希」之间切换。原有的两文件 APK/DEX/ARSC/AXML 对比保持不动。</p></div>
+
+<div class="card"><span class="tag p2">P2-2</span><h3 style="display:inline">动态图标别名</h3>
+<p>Manifest 里 <code>MAIN/LAUNCHER</code> 从 <code>MainActivity</code> 移到三个 <code>activity-alias</code>（默认 / 极光蓝 / 矩阵绿，<b>同一时刻只启用一个</b>），避免 MT 式 21 个别名造成系统选择器重复行。新增两套 vector drawable，<code>ExtraTools.setIconVariant</code> 用 <code>PackageManager.setComponentEnabledSetting</code> 切换。VIEW/EDIT/SEND 过滤与 <code>pinShortcut</code> 的显式 Intent 不受影响。设置 → 外观 → <b>桌面图标</b>（原占位「当前版本使用固定应用图标」）已改为选择器。</p>
+<p class="warn">注意：启动组件变更后，部分桌面需要重新添加快捷方式；设置里已给出提示。</p></div>
+
+<div class="card"><span class="tag p2">P2-3</span><h3 style="display:inline">媒体信息 / MIDI / 本地 ffmpeg</h3>
+<p><code>ExtraTools.mediaProbe</code>：普通媒体用 <code>MediaMetadataRetriever</code> 读取时长、宽高、MIME、码率、旋转、标题/艺术家等；MIDI 走自写 <code>MThd/MTrk</code> 解析（格式、轨道数、division、tempo、事件数、估算时长）；ffmpeg 探测系统 / Termux 常见路径与 <code>PATH</code>，若存在则执行 <code>-version</code> 与 <code>-i</code>（固定参数数组，无 shell 注入）并截取输出。入口：工具 → 媒体信息。<b>不打包几十 MB 的 ffmpeg 二进制</b>，未安装时明确提示。</p></div>
+
+<div class="card"><span class="tag p2">P2-4</span><h3 style="display:inline">签名指纹自检</h3>
+<p><code>ExtraTools.signatures</code>：所选 APK 用项目已依赖的 <code>com.android.apksig.ApkVerifier</code> 验证 V1/V2/V3 并取签名证书；自身用 <code>SigningInfo</code>（API 28+）/ <code>GET_SIGNATURES</code>；输出 SHA-256 / SHA-1 / MD5 冒号分隔指纹、证书主题与序列号。入口：设置 → 其它 → <b>签名指纹自检</b>、关于页、工具 → 签名指纹自检（APK 文件）。</p></div>
+
+<h2 id="files">四、改动文件</h2>
+<div class="grid">
+<div class="kpi"><b>29</b><span>新增文件（含 20 个 KaTeX 字体、2 个 drawable、语言包、2 个渲染器、ExtraTools.java、MIT 许可）</span></div>
+<div class="kpi"><b>8</b><span>修改文件：app.js / app.html / style.css / AndroidManifest.xml / DataEngine.java / MainActivity.java / README.md / DEPENDENCIES.json</span></div>
+<div class="kpi"><b>307</b><span>ExtraTools.java 新增行数（原生能力聚合）</span></div>
+<div class="kpi"><b>0</b><span>删除文件；未改动 build.gradle 与 versionCode</span></div>
+</div>
+<pre>新增原生接口（DataEngine.call / Bridge.request）
+  compareFolders · fileData · saveFileData · mediaProbe · signatures
+  setAppIcon · getAppIcon
+
+新增前端资源
+  lang/packs.js · vendor/markdown-preview.js · vendor/ninepatch.js
+  vendor/katex/{katex.min.js,katex.min.css,fonts/*.woff2}
+
+Manifest
+  MainActivity 去掉 MAIN/LAUNCHER（VIEW/EDIT/SEND 保留）
+  + .MainActivityDefault / .MainActivityBlue / .MainActivityGreen</pre>
+
+<h2 id="verify">五、验证结果</h2>
+<table><tr><th>项目</th><th>结果</th></tr>
+<tr><td>第三轮专项（自写脚本，31 项）</td><td class="ok">31 PASS / 0 FAIL — Markdown 渲染与 XSS、大纲、KaTeX 真实渲染、npTc 解析/编辑/CRC、语言包 key 一致性、t()/tr() 中英行为</td></tr>
+<tr><td>CI 冒烟测试全套（20 个 .cjs）</td><td class="ok">10 PASS / 10 FAIL，<b>与改动前基线逐项完全一致</b>；失败项均为沙箱环境限制（happy-dom 路径、Playwright 截图、英文文案 mock）</td></tr>
+<tr><td>Java 全量编译（javac + 项目 classpath）</td><td class="ok">132 个 class，零错误（含新增 ExtraTools.class）</td></tr>
+<tr><td>JS 语法 / XML / CSS</td><td class="ok">app.js、boot.js、packs.js、markdown-preview.js、ninepatch.js、katex.min.js 全部 <code>node --check</code> 通过；Manifest 与两个 drawable XML 解析通过；CSS 括号 1020/1020 平衡</td></tr>
+<tr><td>补丁完整性</td><td class="ok"><code>git apply --check</code> 通过、在干净副本应用后 <code>diff -rq</code> <b>0 差异</b>；37 files / +1296 −247 / 20 个二进制块 / 813 KB</td></tr>
+</table>
+<p class="mut">过程中修掉的三个真实问题：① npTc / npOl 载荷是<b>小端 int32</b>，初版按 PNG 长度的大端读取导致拉伸区数值全错；② <code>u32</code> 返回有符号数导致 CRC 比对失败；③ 新入口最初加进长按菜单，触发「菜单恰好 10 项」硬断言，已全部收拢到工具对话框。</p>
+
+<h2 id="limits">六、边界与仍需你拍板的事项</h2>
+<ul>
+<li><b class="warn">Web 管理器只读 → 读写（上一轮遗留，本轮仍未动）</b>：这是唯一的结构性差距，但会把写操作暴露到局域网。它不属于 P1/P2 清单，且上一轮明确留待你确认，所以本轮保持「配对码 + 只读」模型。要放开请指定可写根目录（工作区 / 整个共享目录），我会加 CSRF token、白名单与写操作审计。</li>
+<li><b>九宫格编辑粒度</b>：本轮是 chunk 级（输入拉伸坐标 → 生成新 npTc → 导出新 PNG），不是 MT 那种在图像上拖拽画线的像素级交互；对逆向场景够用，若需要拖拽画布可再加。</li>
+<li><b>ffmpeg</b>：仅探测与信息读取，未打包二进制、未提供任意转码命令执行（避免命令注入与 APK 膨胀）。</li>
+<li><b>i18n 覆盖</b>：129 个 key 覆盖对话框/菜单/toast 标签、设置页与全部新页面；<code>app.js</code> 中约 1630 条历史硬编码中文（多为长提示、版本说明、动态拼接文本）未逐条迁移，采用 <code>tr()</code> 精确匹配 + <code>t(key, fallback)</code> 的渐进式方案，可继续按 key 增量抽取。</li>
+<li><b>启动组件变更</b>：LAUNCHER 移到 alias 后，部分桌面的旧快捷方式需重新添加；已安装应用直接覆盖升级即可，包名与签名不变。</li>
+<li><b>责任边界</b>：本轮只做静态结构观察与自有代码，未复制 MT 的任何代码、资源、图标或文案，未绕过其加固与授权；KaTeX（MIT）与 JetBrains Mono（OFL）、Public Sans（OFL）、CodeMirror（MIT）的许可均随包附带。</li>
+</ul>
+
+<h2 id="deliver">七、交付物</h2>
+<table><tr><th>文件</th><th>说明</th></tr>
+<tr><td><code>optimization-round3.patch</code></td><td>本轮补丁，可在仓库根 <code>git apply optimization-round3.patch</code>（含二进制字体）</td></tr>
+<tr><td><code>Cyber-Hub-Manager-main/</code></td><td>已改好的项目副本，含前两轮全部改动</td></tr>
+<tr><td><code>mt-gap-round3.html</code></td><td>本报告</td></tr>
+<tr><td><code>optimization.patch</code> / <code>optimization-round2.patch</code></td><td>前两轮补丁（历史）</td></tr>
+<tr><td><code>pkg.json</code> / <code>archive.json</code> / <code>res.json</code> / <code>mt.cany/</code></td><td>craft-anything 原始静态分析证据</td></tr>
+</table>
+
+<footer>Cyber Hub Manager 第三轮优化 · 分析工具 craft-anything 0.5.0（Deep 模式）· 所有结论基于静态结构观察，未运行或反编译 MT 的加固代码。</footer>
+</div></body></html>

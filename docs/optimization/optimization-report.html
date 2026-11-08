@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MT 管理器静态分析 × Cyber-Hub-Manager 优化报告</title>
+<style>
+:root{--bg:#f6f7f9;--panel:#fff;--ink:#1b2330;--muted:#5b6675;--line:#e2e6ec;--accent:#1a6fd4;--accent-soft:#eaf2fd;--good:#0f7b52;--good-soft:#e7f5ee;--warn:#a35a00;--warn-soft:#fff3e0;--code:#0f1722;--code-ink:#d8e2ef}
+@media (prefers-color-scheme:dark){:root{--bg:#0e131b;--panel:#161d28;--ink:#e6ecf4;--muted:#98a5b6;--line:#2a3545;--accent:#63a6ff;--accent-soft:#14243c;--good:#4fd39b;--good-soft:#122c23;--warn:#f0b45e;--warn-soft:#332615;--code:#0b1119;--code-ink:#cfe0f2}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:32px 22px 80px}
+header{border-bottom:2px solid var(--line);padding-bottom:26px;margin-bottom:28px}
+h1{font-size:30px;line-height:1.35;margin:0 0 10px;letter-spacing:-.4px}
+.sub{color:var(--muted);font-size:15px;margin:0}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.meta span{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 11px;font-size:12.5px;color:var(--muted)}
+.meta b{color:var(--ink);font-weight:600}
+h2{font-size:21px;margin:42px 0 14px;padding-left:12px;border-left:4px solid var(--accent)}
+h3{font-size:16px;margin:24px 0 8px}
+p{margin:10px 0}
+a{color:var(--accent)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(228px,1fr));gap:12px;margin:16px 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card .n{font-size:25px;font-weight:700;color:var(--accent);letter-spacing:-.5px}
+.card .t{font-size:13px;color:var(--muted);margin-top:3px}
+table{width:100%;border-collapse:collapse;margin:12px 0 20px;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:13.6px}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--accent-soft);font-weight:600;color:var(--ink);white-space:nowrap}
+tr:last-child td{border-bottom:none}
+td code,li code,p code{background:var(--code);color:var(--code-ink);padding:1px 5px;border-radius:4px;font-size:12.4px}
+pre{background:var(--code);color:var(--code-ink);padding:14px 16px;border-radius:8px;overflow-x:auto;font:12.4px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+pre .c{color:#7d93ad}
+.tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:12px;font-weight:600;white-space:nowrap}
+.t-good{background:var(--good-soft);color:var(--good)}
+.t-warn{background:var(--warn-soft);color:var(--warn)}
+.t-info{background:var(--accent-soft);color:var(--accent)}
+.note{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;padding:14px 18px;margin:16px 0}
+.note.warn{border-left-color:var(--warn)}
+.note.ok{border-left-color:var(--good)}
+.note b{color:var(--ink)}
+ul{padding-left:22px;margin:10px 0}
+li{margin:5px 0}
+.change{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin:14px 0}
+.change h3{margin:0 0 6px;font-size:16.5px}
+.change .files{font-size:12.5px;color:var(--muted);margin-bottom:8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:760px){.grid2{grid-template-columns:1fr}.wrap{padding:20px 14px 60px}h1{font-size:24px}}
+footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px}
+.toc{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 20px;font-size:13.5px}
+.toc a{margin-right:16px;white-space:nowrap;text-decoration:none}
+.small{font-size:12.5px;color:var(--muted)}
+</style>
+</head>
+<body><div class="wrap">
+
+<header>
+  <h1>MT 管理器 2.26.11 静态结构分析<br>与 Cyber-Hub-Manager 优化报告</h1>
+  <p class="sub">用 craft-anything 0.5.0（Deep 模式）观察 APK 结构，提炼可借鉴的产品设计，并在你的项目里落地 4 项改动。</p>
+  <div class="meta">
+    <span>日期 <b>2026-11-08</b></span>
+    <span>分析工具 <b>craft-anything 0.5.0</b></span>
+    <span>APK <b>bin.mt.plus 2.26.11</b></span>
+    <span>目标项目 <b>com.cyberhub.manager 0.1.59</b></span>
+    <span>状态 <b>4 项改动已落地并通过验证</b></span>
+  </div>
+</header>
+
+<div class="toc">
+  <a href="#summary">摘要</a><a href="#method">方法与边界</a><a href="#facts">MT 结构事实</a><a href="#compare">对比</a><a href="#changes">已实施改动</a><a href="#verify">验证</a><a href="#roadmap">后续建议</a><a href="#files">交付文件</a>
+</div>
+
+<h2 id="summary">一、执行摘要</h2>
+<div class="cards">
+  <div class="card"><div class="n">2310</div><div class="t">APK 主条目（另含 1 个内嵌 APK）</div></div>
+  <div class="card"><div class="n">32,989</div><div class="t">5 个 DEX 中的类 / 299,951 个方法</div></div>
+  <div class="card"><div class="n">144</div><div class="t">清单组件（104 Activity + 21 别名等）</div></div>
+  <div class="card"><div class="n">62</div><div class="t">MT 外置语法定义（.mtsx）</div></div>
+</div>
+<p>结论先说：你的项目<b>不是「功能不够」，而是「接入面不够」</b>。核心能力（双窗格、DEX/Smali/Java 编辑、ARSC、APKS 合并、签名 V1/V2/V3、Shizuku/Root、zstd、WebDAV/FTP/SFTP/SMB/S3、Termux、GPG）已经和 MT 同量级，甚至在 <code>targetSdk 34</code> 和签名方案上更现代。真正被 MT 拉开的是三件事：<b>作为系统「打开方式」被外部调用的能力</b>、<b>编辑器语言覆盖</b>、<b>面向电脑浏览器的 Web 管理端</b>。</p>
+<div class="note ok"><b>本次已落地：</b>① 12 个 CodeMirror 模式 + 51 条扩展名映射；② 系统 VIEW/EDIT/SEND 入口；③ 外部文件直接进对应内置查看器；④ README 版本与构建配置对齐。全部通过 <code>javac</code> 全量编译、<code>node --check</code>、51/51 映射命中和 31 项 CI 冒烟测试。</div>
+
+<h2 id="method">二、分析对象、方法与边界</h2>
+<table>
+<tr><th>项目</th><th>值</th></tr>
+<tr><td>样本</td><td><code>MT2.26.11.apk</code>，38,498,857 B（36.71 MiB），来源：小米应用商店</td></tr>
+<tr><td>SHA-256</td><td><code>24763601d30b2c42f3a684572adc55c0e9a28c655b6fbb5af9d06d337db46899</code></td></tr>
+<tr><td>工具</td><td><code>craft-anything-cli 0.5.0</code>，<code>--deep</code> 模式，内置解析器（无需 Ghidra/apktool）</td></tr>
+<tr><td>主要工具</td><td><code>core-target-open</code>、<code>android-package-show</code>、<code>core-archive-show</code>、<code>android-resources-read</code>、<code>capabilities</code></td></tr>
+<tr><td>证据</td><td>包信息 <code>ev_3f3b76ce…</code>；归档清单 <code>ev_5c368912…</code>（<code>inv_30ad8f8d…</code>）；原始输出保存在 <code>pkg.json</code> / <code>archive.json</code> / <code>res.json</code>，证据项目在 <code>mt.cany/</code></td></tr>
+</table>
+<div class="note warn"><b>责任边界。</b>本次只做<b>静态结构观察</b>：清单、权限、组件、资源表、文件清单、DEX 计数、内置资产命名。没有反编译并复制 MT 的代码、资源、图标或文案，没有绕过其加固、授权或签名校验，也没有把 MT 的二进制资产搬进你的项目。新增的语法高亮文件来自 CodeMirror 5.65.16（MIT，与项目 vendor 同版本）。craft-anything 的责任使用声明同样适用于本样本：仅用于你拥有或获授权检查的软件。</div>
+
+<h2 id="facts">三、MT 2.26.11 的关键结构事实</h2>
+
+<h3>3.1 包与签名</h3>
+<table>
+<tr><th>维度</th><th>观测值</th></tr>
+<tr><td>包名 / 版本</td><td><code>bin.mt.plus</code> · 2.26.11 · versionCode <code>26110366</code></td></tr>
+<tr><td>SDK</td><td>minSdk <b>21</b>（Android 5.0）/ targetSdk <b>30</b>（Android 11）</td></tr>
+<tr><td>签名</td><td>v1 + v2（<b>无 v3</b>），证书 <code>CN=bin</code>，SHA-256 <code>8501dd29…</code></td></tr>
+<tr><td>权限</td><td>25 项，含 <code>MANAGE_EXTERNAL_STORAGE</code>、<code>QUERY_ALL_PACKAGES</code>、<code>ACCESS_SUPERUSER</code>、<code>moe.shizuku.manager.permission.API_V23</code>、<code>com.rosan.dhizuku.permission.API</code></td></tr>
+<tr><td>组件</td><td>104 activity + 21 activity-alias + 13 service + 4 provider + 2 receiver</td></tr>
+</table>
+
+<h3>3.2 体积与内容构成</h3>
+<table>
+<tr><th>类别</th><th>数量 / 说明</th></tr>
+<tr><td>归档</td><td>2310 个主条目；<code>assets/filetransfer.apk</code> 是内嵌 APK（再展开 9 条）</td></tr>
+<tr><td>DEX</td><td>5 个，共 <b>32,989 类 / 299,951 方法 / 222,927 字符串</b>，每个都贴近 65,535 方法引用上限</td></tr>
+<tr><td>文件类型</td><td>1078 binary XML · 452 PNG · 599 binary · 43 ELF · 20 JS · 5 CSS · 1 HTML · 6 DEX</td></tr>
+<tr><td>资源表</td><td><code>resources.arsc</code>：45,333 条目 / 35,507 全局字符串 / 12 个 locale 配置</td></tr>
+<tr><td>原生库</td><td>4 个 ABI（arm64-v8a / armeabi-v7a / x86 / x86_64）× 约 10 个 .so</td></tr>
+</table>
+
+<h3>3.3 值得借鉴的内置资产</h3>
+<table>
+<tr><th>资产</th><th>内容</th><th>产品含义</th></tr>
+<tr><td><code>assets/web-manager/</code></td><td>完整 SPA：<code>index.html</code> + 14 个 Vite 打包的 JS/CSS chunk（最大 824 KB）+ <code>favicon.ico</code> + <code>shell-*.js</code></td><td><b>电脑浏览器里的完整 Web 文件管理器</b>，不是只读文件列表</td></tr>
+<tr><td><code>assets/syntax/*.mtsx</code></td><td>62 个自研语法定义：java/kotlin/smali/jasm/rust/zig/go/python/sql/markdown/latex/mtsx/mtl…</td><td>编辑器语言覆盖是核心卖点，语法可外置、可扩展</td></tr>
+<tr><td><code>lang-*.mtl</code> / <code>strings-*.mtl</code></td><td>11 套外置语言包：az / be / es / in / it / ru / tr / uk / zh-CN / zh-TW + 默认</td><td>语言与代码解耦，社区可翻译、可热更新</td></tr>
+<tr><td><code>assets/preview/</code></td><td>github-markdown 明暗 CSS、KaTeX JS/CSS、outline.js、download.js、enhance.js、preview.js</td><td>Markdown / 公式 / 大纲预览是编辑器配套能力</td></tr>
+<tr><td><code>assets/ffmpeg</code></td><td>452,780 B 的内置 ffmpeg 可执行文件</td><td>媒体转码、探测、缩略图等本地处理</td></tr>
+<tr><td>其它</td><td><code>compile_dex</code> / <code>runtime_dex</code> / <code>killer_*</code> / <code>testkey.pk8</code> / <code>Mono.ttf</code> / <code>eruda.js</code> / <code>sonivox_wave_data.dat</code> / <code>libzstd-jni</code></td><td>DEX 工具链、测试签名、等宽字体、移动端调试、MIDI 音色、zstd 压缩</td></tr>
+</table>
+
+<h3>3.4 保护形态（不建议照搬）</h3>
+<p>MT 的应用类名是 <code>l.֡ᩴ۫</code>，res 目录名被混淆，<code>resources.arsc</code> 里所有资源 key 统一为 <code>MT_Protector</code>，并带有 <code>libmtprotect.so</code>（每 ABI 约 2.5–3.1 MB）、<code>libhook.so</code>、<code>liblsplant.so</code> 与 <code>assets/0…9</code>。你的项目是开源开发版、明确「不包含任何原应用代码」，保持可审计比加壳更有价值；建议只做轻量的<b>自身完整性校验</b>，不要引入加固。</p>
+
+<h2 id="compare">四、逐项对比：MT vs 你的项目</h2>
+<table>
+<tr><th>维度</th><th>MT 2.26.11</th><th>Cyber-Hub-Manager 0.1.59</th><th>结论</th></tr>
+<tr><td>targetSdk / 签名</td><td>30 / v1+v2</td><td><b>34 / V1+V2+V3</b></td><td><span class="tag t-good">你领先</span></td></tr>
+<tr><td>提权通道</td><td>Root · Shizuku · Dhizuku · ACCESS_SUPERUSER</td><td>Root · Shizuku（<code>ElevatedAccess</code> / <code>ShizukuProvider</code>）</td><td><span class="tag t-info">基本持平</span></td></tr>
+<tr><td>归档格式</td><td>zstd-jni 等</td><td>zip/7z/tar+gz/xz/<b>zst</b>/bz2/lz4/gzip（<code>ArchiveTools</code>）</td><td><span class="tag t-good">持平</span></td></tr>
+<tr><td>系统「打开方式」</td><td>21 个 activity-alias，按 text/image/audio/video/file 分别注册 VIEW/EDIT/SEND</td><td>改前仅 3 个组件，<code>MediaPlayerActivity</code> 还 <code>exported=false</code></td><td><span class="tag t-warn">本次补齐</span></td></tr>
+<tr><td>语法高亮</td><td>62 个外置 <code>.mtsx</code></td><td>改前只有 clike / xml / 自定义 smali，且<b>所有文本一律按 Java 上色</b></td><td><span class="tag t-warn">本次大幅补齐</span></td></tr>
+<tr><td>本地化</td><td>11 套外置 <code>.mtl</code> 语言包 + 12 个 locale 资源</td><td>UI 全中文硬编码（<code>app.html lang="zh-CN"</code>）</td><td><span class="tag t-warn">待做</span></td></tr>
+<tr><td>Web 管理端</td><td>完整读写 SPA（含 shell chunk）</td><td><code>LocalService</code>：配对码保护的<b>只读</b> HTTP/FTP + MCP，仅 <code>list_files</code> / <code>read_text</code></td><td><span class="tag t-warn">差距最大，需你确认</span></td></tr>
+<tr><td>文档预览</td><td>Markdown 明暗主题 + KaTeX + 大纲</td><td>沙箱化 HTML 预览（<code>HtmlPreviewActivity</code>），无 Markdown/KaTeX</td><td><span class="tag t-warn">待做</span></td></tr>
+<tr><td>媒体处理</td><td>内置 ffmpeg</td><td>MediaServer（127.0.0.1 + Range）+ 原生播放器 + 字幕</td><td><span class="tag t-info">媒体播放持平，处理缺</span></td></tr>
+<tr><td>动态图标</td><td>3 个图标别名（NoBg / Dark / Light）</td><td>单一 <code>ic_launcher.xml</code></td><td><span class="tag t-info">可选</span></td></tr>
+<tr><td>版本一致性</td><td>—</td><td>改前 README 写 0.1.14 / versionCode 15，实际 0.1.59 / 55</td><td><span class="tag t-warn">本次修复</span></td></tr>
+</table>
+
+<h2 id="changes">五、本次已实施的 4 项改动</h2>
+
+<div class="change">
+  <h3>① 编辑器语法高亮：51 条扩展名映射 + 12 个语言包文件</h3>
+  <div class="files">文件：<code>app.html</code> · <code>app.js</code> · <code>vendor/</code> 新增 12 个文件</div>
+  <p>原实现是 <code>e.binaryXml || .xml ? 'xml' : .smali ? 'smali' : 'text/x-java'</code>——打开 <code>.json</code>、<code>.md</code>、<code>.py</code>、<code>.sh</code> 都会被当成 Java 上色。现在新增 CodeMirror 5.65.16 的 javascript / css / markdown / python / shell / sql / yaml / go / rust / properties / diff 共 11 个模式，加上 <code>simple.js</code> addon（rust 依赖 <code>defineSimpleMode</code>），并用 <code>editorModeFor(e)</code> 按扩展名选模式；<b>未注册的模式回退纯文本，不再误上色也不抛异常</b>。</p>
+  <pre>const mode=editorModeFor(e);   <span class="c">// 原来：所有文本统一 text/x-java</span>
+const known = (CodeMirror.modes[m] || CodeMirror.mimeModes[m]);
+return known ? m : null;        <span class="c">// 安全回退</span></pre>
+  <p class="small">覆盖 java/kotlin/scala/c/cpp/c#/gradle · xml/html/svg · js/jsx/ts/tsx/json · css/scss/less · md · py · sh/bash · sql · yaml · go · rust · properties/ini · diff · smali。验证：51/51 映射全部命中已注册模式。</p>
+</div>
+
+<div class="change">
+  <h3>② 注册为系统「打开方式」</h3>
+  <div class="files">文件：<code>AndroidManifest.xml</code></div>
+  <p>给 <code>MainActivity</code> 增加 VIEW / EDIT / SEND 三个 intent-filter（<code>content</code> / <code>file</code> scheme，mimeType <code>*/*</code>）。</p>
+  <p><b>刻意没有照搬 MT 的 21 个 activity-alias</b>：你的应用是单一 WebView 界面，若按媒体类型拆成多个别名，系统选择器里会出现多行重复的「赛博中枢管家」。一个统一入口更干净，同时复用了项目已有的 <code>openPathInUi</code> 机制。</p>
+</div>
+
+<div class="change">
+  <h3>③ 外部文件直接进对应内置查看器</h3>
+  <div class="files">文件：<code>MainActivity.java</code> · <code>app.js</code></div>
+  <p>新增 <code>resolveIncomingPath()</code> / <code>incomingDisplayName()</code> / <code>openExternalInUi()</code>：<code>content://</code> 通过 <code>ContentResolver</code> 复制到应用私有缓存（文件名消毒、256 MB 上限、不改动来源文件），<code>file://</code> 直接取规范路径；桌面快捷方式的 <code>open_path</code> extra 保持原行为。</p>
+  <p>前端新增 <code>window.cyberOpenExternal</code>：先导航到文件所在目录，再调用项目已有的 <code>openFile()</code> 分发器——共享的 <code>.txt</code> 直接进编辑器、图片进查看器、APK 进信息页、音视频进播放器，而不是把「文件路径」当目录去列（那样会报错）。</p>
+</div>
+
+<div class="change">
+  <h3>④ README 与构建配置对齐</h3>
+  <div class="files">文件：<code>README.md</code></div>
+  <p>标题、安装包名、versionCode 从 <code>0.1.14 / 15</code> 更正为 <code>0.1.59 / 55</code>，构建输出名同步；并注明下方 0.1.14 章节是历史版本记录，最新版说明在应用内「关于」中。</p>
+</div>
+
+<h2 id="verify">六、验证结果</h2>
+<table>
+<tr><th>检查</th><th>命令 / 方式</th><th>结果</th></tr>
+<tr><td>Java 全量编译</td><td><code>javac -11 -cp app/libs/*.jar + termux libs + android-api.jar</code>（补齐生成的 R stub）</td><td><span class="tag t-good">131 个 class，0 error</span></td></tr>
+<tr><td>前端语法</td><td><code>node --check app.js / boot.js / 12 个 vendor 文件</code></td><td><span class="tag t-good">全部通过</span></td></tr>
+<tr><td>语法映射</td><td>happy-dom + vm 加载全部模式后逐条核对 <code>CodeMirror.modes</code> / <code>mimeModes</code></td><td><span class="tag t-good">51 / 51 命中</span></td></tr>
+<tr><td>UI 冒烟测试</td><td><code>file-icons-smoke</code> · <code>open-with-ui-smoke</code> · <code>media-player-ui-smoke</code>（CI 同款）</td><td><span class="tag t-good">8 + 12 + 11 = 31 PASS</span></td></tr>
+<tr><td>清单 XML</td><td>ElementTree 解析 + intent-filter 结构核对</td><td><span class="tag t-good">通过</span></td></tr>
+<tr><td>补丁可应用性</td><td>还原出干净副本后 <code>git apply --check</code> 再实际应用并逐文件比对</td><td><span class="tag t-good">完全一致</span></td></tr>
+<tr><td>MCP / 工具链</td><td>craft-anything <code>doctor</code> + stdio 握手</td><td><span class="tag t-good">healthy</span></td></tr>
+</table>
+<p class="small">未做：真机 / 模拟器上的 intent 跳转与 WebView 实测（沙箱无 Android 设备）。这属于项目 README 已声明的限制。</p>
+
+<h2 id="roadmap">七、后续建议（按优先级）</h2>
+<table>
+<tr><th>优先级</th><th>建议</th><th>说明与风险</th></tr>
+<tr><td><span class="tag t-warn">需先确认</span></td><td><b>Web 管理器：只读共享 → 完整读写</b></td><td>MT 的 <code>web-manager</code> SPA 是最大差距。但你的 <code>LocalService</code> 刻意设计为「配对码保护 + 只读」，改成读会把写操作暴露到局域网，属于安全模型变更：<b>请先确认是否要放开</b>。若放开，建议保留配对码、加 CSRF token、限制 root 目录、写操作二次确认并记入活动记录。可复用现有 <code>LocalService</code> / <code>MediaServer</code> 的 HTTP 骨架。</td></tr>
+<tr><td>P1</td><td>外置语言包与 i18n</td><td>把 UI 文案抽到 <code>assets/lang/*.json</code>，运行时按系统 locale 加载，先做 zh-CN / en，再开放社区翻译。对齐 MT 的 <code>.mtl</code> 思路，但用你自己的格式。</td></tr>
+<tr><td>P1</td><td>Markdown / KaTeX / 大纲预览</td><td>在 <code>HtmlPreviewActivity</code> 旁加一个预览页，沿用现有 CSP（<code>script-src 'self'</code>），本地打包 marked + KaTeX，注意离线与同目录资源白名单。</td></tr>
+<tr><td>P2</td><td>动态图标别名</td><td>MT 有 NoBg / Dark / Light 三种图标别名。需先补 drawable 资源，再用 <code>activity-alias</code> + <code>PackageManager.setComponentEnabledSetting()</code> 切换。</td></tr>
+<tr><td>P2</td><td>本地 ffmpeg（可选）</td><td>用于转码 / 媒体探测 / 视频缩略图。注意体积与 ABI 分发，且二进制来源与许可要写进 <code>DEPENDENCIES.json</code>。</td></tr>
+<tr><td>P2</td><td>轻量自身完整性校验</td><td>只做签名证书指纹自检并提示，<b>不要</b>照搬 MT 的加壳、资源混淆与 LSPlant hook。</td></tr>
+<tr><td>保持</td><td>targetSdk 34、V1/V2/V3、开源可审计</td><td>这三点是你相对 MT 的优势，别为了「像 MT」而回退。</td></tr>
+</table>
+
+<h2 id="files">八、交付文件</h2>
+<table>
+<tr><th>路径</th><th>内容</th></tr>
+<tr><td><code>/workspace/mt-analysis/optimization-report.html</code></td><td>本报告</td></tr>
+<tr><td><code>/workspace/mt-analysis/optimization.patch</code></td><td>可直接 <code>git apply</code> 到原仓库的完整补丁（5 个修改 + 12 个新增）</td></tr>
+<tr><td><code>/workspace/mt-analysis/Cyber-Hub-Manager-main/</code></td><td>已应用全部改动的项目副本，可直接构建</td></tr>
+<tr><td><code>/workspace/mt-analysis/backup/</code></td><td>改动前的 5 个原始文件，便于 diff 与回滚</td></tr>
+<tr><td><code>/workspace/mt-analysis/MT2.26.11.apk</code></td><td>分析样本</td></tr>
+<tr><td><code>/workspace/mt-analysis/pkg.json</code> · <code>archive.json</code> · <code>res.json</code></td><td>craft-anything 的原始证据输出（含 evidence id 与 coverage）</td></tr>
+<tr><td><code>/workspace/mt-analysis/mt.cany/</code></td><td>craft-anything 证据项目目录</td></tr>
+</table>
+<pre># 应用补丁到你自己 clone 的仓库
+cd Cyber-Hub-Manager
+git apply /workspace/mt-analysis/optimization.patch
+
+# 本地复验（需 JDK 17 + Node 20 + happy-dom 15.11.7）
+node --check app/src/main/assets/app.js
+node tests/file-icons-smoke.cjs
+python3 tools/build.py        # 需要 Android SDK platform 34 / build-tools 35.0.0</pre>
+
+<footer>
+分析由 craft-anything 0.5.0（Deep 模式，内置解析器）完成；优化实施与验证在本沙箱内完成。<br>
+本报告仅记录静态结构观察与自有项目的独立实现，未包含、未复制 MT 管理器的代码、资源、图标或文案。
+</footer>
+
+</div></body></html>

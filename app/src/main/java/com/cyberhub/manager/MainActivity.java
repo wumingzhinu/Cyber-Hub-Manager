@@ -37,6 +37,7 @@ public class MainActivity extends Activity {
     static final int UNINSTALL_REQ=4242;
     public volatile boolean uninstallBusy;
     private String pendingOpenPath;
+    private boolean pendingOpenExternal;
     private static final String APP_URL="https://appassets.androidplatform.net/assets/app.html";
     private final ExecutorService worker=Executors.newFixedThreadPool(2);
     private final ExecutorService thumbnails=Executors.newSingleThreadExecutor();
@@ -59,7 +60,7 @@ public class MainActivity extends Activity {
     private AudioManager mediaAudioManager;
     @Override public void onCreate(Bundle state){super.onCreate(state);
         System.setProperty("java.io.tmpdir",getCacheDir().getPath());
-        pendingOpenPath=getIntent()==null?null:getIntent().getStringExtra("open_path");
+        pendingOpenPath=resolveIncomingPath(getIntent());
         try{engine=new DataEngine(this);web=new WebView(this);web.setBackgroundColor(0xff303030);
         WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setAllowFileAccess(false);s.setAllowContentAccess(false);s.setAllowFileAccessFromFileURLs(false);s.setAllowUniversalAccessFromFileURLs(false);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);s.setMediaPlaybackRequiresUserGesture(false);s.setTextZoom(100);s.setSupportZoom(false);s.setBuiltInZoomControls(false);s.setDisplayZoomControls(false);
         web.setWebChromeClient(new WebChromeClient(){@Override public boolean onConsoleMessage(ConsoleMessage m){
@@ -72,7 +73,7 @@ public class MainActivity extends Activity {
             @Override public void onPageFinished(WebView v,String url){
                 if(APP_URL.equals(url)){
                     v.evaluateJavascript("typeof window.CyberBoot === 'object'",result->{if(!"true".equals(result))showStartupError("界面启动脚本未能加载。");});
-                    if(pendingOpenPath!=null){String path=pendingOpenPath;pendingOpenPath=null;openPathInUi(path);}
+                    if(pendingOpenPath!=null){String path=pendingOpenPath;boolean external=pendingOpenExternal;pendingOpenPath=null;pendingOpenExternal=false;if(external)openExternalInUi(path);else openPathInUi(path);}
                 }
             }
             @Override public boolean onRenderProcessGone(WebView v,RenderProcessGoneDetail detail){
@@ -84,13 +85,80 @@ public class MainActivity extends Activity {
     }
     @Override protected void onNewIntent(Intent intent){
         super.onNewIntent(intent);
-        String path=intent==null?null:intent.getStringExtra("open_path");
-        if(path!=null)runOnUiThread(()->{if(web!=null){pendingOpenPath=null;openPathInUi(path);}else pendingOpenPath=path;});
+        String path=resolveIncomingPath(intent);
+        if(path==null)return;
+        final boolean external=pendingOpenExternal;
+        pendingOpenExternal=false;
+        runOnUiThread(()->{
+            if(web!=null){pendingOpenPath=null;if(external)openExternalInUi(path);else openPathInUi(path);}
+            else{pendingOpenPath=path;pendingOpenExternal=external;}
+        });
+    }
+    /** Resolve an external VIEW / EDIT / SEND intent into a path the file pane can
+        show. content:// streams are copied into our private cache first: the WebView
+        never receives a foreign URI and the sender's file is never modified. The
+        same helper serves the existing desktop-shortcut "open_path" extra. */
+    private String resolveIncomingPath(Intent intent){
+        pendingOpenExternal=false;
+        if(intent==null)return null;
+        String direct=intent.getStringExtra("open_path");
+        if(direct!=null&&!direct.isEmpty())return direct;
+        Uri uri=intent.getData();
+        if(uri==null&&Intent.ACTION_SEND.equals(intent.getAction()))
+            uri=intent.getParcelableExtra(Intent.EXTRA_STREAM);
+        if(uri==null)return null;
+        try{
+            if("file".equalsIgnoreCase(uri.getScheme())){
+                File f=new File(uri.getPath()==null?"":uri.getPath()).getCanonicalFile();
+                if(!f.isFile()&&!f.isDirectory())return null;
+                pendingOpenExternal=f.isFile();
+                return f.getAbsolutePath();
+            }
+            if(!"content".equalsIgnoreCase(uri.getScheme()))return null;
+            String name=incomingDisplayName(uri);
+            if(name==null||name.isEmpty())name="shared-"+Integer.toHexString(uri.toString().hashCode());
+            name=new File(name).getName();
+            if(name.isEmpty()||name.equals(".")||name.equals(".."))name="shared.bin";
+            File dir=new File(getCacheDir(),"incoming");
+            if(!dir.isDirectory()&&!dir.mkdirs())return null;
+            File out=FileOps.child(dir,name);
+            try(InputStream in=getContentResolver().openInputStream(uri);
+                OutputStream os=new FileOutputStream(out)){
+                if(in==null)return null;
+                byte[] buf=new byte[65536];long total=0;int n;
+                while((n=in.read(buf))>0){
+                    total+=n;
+                    if(total>256L*1024*1024)throw new IOException("文件超过 256 MB 限制");
+                    os.write(buf,0,n);
+                }
+            }
+            pendingOpenExternal=true;
+            return out.getAbsolutePath();
+        }catch(Throwable error){
+            android.util.Log.w("CyberHub","Cannot open external file: "+error.getMessage());
+            return null;
+        }
+    }
+    private String incomingDisplayName(Uri uri){
+        try(android.database.Cursor c=getContentResolver().query(uri,
+                new String[]{android.provider.OpenableColumns.DISPLAY_NAME},null,null,null)){
+            if(c!=null&&c.moveToFirst()){
+                int i=c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+                if(i>=0)return c.getString(i);
+            }
+        }catch(Throwable ignored){}
+        String last=uri.getLastPathSegment();
+        return last==null?"":last;
     }
     /** Navigate the file pane to a path requested by a desktop shortcut. */
     private void openPathInUi(String path){
         if(web==null)return;
         web.evaluateJavascript("(function(){var p="+JSONObject.quote(path)+";var n=0;var t=function(){if(window.cyberOpenPath)window.cyberOpenPath(p);else if(n++<100)setTimeout(t,100);};t();})()",null);
+    }
+    /** Open an externally shared file directly in the matching built-in viewer. */
+    private void openExternalInUi(String path){
+        if(web==null)return;
+        web.evaluateJavascript("(function(){var p="+JSONObject.quote(path)+";var n=0;var t=function(){if(window.cyberOpenExternal)window.cyberOpenExternal(p);else if(n++<100)setTimeout(t,100);};t();})()",null);
     }
     /** Request a launcher shortcut that opens this file or folder in the app. */
     private void pinShortcut(File target){
@@ -189,6 +257,8 @@ public class MainActivity extends Activity {
                     case "createShortcut":{File target=new File(a.getString("path"));if(!target.exists())throw new IOException("目标不存在");runOnUiThread(()->pinShortcut(target));result=true;break;}
                     case "openWithApps":result=openWithApps(a);break;
                     case "openWithLaunch":{File f=new File(a.getString("path"));if(!f.isFile())throw new IOException("文件未找到");if(!f.canRead())throw new IOException("无法读取此文件");File shared=shareCopy(f);String mime=a.optString("mime",openWithMime(f.getPath()));String pkg=a.getString("pkg"),cls=a.getString("cls");runOnUiThread(()->openWithLaunch(shared,mime,pkg,cls));result=true;break;}
+                    case "setAppIcon":result=ExtraTools.setIconVariant(MainActivity.this,a.optString("variant","默认"));break;
+                    case "getAppIcon":result=ExtraTools.iconVariant(MainActivity.this);break;
                     default:result=engine.call(action,a);
                 }
                 response.put("id",id);response.put("ok",true);response.put("data",result==null?JSONObject.NULL:result);

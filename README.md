@@ -1,8 +1,35 @@
-# Cyber Hub Manager — 0.1.14 development build
+# Cyber Hub Manager — 0.1.59 development build
 
 Android file manager and APK/DEX editor using a local WebView interface and native Java tools. Core tools work offline. Android 8.0 / API 26 or newer is required.
 
-Install `Cyber-Hub-Manager-0.1.14.apk` as an **Update** over the existing app. Package `com.cyberhub.manager`, development signer and local asset origin are unchanged; versionCode is 15. Do not uninstall if you want to keep the private Workspace.
+Install `Cyber-Hub-Manager-0.1.59.apk` as an **Update** over the existing app. Package `com.cyberhub.manager`, development signer and local asset origin are unchanged; versionCode is 55. Do not uninstall if you want to keep the private Workspace.
+
+> Current build is **0.1.59** (versionCode 55). The section below documents the 0.1.14 feature set; the in-app About dialog lists every later release. Round 3 changes are documented in the section directly below.
+
+## Round 3 — i18n, offline previews, folder comparison, media probe and signature check
+
+Closes the remaining P1 / P2 gaps found against MT Manager 2.26.11. The app version is unchanged (0.1.59 / versionCode 55).
+
+- **External language packs.** `assets/lang/packs.js` ships `zh-CN` and `en` dictionaries (110 keys). `t(key, fallback)` and `tr()` translate dialog, menu, options and toast labels when 设置 → 其它 → 语言 is set to English; the default Chinese path returns every original string byte-for-byte, so existing screens and tests are unaffected. All new tool pages are bilingual.
+- **Markdown / KaTeX preview + outline.** A zero-dependency offline renderer (`vendor/markdown-preview.js`) covers headings, lists, task lists, tables, quotes, fenced code, emphasis, links and `$…$` / `$$…$$` math. KaTeX 0.16.11 (JS + CSS + 20 woff2 fonts, 592 KB) is bundled and loaded on demand. Output is HTML-escaped, URLs are allow-listed, and the preview has a clickable outline sidebar.
+- **SVG / font / .9.png previews.** SVG keeps its isolated `<img>` rendering and gains a source-view entry; TTF/OTF/WOFF/WOFF2 files render a multi-size specimen; `.9.png` files show npTc stretch, padding and optical chunk data over a pixel checkerboard. Stretch regions can be edited and exported as a new `_edited.9.png` (all chunk CRCs recomputed), never overwriting the source.
+- **Folder comparison.** `ExtraTools.compareFolders` walks two trees by name/size or SHA-256 content. 工具 → 对比文件夹 / 对比两个窗格 show the differences in a tool page. The existing two-file APK/DEX/ARSC/AXML comparison is untouched.
+- **Media / MIDI / ffmpeg probe.** `MediaMetadataRetriever` metadata, MIDI header details (format, tracks, division, tempo, events, estimated duration) and local ffmpeg detection (system / Termux paths, `-version` and `-i` output) appear in 工具 → 媒体信息.
+- **Signature fingerprint self-check.** apksig `ApkVerifier` verifies a chosen APK (V1/V2/V3 + certificates) and `SigningInfo` / `GET_SIGNATURES` reads the app's own signer; SHA-256 / SHA-1 / MD5 are shown. Entries: 设置 → 其它、关于, and 工具 for an APK.
+- **Switchable launcher icons.** Three `activity-alias` components (默认 / 极光蓝 / 矩阵绿) keep exactly one LAUNCHER enabled; 设置 → 外观 → 桌面图标 switches via `PackageManager.setComponentEnabledSetting`. VIEW/EDIT/SEND filters and pinned shortcuts are unchanged; some launchers need the shortcut re-added.
+- **CSP.** `font-src 'self' data:` was added for data-URL font specimens. `script-src 'self'` is unchanged — no script relaxation.
+
+New front-end licence: **KaTeX 0.16.11 (MIT, `licenses/KaTeX-MIT.txt`)**. All preview code is self-contained; no MT Manager assets, icons or strings were copied.
+
+## Editor polish (bundled monospace, wider syntax coverage, regex find/replace)
+
+Three editor-level gaps against MT Manager 2.26.11 were closed in this round:
+
+- **Bundled monospace face.** The editor requested `Droid Sans Mono` but shipped no monospace font, so character alignment depended on each ROM's fallback. `fonts/JetBrainsMono-Regular.woff2` (21 KB, JetBrains Mono, SIL OFL 1.1) is now loaded through `@font-face` and drives `--mono`, the code editor, the hex viewer, the terminal and log output. MT ships its own `Mono.ttf` for the same reason.
+- **Syntax coverage.** 15 more CodeMirror 5.65.16 modes are bundled — Lua, PHP, Ruby, Swift, Dart, Groovy, TOML, PowerShell, VB, LaTeX, CMake, Sass, TCL, GNU as and Brainfuck — taking the extension map from 51 to **84 entries** and covering most of MT's 62 `.mtsx` definitions. `CMakeLists.txt` is matched by filename. Unregistered modes still fall back to plain text instead of throwing.
+- **Regex find / replace.** 搜索 and 查找替换 now share 正则表达式 / 区分大小写 toggles, show a match count, and support `$1`–`$9` / `$&` capture references when replacing with a pattern. Invalid patterns report the error instead of silently doing nothing. MT's remote web manager exposes the same capability.
+
+Front-end licences are bundled offline: CodeMirror (MIT, `app/src/main/assets/vendor/CODEMIRROR-LICENSE.txt`), Public Sans (OFL, `licenses/Public-Sans-OFL.txt`), JetBrains Mono (OFL, `licenses/JetBrains-Mono-OFL.txt`). No runtime network fetch was added. KaTeX (MIT, `licenses/KaTeX-MIT.txt`) is also bundled for math rendering.
 
 ## 0.1.14 — Built-in media player, screenshot-driven UX (媒体播放 / 长按菜单 / 快速访问 / 跳转)
 
@@ -142,7 +169,7 @@ All runtime JARs, four Zstandard Android ABIs and local UI assets are included. 
 python tools/build.py --sdk /absolute/path/to/android-sdk
 ```
 
-Its default build-tools selection is 35.0.0 (required for `zipalign -P 16`); pass `--tools` for another installed build-tools directory. It stores native libraries uncompressed, aligns them to 16 KB, then verifies every packaged ELF LOAD segment and ZIP data offset before publishing. Output: `dist/Cyber-Hub-Manager-0.1.14.apk`. It compiles with desktop ECJ, converts with D8, aligns, signs, verifies signatures and checks packaged assets before publishing.
+Its default build-tools selection is 35.0.0 (required for `zipalign -P 16`); pass `--tools` for another installed build-tools directory. It stores native libraries uncompressed, aligns them to 16 KB, then verifies every packaged ELF LOAD segment and ZIP data offset before publishing. Output: `dist/Cyber-Hub-Manager-0.1.59.apk`. It compiles with desktop ECJ, converts with D8, aligns, signs, verifies signatures and checks packaged assets before publishing.
 
 `python tools/dependencies.py` recreates pinned runtime JARs. `python tools/compiler-api.py /path/to/platforms/android-34/android.jar` recreates the compile-only classpath asset. Dependency/source/license information is in `THIRD-PARTY-NOTICES.txt`, `DEPENDENCIES.json` and `licenses/`.
 

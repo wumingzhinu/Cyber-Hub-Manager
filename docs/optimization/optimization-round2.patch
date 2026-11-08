@@ -1,0 +1,4276 @@
+diff --git a/README.md b/README.md
+index a2ac93f..7b710e9 100755
+--- a/README.md
++++ b/README.md
+@@ -6,6 +6,16 @@ Install `Cyber-Hub-Manager-0.1.59.apk` as an **Update** over the existing app. P
+ 
+ > Current build is **0.1.59** (versionCode 55). The section below documents the 0.1.14 feature set; the in-app About dialog lists every later release.
+ 
++## Editor polish (bundled monospace, wider syntax coverage, regex find/replace)
++
++Three editor-level gaps against MT Manager 2.26.11 were closed in this round:
++
++- **Bundled monospace face.** The editor requested `Droid Sans Mono` but shipped no monospace font, so character alignment depended on each ROM's fallback. `fonts/JetBrainsMono-Regular.woff2` (21 KB, JetBrains Mono, SIL OFL 1.1) is now loaded through `@font-face` and drives `--mono`, the code editor, the hex viewer, the terminal and log output. MT ships its own `Mono.ttf` for the same reason.
++- **Syntax coverage.** 15 more CodeMirror 5.65.16 modes are bundled — Lua, PHP, Ruby, Swift, Dart, Groovy, TOML, PowerShell, VB, LaTeX, CMake, Sass, TCL, GNU as and Brainfuck — taking the extension map from 51 to **84 entries** and covering most of MT's 62 `.mtsx` definitions. `CMakeLists.txt` is matched by filename. Unregistered modes still fall back to plain text instead of throwing.
++- **Regex find / replace.** 搜索 and 查找替换 now share 正则表达式 / 区分大小写 toggles, show a match count, and support `$1`–`$9` / `$&` capture references when replacing with a pattern. Invalid patterns report the error instead of silently doing nothing. MT's remote web manager exposes the same capability.
++
++Front-end licences are bundled offline: CodeMirror (MIT, `app/src/main/assets/vendor/CODEMIRROR-LICENSE.txt`), Public Sans (OFL, `licenses/Public-Sans-OFL.txt`), JetBrains Mono (OFL, `licenses/JetBrains-Mono-OFL.txt`). No runtime network fetch was added.
++
+ ## 0.1.14 — Built-in media player, screenshot-driven UX (媒体播放 / 长按菜单 / 快速访问 / 跳转)
+ 
+ - **内置媒体播放器**: tapping a photo/video/audio file opens it in-app. The video player supports **long-press 2×/3× speed boost**, **right-half vertical swipe = volume**, **left-half vertical swipe = brightness** (both remembered), a seek bar and auto-hiding controls. Audio plays in the same layer. Streams are served by a loopback-only HTTP server (`MediaServer`, 127.0.0.1, HTTP Range support); unsupported exotic formats fall back to the system player, then to 打开方式. Format coverage was greatly expanded (ico/tiff/dng/RAW, mkv/ts/m2ts/flv/rmvb/asf/vob…, flac/opus/ape/ac3/dts/amr/mka…).
+diff --git a/app/src/main/assets/app.html b/app/src/main/assets/app.html
+index 94636ab..17f2d72 100755
+--- a/app/src/main/assets/app.html
++++ b/app/src/main/assets/app.html
+@@ -1,3 +1,3 @@
+ <!doctype html>
+ <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark light"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'none'; object-src 'none'; base-uri 'none'"><title>赛博中枢管家</title><link rel="stylesheet" href="vendor/codemirror.css"><link rel="stylesheet" href="style.css"></head>
+-<body><main id="app"><header id="toolbar"><div class="titleblock"><div class="title">赛博中枢管家</div><div class="subtitle">正在启动…</div></div></header><section id="subbar"></section><section id="content"><div class="bootStatus" role="status"><h2>正在打开您的工作区…</h2><p>文件管理器正在加载。</p><button class="primary" id="bootRetry">重试</button><noscript>JavaScript 不可用。请关闭并重新打开应用。</noscript></div></section><footer id="bottom"></footer></main><div id="drawerLayer"></div><div id="modalLayer"></div><div id="menuLayer"></div><div id="toast" role="status"></div><div id="progress"></div><script src="boot.js"></script><script src="vendor/codemirror.js"></script><script src="vendor/simple.js"></script><script src="vendor/clike.js"></script><script src="vendor/xml.js"></script><script src="vendor/javascript.js"></script><script src="vendor/css.js"></script><script src="vendor/markdown.js"></script><script src="vendor/python.js"></script><script src="vendor/shell.js"></script><script src="vendor/sql.js"></script><script src="vendor/yaml.js"></script><script src="vendor/go.js"></script><script src="vendor/rust.js"></script><script src="vendor/properties.js"></script><script src="vendor/diff.js"></script><script src="vendor/searchcursor.js"></script><script src="app.js"></script></body></html>
++<body><main id="app"><header id="toolbar"><div class="titleblock"><div class="title">赛博中枢管家</div><div class="subtitle">正在启动…</div></div></header><section id="subbar"></section><section id="content"><div class="bootStatus" role="status"><h2>正在打开您的工作区…</h2><p>文件管理器正在加载。</p><button class="primary" id="bootRetry">重试</button><noscript>JavaScript 不可用。请关闭并重新打开应用。</noscript></div></section><footer id="bottom"></footer></main><div id="drawerLayer"></div><div id="modalLayer"></div><div id="menuLayer"></div><div id="toast" role="status"></div><div id="progress"></div><script src="boot.js"></script><script src="vendor/codemirror.js"></script><script src="vendor/simple.js"></script><script src="vendor/clike.js"></script><script src="vendor/xml.js"></script><script src="vendor/javascript.js"></script><script src="vendor/css.js"></script><script src="vendor/markdown.js"></script><script src="vendor/python.js"></script><script src="vendor/shell.js"></script><script src="vendor/sql.js"></script><script src="vendor/yaml.js"></script><script src="vendor/go.js"></script><script src="vendor/rust.js"></script><script src="vendor/properties.js"></script><script src="vendor/diff.js"></script><script src="vendor/lua.js"></script><script src="vendor/php.js"></script><script src="vendor/ruby.js"></script><script src="vendor/swift.js"></script><script src="vendor/dart.js"></script><script src="vendor/groovy.js"></script><script src="vendor/toml.js"></script><script src="vendor/powershell.js"></script><script src="vendor/vb.js"></script><script src="vendor/stex.js"></script><script src="vendor/cmake.js"></script><script src="vendor/sass.js"></script><script src="vendor/tcl.js"></script><script src="vendor/gas.js"></script><script src="vendor/brainfuck.js"></script><script src="vendor/searchcursor.js"></script><script src="app.js"></script></body></html>
+diff --git a/app/src/main/assets/app.js b/app/src/main/assets/app.js
+index d7b28ae..dbc003e 100755
+--- a/app/src/main/assets/app.js
++++ b/app/src/main/assets/app.js
+@@ -194,7 +194,7 @@ const imageExtensions=['jpg','jpeg','jpe','jfif','png','gif','webp','bmp','dib',
+ const videoExtensions=['mp4','m4v','f4v','mkv','mk3d','webm','mov','qt','avi','divx','3gp','3g2','ts','m2ts','mts','m2t','mtv','tp','trp','vro','flv','wmv','asf','mpg','mpeg','mpe','m1v','m2v','vob','ogv','ogm','rm','rmvb','mxf'];
+ const audioExtensions=['mp3','mp2','mpga','wav','wave','flac','aac','m4a','m4b','ogg','oga','opus','spx','wma','amr','nb','awb','mid','midi','rmi','ape','apl','aiff','aif','aifc','mka','au','snd','caf','weba','ac3','dts','tta','wv'];
+ const archiveExtensions=['zip','rar','7z','tar','gz','gzip','tgz','bz2','bzip2','xz','zst','lz4','tbz','tbz2','txz','tzst','zipx','cab','iso'];
+-const textExtensions=['txt','md','markdown','log','json','csv','tsv','ini','conf','cfg','prop','properties','yml','yaml','toml','html','htm','css','js','mjs','ts','sh','py','bat','gradle'];
++const textExtensions=['txt','md','markdown','log','json','csv','tsv','ini','conf','cfg','prop','properties','yml','yaml','toml','html','htm','css','js','mjs','ts','sh','py','bat','gradle','geojson','scss','less','sass','cjs','jsx','tsx','bash','zsh','ksh','pyw','lua','php','php3','php4','php5','php7','phtml','rb','rbw','rake','gemspec','swift','dart','groovy','gvy','gy','gsh','ps1','psm1','psd1','vb','bas','frm','tex','latex','sty','s','asm','bf','cmake','tcl','go','rs','sql','kt','kts','scala','c','h','cpp','cc','cxx','hpp','cs','diff','patch'];
+ function mediaKind(f){const ext=String(f.name||'').split('.').pop().toLowerCase();if(imageExtensions.includes(ext))return 'image';if(videoExtensions.includes(ext))return 'video';if(audioExtensions.includes(ext))return 'audio';return '';}
+ function fileType(f){if(f.dir)return 'folder';const media=mediaKind(f);if(media)return media;const ext=f.name.split('.').pop().toLowerCase();if(ext==='bak')return 'bak';if(ext==='arec')return 'arec';if(ext==='so')return 'so';if(ext==='bin')return 'bin';if(ext==='hap')return 'hap';if(ext==='iap')return 'iap';if(ext==='ipa')return 'ipa';if(ext==='exe')return 'exe';if(ext==='deb')return 'deb';if(ext==='pdf')return 'pdf';if(ext==='doc'||ext==='docx')return 'doc';if(ext==='xls'||ext==='xlsx'||ext==='csv')return 'xls';if(ext==='ppt'||ext==='pptx')return 'ppt';if(ext==='html'||ext==='htm'||ext==='xhtml')return 'html';if(ext==='xapk')return 'apks';if(archiveExtensions.includes(ext))return 'archive';if(textExtensions.includes(ext))return 'text';return ['apk','apks','dex','xml','java','smali','arsc'].includes(ext)?ext:'file';}
+ const apkIconCache=new Map();const listThumbCache=new Map();const appBadgeCache=new Map();let iconObservers=[];
+@@ -2092,18 +2092,28 @@ if(window.matchMedia){const reduced=window.matchMedia('(prefers-reduced-motion:
+ const editorModeByExt={java:'text/x-java',kt:'text/x-kotlin',kts:'text/x-kotlin',scala:'text/x-scala',
+  c:'text/x-csrc',h:'text/x-csrc',cpp:'text/x-c++src',cc:'text/x-c++src',cxx:'text/x-c++src',hpp:'text/x-c++src',
+  cs:'text/x-csharp',gradle:'text/x-java',
++ groovy:'text/x-groovy',gvy:'text/x-groovy',gy:'text/x-groovy',gsh:'text/x-groovy',
+  xml:'xml',axml:'xml',svg:'xml',xsl:'xml',html:'text/html',htm:'text/html',xhtml:'text/html',
+  js:'javascript',mjs:'javascript',cjs:'javascript',jsx:'javascript',ts:'text/typescript',tsx:'text/typescript',
+- json:'application/json',geojson:'application/json',css:'css',scss:'text/x-scss',less:'text/x-less',
++ json:'application/json',geojson:'application/json',css:'css',scss:'text/x-scss',less:'text/x-less',sass:'text/x-sass',
+  md:'markdown',markdown:'markdown',py:'python',pyw:'python',
++ lua:'text/x-lua',php:'text/x-php',php3:'text/x-php',php4:'text/x-php',php5:'text/x-php',php7:'text/x-php',phtml:'text/x-php',
++ rb:'text/x-ruby',rbw:'text/x-ruby',rake:'text/x-ruby',gemspec:'text/x-ruby',
++ swift:'text/x-swift',dart:'application/dart',
+  sh:'shell',bash:'shell',zsh:'shell',ksh:'shell',sql:'text/x-sql',
+- yml:'yaml',yaml:'yaml',go:'go',rs:'rust',
++ ps1:'application/x-powershell',psm1:'application/x-powershell',psd1:'application/x-powershell',
++ vb:'text/x-vb',bas:'text/x-vb',frm:'text/x-vb',
++ tex:'text/x-stex',latex:'text/x-stex',sty:'text/x-stex',
++ s:'gas',asm:'gas',bf:'text/x-brainfuck',
++ yml:'yaml',yaml:'yaml',toml:'text/x-toml',go:'go',rs:'rust',cmake:'text/x-cmake',tcl:'text/x-tcl',
+  properties:'properties',ini:'properties',conf:'properties',cfg:'properties',prop:'properties',
+  diff:'diff',patch:'diff',smali:'smali'};
+ function editorModeFor(e){
+  if(e&&e.binaryXml)return 'xml';
+  const name=String((e&&e.name)||'').toLowerCase(),dot=name.lastIndexOf('.');
+  let m=dot>=0?editorModeByExt[name.slice(dot+1)]:null;
++ /* Name-based overrides: files whose extension alone is ambiguous. */
++ if(/^cmakelists\.txt$/.test(name))m='text/x-cmake';
+  if(!m&&e&&e.kind==='dex')m=e.mode==='java'?'text/x-java':'smali';
+  if(!m)return null;
+  const known=typeof CodeMirror!=='undefined'&&((CodeMirror.modes&&CodeMirror.modes[m])||(CodeMirror.mimeModes&&CodeMirror.mimeModes[m]));
+@@ -2137,8 +2147,70 @@ async function toggleJava(){if(!await canLeave())return;await openClass(state.ed
+ async function reloadEditor(){if(!await canLeave())return;const e=state.editor;if(e.kind==='dex')await openClass(e.class,e.mode);else if(e.kind==='arsc')await arscOpenEntryXml(e.entry&&e.entry.package,'',e.id,e.config||'');else await openText(e.args);}
+ function editorMenu(){const e=state.editor;const rows=[{icon:'save',label:e.mode==='java'?'编译并保存 Java':'保存',run:saveEditor},...(e.kind==='dex'?[{icon:'check',label:'保存并签名 APK',run:saveAndSignProject}]:[]),{icon:'refresh',label:'重新加载',run:reloadEditor}];if(e.kind==='file'&&/\.x?html?$/i.test(e.name||''))rows.push({icon:'html',label:'预览网页',run:()=>htmlPreview({name:e.name,dir:false,archive:e.args&&e.args.archive,entry:e.args&&e.args.entry,path:(e.args&&e.args.path)||e.path})});if(e.kind==='dex'&&e.mode==='java')rows.push({icon:'compass',label:'查看 Smali',run:toggleJava});if(e.kind==='dex')rows.push({icon:'switch',label:e.mode==='java'?'切换反编译器':'查看 Java',run:e.mode==='java'?switchDecompiler:toggleJava});rows.push({icon:'search',label:'搜索',run:findText},{icon:'edit',label:'查找替换',run:replaceText},{icon:'jump',label:'跳转到行',run:jumpLine},{icon:'wrap',label:'自动换行',end:pref.wrap?'已开启':'已关闭',run:()=>{pref.wrap=!pref.wrap;savePref();state.cm.setOption('lineWrapping',pref.wrap);}},{icon:'export',label:'导出',run:()=>exportText(state.cm.getValue(),e.name)},{icon:'text',label:'文字大小 / 缩放',run:zoomDialog},{icon:'settings',label:'设置',run:preferences},{icon:'close',label:'关闭',run:window.goBack});menu(rows);}
+ function switchDecompiler(){options('JADX 反编译模式',[['auto','自动 — 结构化 Java'],['simple','简单 — 较少转换'],['fallback','回退 — 指令视图']].map(([mode,label])=>({label,run:async()=>{state.dex.mode=mode;await reloadEditor();}})));}
+-function replaceText(){const cm=state.cm;if(state.editor.readOnly)return;const d=dialog('查找替换','<label>查找</label><input id="replaceFind" spellcheck="false"><label>替换为</label><input id="replaceWith" spellcheck="false"><p id="replaceCount" class="muted">匹配完全一致的文本（区分大小写）。</p>',[['关闭',closeModal],['替换下一处',()=>replace(false)],['全部替换',()=>replace(true)]]);function replace(all){const query=d.querySelector('#replaceFind').value,value=d.querySelector('#replaceWith').value;if(!query)return;let count=0;cm.operation(()=>{const cursor=cm.getSearchCursor(query,all?{line:0,ch:0}:cm.getCursor('from'),false);while(cursor.findNext()){const from=cursor.from();cursor.replace(value);count++;if(!all){cm.setCursor(cursor.to());cm.scrollIntoView(from,60);break;}}});d.querySelector('#replaceCount').textContent=count+' 处替换';}}
+-let lastSearch='';function findText(){const d=dialog('搜索',`<input id="searchText" value="${esc(lastSearch)}" placeholder="搜索文本" spellcheck="false"><div id="searchResult" class="progresslabel"></div>`,[['关闭',closeModal],['上一处',()=>find(-1)],['下一处',()=>find(1)]]);function find(dir){const q=d.querySelector('input').value;if(!q)return;lastSearch=q;const cm=state.cm,cursor=cm.getSearchCursor(q,dir<0?cm.getCursor('from'):cm.getCursor('to'),{caseFold:true});let found=dir<0?cursor.findPrevious():cursor.findNext();let c=cursor;if(!found){c=cm.getSearchCursor(q,dir<0?{line:cm.lastLine(),ch:cm.getLine(cm.lastLine()).length}:{line:0,ch:0},{caseFold:true});found=dir<0?c.findPrevious():c.findNext();}if(found){cm.setSelection(c.from(),c.to());cm.scrollIntoView({from:c.from(),to:c.to()},70);$('#searchResult').textContent='第 '+(c.from().line+1);}else $('#searchResult').textContent='未找到匹配';}d.querySelector('input').onkeydown=e=>{if(e.key==='Enter')find(1);};d.querySelector('input').focus();}
++/* ---- Editor search & replace: shared regex / case options ---- */
++let lastSearch='',searchOpts={regex:false,caseSensitive:false};
++function searchOptionsHtml(){return '<div class="findOpts"><label class="toggleRow"><span>正则表达式</span><input type="checkbox" id="srRegex" '+(searchOpts.regex?'checked':'')+'></label><label class="toggleRow"><span>区分大小写</span><input type="checkbox" id="srCase" '+(searchOpts.caseSensitive?'checked':'')+'></label></div>';}
++function readSearchOptions(d){const r=d.querySelector('#srRegex'),c=d.querySelector('#srCase');searchOpts.regex=!!(r&&r.checked);searchOpts.caseSensitive=!!(c&&c.checked);}
++function buildSearchQuery(raw){
++ if(!searchOpts.regex)return raw;
++ try{return new RegExp(raw,searchOpts.caseSensitive?'':'i');}
++ catch(e){toast('正则表达式无效：'+e.message);return null;}
++}
++function searchCursor(cm,q,pos){return cm.getSearchCursor(q,pos,{caseFold:!searchOpts.caseSensitive});}
++function countMatches(cm,q){let n=0;const c=searchCursor(cm,q,{line:0,ch:0});while(n<9999&&c.findNext())n++;return n;}
++function expandReplacement(text,q,tpl){
++ if(typeof q==='string'||tpl.indexOf('$')<0)return tpl;
++ try{
++  const flags=(q.ignoreCase?'i':'')+(q.multiline?'m':''),m=new RegExp(q.source,flags).exec(text);
++  if(!m)return tpl;
++  return tpl.replace(/\$(\$|&|\d)/g,function(s,g){return g==='$'?'$':g==='&'?m[0]:(m[Number(g)]||'');});
++ }catch(e){return tpl;}
++}
++function findText(){
++ const d=dialog('搜索',`<input id="searchText" value="${esc(lastSearch)}" placeholder="搜索文本或正则表达式" spellcheck="false">`+searchOptionsHtml()+`<div id="searchResult" class="progresslabel"></div>`,[['关闭',closeModal],['上一处',()=>find(-1)],['下一处',()=>find(1)]]);
++ const input=d.querySelector('#searchText'),result=d.querySelector('#searchResult');
++ let countCache=null;
++ function find(dir){
++  readSearchOptions(d);
++  const raw=input.value;if(!raw)return;
++  if(raw!==lastSearch)countCache=null;
++  lastSearch=raw;
++  const q=buildSearchQuery(raw);if(q===null)return;
++  const cm=state.cm,start=dir<0?cm.getCursor('from'):cm.getCursor('to');
++  let c=searchCursor(cm,q,start),found=dir<0?c.findPrevious():c.findNext();
++  if(!found){c=searchCursor(cm,q,dir<0?{line:cm.lastLine(),ch:cm.getLine(cm.lastLine()).length}:{line:0,ch:0});found=dir<0?c.findPrevious():c.findNext();}
++  if(found){
++   cm.setSelection(c.from(),c.to());cm.scrollIntoView({from:c.from(),to:c.to()},70);
++   if(countCache===null)countCache=countMatches(cm,q);
++   result.textContent='第 '+(c.from().line+1)+' 行 · 共 '+countCache+(countCache>=9999?'+':'')+' 处匹配';
++  }else result.textContent='未找到匹配';
++ }
++ input.onkeydown=e=>{if(e.key==='Enter')find(1);};
++ d.querySelectorAll('input[type=checkbox]').forEach(x=>x.onchange=()=>{countCache=null;result.textContent='';});
++ input.focus();
++}
++function replaceText(){
++ const cm=state.cm;if(state.editor.readOnly)return;
++ const d=dialog('查找替换',`<label>查找</label><input id="replaceFind" value="${esc(lastSearch)}" spellcheck="false"><label>替换为</label><input id="replaceWith" spellcheck="false">`+searchOptionsHtml()+`<p id="replaceCount" class="muted">普通文本或正则表达式；正则替换可用 $1、$&amp; 引用捕获组。</p>`,[['关闭',closeModal],['替换下一处',()=>replace(false)],['全部替换',()=>replace(true)]]);
++ function replace(all){
++  readSearchOptions(d);
++  const raw=d.querySelector('#replaceFind').value,value=d.querySelector('#replaceWith').value;
++  if(!raw)return;
++  lastSearch=raw;
++  const q=buildSearchQuery(raw);if(q===null)return;
++  let count=0;
++  cm.operation(()=>{
++   const cursor=searchCursor(cm,q,all?{line:0,ch:0}:cm.getCursor('from'));
++   while(cursor.findNext()){
++    const from=cursor.from(),matched=cm.getRange(from,cursor.to());
++    cursor.replace(expandReplacement(matched,q,value));
++    count++;
++    if(!all){cm.setCursor(cursor.to());cm.scrollIntoView(from,60);break;}
++   }
++  });
++  d.querySelector('#replaceCount').textContent=count+' 处替换';
++ }
++}
+ async function jumpLine(){const n=await ask('跳转到行',String(state.cm.getCursor().line+1),`1–${state.cm.lineCount()}`);if(n===null)return;const line=Number(n);if(!Number.isInteger(line)||line<1||line>state.cm.lineCount())return toast('请输入有效的行号');state.cm.setCursor(line-1,0);state.cm.scrollIntoView({line:line-1,ch:0},100);state.cm.focus();}
+ async function exportText(text,name){const dir=await ask('导出到文件夹',state.info.permission?state.info.home+'/下载':state.info.workspace);if(!dir)return;const filename=await ask('文件名',name);if(filename){const path=await rpc('exportText',{path:dir,name:filename,text});alertBox('已导出',path);}}
+ let settingsNeedsRefresh=false;
+diff --git a/app/src/main/assets/fonts/JetBrainsMono-Regular.woff2 b/app/src/main/assets/fonts/JetBrainsMono-Regular.woff2
+new file mode 100644
+index 0000000000000000000000000000000000000000..585887339efd032b6b715466ae72d86e306bec79
+GIT binary patch
+literal 21168
+zcmV)FK)=6tPew8T0RR9108+335C8xG0O80008&f<0RR9100000000000000000000
+z0000QfessnP#l4pat2^OQ&d4zUI2w65eN!_+&F=(E(?Yh00A}vBm;~Z1Rw>400*NC
+z3<n#G#Rr&PWzO9Wu#0`YeKz5acRQ%o;Pw1Sgs^cSkYP`=|Nk=*)EL8u>OjnDrQ41$
+zku4jAdY(h=YH?Q9T~KMlzwZ!Tk6XX@GiB;<r=~C!ArOneAOsc=7BHYo1okgfGykS_
+zoU5lvL`L95+G*CC-Y;S}Ez@h>(kgcy_S%vf9>QZB<#m3B{T@3lCUU1K#MJYCtJ$}?
+zluNjuAA8m}JT`ar&x}3FT@2*rhYB_4_2Kz#{<-&|0(J~hQBlzuJw-*#O=b@(5Uba^
+zHkPf+^t&t<?Ogre>tCx-;2-K@@9z=b1e`<x2bPA79{`6@K*4F%`u<c~euw}`6uSpI
+zS9)2q4EJsZ|JQ%VC*yjvnk1`P&9nC8$$YZ1c2-t)-f6PZq_gIeB+csFpCn1rX_92!
+zlgv-9r^%X6v(n`L+`lwwlKYb+Y0@M~l9l_DBsc&40fy`}t=|Z=$z$#DUiVHe;JmfL
+zzkj`>%nW1TPo1Xnd~xr4?(X<U%LE%sC_oik2Mf1i!FcpF|9hQp_ezGDd!CHp>9fTB
+zZqWrE$bKIz`BR7;xv^WhHUA)2yId_#9~xMfeT!)>eKnuNmkuIu8}0HwYZ3&Z>~b%H
+zAeesM^^=>A?+&pfh**#a5D1!Im38kjcb>bf9h{f*z{867@VuM;A5&8$iAk!KMiCqc
+zBB;n(cfw`M;R1?R0S6jUab_$#vN}wfZN@UA>C4z=?2iAE{TtJ%U1pBAmN{J8ecgyR
+z!>u)yNGP-*ZVex{ZC|!Mofo4MEB=3-ezi}w=YM^+XJ&!8XeNIFps2Ry`<|XG>B)*^
+zJ0L?6Tgl(Z9~I|=JQ!Q{A1g3~D91z0)dFBUXHLIOxphHMl=Yr1x;^WEEo-*l{GGa<
+z%gaGlTPP&LHF=P(ceXF|_WlbwI6|6>eSugWp)e*y7qU<k3T+U^VFdn@Ez7j(ca`_`
+z)RswS90Nu~@xhom<skbtT|J=gmj0@0wR5ZkBSpBqV-SpCq+^c>bxC3hFAePbnyORU
+zmDH(?!$~jepmzX;SR_rQv@*7a54fDp8J1-8v?hM;OU)aU-CpY)$f3>(;}IDnj0mRK
+z?XCar(F4+D7$bqV@fE^s8O#yF7jI3pimHY+fag+O{C{D5*))w1LI`1m@u&2DY2O3U
+zDP2gqQ7n_&?|a&5O>5AYZ6)by6gvV2R0N`+TfSHRtbzd00RR9LrU=*|;KBugkPv~p
+zNCXnm2x2877-t*;nM?$7as=6m5h#@-s8olbK?8y&tq4B&fZ(gI2q_^YV2Fa0fgu&7
+z8VqSAlfaN^q#XkSfD1?7s6?8W3cbpL#%kz+1pwco$g6t|umKRp^3a@rB<TARg3<+a
+zpd15ri(Uh$1vOf206wA))ug;yKGzr>`OZBjAM;=RdIr=lk&NW-Ci1F`)N9h;f&5u8
+zg0w1q!SXYZq1;*R8dw+eUtR$qg}LLKBBygShq4FAHvc98ted>Vz#4><0Yk=LQb7mi
+zjwH^0uO~tKI0*qzfO7?T(db$+(1Bj5E9*|cd4Z1}lx#3M;me+&FhIZtnw;3=OfD2o
+z5hSG;lF@jQQ#KV+5h>P|(F2e>$V75k?wJIM04c->E|Vtv1BB>Bb@6Yohul-ZUQiGa
+z5SY*-C7p!Js3cVnR%9ZXWK1V*kI3idchoA<Gjm6yB2sy<yL=|_V9-|q*3Q8|BMGuN
+zCPbx$BPXp{R8ZLn@wKR`7J+X@{!c940^T=NR0(%g5Lzuqu!5^LC@F3eK<AHt^Fjk0
+z=)sUNQ|2sLv%}}enUFgXZ+?P=2oot<tOR4pq)3xNE?2%nrIadEsnwuKt0|^wGs7%%
+zb?UazV#}<w#yT5qw#^Q^?6Kb={f;{Blyfe+?5Z1Xx#PYePyFIHfB4G_ul(ab?|k&d
+zcOzoaY8px%eN+aE!xu?p3RjJrr{2qCw%UDs1HvdyQt3=KmoF4c<w~_fW<t5s=(y+j
+z!ExCUbU5_F%l4D@J;Hi@0NWkgceZ)9I@@IH-($k8`P41yB-Kc{EO#v5SuR@2EjFAN
+z&G*b#&6HWm`6B<1JVNdy*~EV%8;Lsn&k@h?AL3ky&%m3oe~RA-AODruEG!*+6a5-K
+z51j)h%vFC`|Ga$Qk0?wqrvErP0()yO@5X%<xglq_6Zy$DaqzF})hZ1ZeaSDG<uUm9
+z%NI`Ip*c9?|Jwd#PJU>7!(67pWa>`7$vjTR=2#iwQU2ljZhHlX(a`<O59nZS&~4HW
+z`<ve1Tf1tP=@i|P*V$+C2t4^-7E%8`;t%XG>j}|*58Q2cj>tr$xfr^6UQgpj_n^Q2
+z+umt6nlDY$&umnU3{<EKb*ip_x|X^AQ(afS%3jf2S-inDdfmIauQZn*{Rd^N^p*_4
+z*TPrWZRXAVec)$SS96i0(#VRLK2uRBU#FMXPnWJGoury<Cz|#t0rvZcYhM}b!RNB-
+zuqRPJ@<+~y$J6^c9VS9JghH|1z2H@#2qXv2<*<F_7ktz=-@kYhulv2=q29eC;Evq3
+zjV%{i1?SR9@}@E?cfTP!Z70GKOP6O^udH*sz{1XapLx`m$rPGfm~AqGhSy-2e%0N&
+zMF&jYM?l-rO#FwVj@290tg4l|l2u?uWOzW18eUmq$TK(~g$%C*NkaYlEnHOG7Ae&J
+zah<};%<l&KY<F&}>2W4<QHD)}Kc&`+B@y_P>dee>yx`W&xEfY&izAV{5s9{NAycQ)
+zeNzvc0!gLzs+H0zYE<jhLctV3{Lhmhp848e`*<(vMLmTHWQ2?j{r$AQQgBCMh6@4~
+zx-eL6Ito2#q9f^<s&i*4yOn_U^Dg<ehbGdr=ZDdP<`*d(artfn69l4n&j+ajY3z18
+ztDVLQMP;-6&0+arw`xLzyRz*+q4<y9czuk_$jr>j?99pB%yYLk+VR%&@YE>>=KKKK
+z=-WZcKtX384VpLgU_W{T<7N8H$@fQ+$r%3sxt7$CdeT4|NfT*~^1oQ9mq|zujBh83
+z^ZZg!kUN86-x}$XhBd1du;i<?q#0Uye0L}c6Yj?-l1cS$0)LH94<pcw7rad)U!Cck
+zJGY*z!){+?Q{Wdy^2U2jfJi!tNL{vzVnSNxrDk2xr@v4NDrF^Rk|pW-{pgQ?&&@hu
+zs(Jp<%&qHfU;dj0awQ7n$YA-N=zgM75&gbUK^gt=>sBE2#dblXe^2N;?*Yf(_KlOk
+zM8Bt}onURs6n^|8bPr@5s{0E!sY0~KiR~y4(bZn8WAYHqmGJMW(SFyd;ct8{<Cg-@
+z7kDYudFOkw$uUK}@2)NfYJ>Q$N{x1bPWPSXV}BiGu}XJ=T*`uEg%9{@vy`_4yl{<{
+zZ)XJzmCrnzR`TUjN%-PlihA|8CVy=v9HU*jaZY9eqAm_4p@cn7b>Eh|q{h{5(diPK
+zEbVV2EXDH4N~g2Z6>PnyW5ZN{j1}$Y)IM#X&eFax`{d;HRB%921eDkVZxaCV^RoaC
+z<YeLo6EMId6R_UR{(O_YAQm{RjeH<(d92#{RJmZ;snN=H7M7TqeR}dnAI&co6<%Fv
+zrx|aFt7esn$oPNa|6Ru7_4`~6H4wH_{7D|*pS{a;D4M@<G-b#nA|GX)J|r>MoeFOo
+z6ww_=#h>aQe_-}cRhPq&8eLH*+!<_MIUmPwsR75q@ZkHfn&17j5p<>RZ!h7$?a*B<
+zg#G;+H-OoDeO~pWfpi|-YyFD?7mr4Gh`r!?RQ(z&d%3>{^DFj*^jnF@dqk)A3fNyq
+zc!)jf_HFtZ-(-GQo1d{eWtX}3>F(J{OJ*e_KE%E--1=RVe#F;fY&F+m^rL(oIjqi3
+z^CPzY!ItW_6_K_ZokO>iP7NoQ5k}Z{T*sjA@x}KY(R`0hE6*>kom!=x{%n|4jWEKt
+z>^2&Gi%-UHfcX|1UDlp!pO$E6tv6=JjyS@a8?LeEGJWBr#OilXkiO(2c39mE%@<be
+zU^PC*ib$(N=g}2@bWk{r@EuFnJs#76<H|px=D?Ddhu;x-d1a?RP}qNt@EuFZEiT${
+zZ284(HY`b5bgq56sGX!T8$aTAEQaAiT`JLny@`3`?ipHSFFLF)L9<{159ZQ6q&h}J
+z(?6&4<=tc5zq5Xy6GQ;y-c)*H*ZXN~-T<~tokV1qQJSvt$T&o-Ddl}kgvZ?iJMDHp
+zjo7+=XPOaATXs?+GE>#sHb9AVTEFagFmZPu6oc~ld(#feBll8jv^K5Xvnatlia|l{
+zHdAy8^zFoUiY;x|HQE_Fy{%QqZg21dZ57ZJR(dC(2i6qmtZM^wmo?U5bxxW)=m?KI
+z#F2^iQPDG=rXw9EH#kM-KHMUXR#A&}!P64c;$|Pxy!nsgR3kHHBJ*uSYcv^&^0ZBp
+z<@nz<!7AT4!32z!OViT#Svi$QQ?<N$nyE{Lt?LDTiFWAjB8sWLVf+FN71n2eBY?WT
+z?L`Hyrl19-Y+lyQ)=Hm_V2rnP*t#2Fr|d~-&A7TtrOXqD)m3Rqyn%yuwZ2kBntD2q
+zwj$x7Al6~T38v(55DV)m$LuKwPN6UInZ*ICG&v^gK|iX+)X)ZH_*i|r2AMVqZx;YB
+z>#&bcY)bJSpbxrfno@Z;VEi~VY55W_Ok<OX^a91aZ|ztr!bUvB&>Ys)@t}y+9n@ED
+z+$rLj#sPcJ#2DfS_0hONL>fZ+2U=qzglBjkfv(`?jxH?2b}CSSsg;K{1t^rM<ghvk
+zO@L0fH*gt|I;9qLpsUBh_0`+K2~=h2>r^OQWz79Y1qyGbHskwO#zht0>(3C8Dz6r_
+zKTwG@NleGJ)*{kL`9Gmia;(!?U`JzPL<!hfK(h;={c?;;R7Nc8hY~N1dM2hb%+Bjr
+zPwvT00WEdlhtKH<7~T6JvXoLXF|GmWT*)I-MoEX&(P>O{fdeG^1*&VJQH6du;&A^H
+z9GXM_N&YMtl~<Y!4F*WZE9;?XG(d*=>>mT9I?1&A4A0>nL=mwM0W6!uXu^F$z{tll
+z=|DpYULp@GM!^$%4hRmzYftC3I6d##6mN#`g8;q{@~H{(vth|~+CmbB7bs~i-y>0m
+zlQ2F<jfnh?6rIb8O!<Zuw5YmQfYL9{gy+Yq1ah`3PUwt5<cmFXMmBy@vGb@?-JP57
+z1iH4RFZ5jPN39oY5wt@8ZFv!pMOdj|fdupy$h@u~6EA(Z1NNKYk?Glz*HwErDk{2`
+z7apa3IhsT>x0vof7p&$hqHFU7Gh;ZcE=9v2t?@`3b7V^2Q_-VsGdf$gLI9D5hOIUY
+z5rr;}cGabBBBcw4@u}I8N-OQ$W!2OQrI2=7Jvb{pf+w1)q;yv(km8mpPyhv<(O`Vi
+zH3-eoUQ$IwYA`Kml2f0BWF?PT2#to_B(1*(HRsQkM$RBX2T;i~kg(c2ya*K<CXet_
+zUHdmADtzXwY;YT({>H2)g2rq*C+zO{9(jFKnN(q1r1c_oIw>B0!}gDZ$|qT$r}KD}
+zl^9;&A732azPbk_{`h6%byjm&cfJ5D;{(4S0INof_#}o)ElUfghIKS<9H*;CNI}z*
+znsvt*;2R$IP?HBuX@IZt*l<|4WdKVwGzqEdmrq?X9adqf3hKGLSUQSW870}G0)584
+zT_#YWrcZJ&Ct#)alj2FjGOMO$D25~y_2A0(2%}LkrFK%G_@Iz^J*gt1ct3-i@z=h2
+zk84e8*=0qh>w7I|z2K{PZfqh7M9h^biyVy^;4M7<xhOKai2otNvqTWt_jrqIW2?jE
+z6}oTw;Z!zo@fzS?c(lRAE^Z>=BoP;#L}Vvltve5&*BcZ<w}>E#EUt?5H#}@I31ooY
+zhzHw@CywSdhyi=d$OIKNJzkaNuEiC81@74loF6z#26zegWpMV6n+RaTbDVj0*}wvE
+zHb_LqG_5%!@83tM>B&Z!bnXyZI2X^A+2gSL3~>_ZV~Xo>!FzNcaR15;uHSfekOl|%
+z6U_xucicoE8c1qMM2=cID>bxEF*L#<qNL0F^g9~4&u`4{h%m`Ny7p<Eww9*>hH(kX
+zXL;2SDV!6eUr}Fs$8CN^1P&cbj*L@HpBYj+wnVKt>Z*NM*oDs@GrWPw9KJ_@enzeH
+z;VbhL;W@(<xgUnubNaLV9WXkl;3F)qiu4%OAp0-_^hm0P!|G%-58?B9#uk};CKY8x
+zqEsIEB!D2++8;b|?)5rgSnl^!uONG63(x~pi1)H)5Z+^kt0I5w#H@GtpH;2^cUsIP
+zpZ5TOd&euhFPY{pN)nTQ0dT2sQ4Csq3Pp<vCvvyKUK8stD{&eN#hFVN=r*pXPiM_-
+z6fQ~0nK~-Vvy-7CY7JUT+V<zDd^Ec$p>rL@O-1o8Vs9$yb6kyGLOu}}N<_|kI^7j@
+z>n?i){x}zV<SF)EBE<mLQDVqrgM>H0H7V^K)@^iPiH6+4!*w|UA~XmUBXLi?7^SkH
+z=Y9--E!YxRH5UV#q*%_`rYll>QCQs?%@t(dc-YyIFl7xYMjW1cED>=9a6lqUI?GCz
+zP<Xv%Fqe>FVy&t6Xq{TOWTs>DKb{|_tC6j;lSKhtK*2&LbmoB0OF{0ix(3a8WE39x
+zeZi4Plt_oHY^IUY78E_*Of-T0+5TW2VMqBKiZsq}CDTMYiyTFIz)I!@=#1ou!&`Vy
+zrrh-DTL`(@!oHIaEaM{=YG4f)OnM!%ky0_NHFLxSsR&--YLh?<^Q15UI*F_X&ErBR
+zoscZwVRZ=231~VV31LSjO-V)14CS|Cj_V&sprxsyQEsy{M&HmeWNWY!#-L-8NfOqC
+z<`~q%i*2_7m?br>^QdjnduJ|Pt70r4A5dM+7SR!;Id5~!5vaPMJ!86HoNCoRVCmgT
+zwQltX)&?Mg^M*=gaaE+BkiuCRF+hEi%FKABWe!6rvB!)|$|V(LU2BfI;rBO0Ob6dQ
+zdH)6<cmnMHJx&qgN3sEkpkil*ssQanqVe+B?1kK6_PshFUo%{h`|^ACYVG8$6K`b+
+zIpP8>?M7Vpfx_&DY?nZs`uG;nTEK;4Pj33A5<B%yu~VU5-LN|qO;pG=TD+~PA~<lZ
+zaHDXLiq6e7+aHSI-IUo5=|bF-L}ckm**!>0*WLKvUAt4fTvt%FEnLM=f?Wk|MHGT0
+zbFPTCNaRjf9h+tg+-Z>*mmQg$krq@Uy2pE*I*6PfLkqk$DkKxi#T_J^98c?HPn!_Y
+zv-1@90DxZiCjva)iJBfb7{m2hIS1Hi$F>78PU#60!o#WqHX16*>T?4LJgSo&&;qmp
+zq0KuqvmOq>>>HjU9N2xJa7Dj;yUt#99DNYW@~_!|HAy+Sc)`b*eVZKzA~iv45ez>o
+zl>nRg=`VPIN|%}XDw{};Z$#<Ulrc-Ow3PO=#_VMq(q+l@rCO{-M=UWNLRSzr5N!NV
+z&e?ccjX(|gsk3^tN&;!Z>aJ;4!ODq@U3O%$Qd&^i;eIRA=ss}I9Wo@AD-~!t{6cA&
+z3KOjm{|y1VWtKxG?^zJ);xq#-s3p|Z?(B!w;A`@03lKgqvh+p)S_*&FOL4OVQiusB
+zdhL3-<fJR^z90LkAgP?`qebwl-n5%Vka%JmJ35u7reVH|&MjH%CUo_AgcST4V+jBE
+zV5R@f&hR|q*lq<{08a_W;5-Y>7f+n9Ivve?cnWcrFMHa6V=bt|^|hywql#aQ89}{d
+zEwj}+C#b7*)2igoA?gx09>$;DrmHl^i^RE_x?D|1?Dq(tvrEKYQ9a+nOo`q}1)2wU
+zIqMY#s6$-PVRc!Wc`zNKC-vFW8$gY0A7NU>u@+Rv)C*JsrZ;0r-a{uICYzm1(?N6K
+zoWY!S`bsl<JKy_!$P%z5qa{W6bygS{Wkz&LUAt*_*DhKs0T)~tA*X$$nQ&NMdt+w8
+zu!<JHQ@8EyiI-0T#A#t&(R}NC<=Z1W%>HUc8=s^ewGeF1Oi(*)pEtv%9fDd+Z=yeR
+zBn$G6t5R*!0*h#?X4?(z&@*PW6aWnzFOF;fq65o@4EVfbLo^*$&9fde9sHTF)<k4J
+zsMFbP?1*dicBKZt<y00;g=O+8#Y_b+8Y)9AJ5DwDv^EcF`mCBdN=wwQDtSB#9M>hZ
+zpTSjFToq|D%y#Co4A3Mo%Vs>6G!wx^*keW}&PPRAedmqM5Y!x*gDudsxND@7W4n1%
+zs+#R3MM7>QZVny3eL)5A>{IqquoLFWmxbyvTov!cu{Z3E9j)bB`Dje=Jjb3>BaAm-
+zgI8^`(kcEG)*b7}w`PGBbzC#X7-!y;-^BtpSK?2zQmR9pIwFkeAh}Zihy>?ir>+9k
+z!<YeQa!iNnL?3rpU4^C&9K<6`)^(UhNJTGCJ$`88f(=l9bt?M!=Qzeg=UH1ETj}(Q
+z3$`+3G>m4ay7x81Q;}*!hdZopfu<U4WRGDoBC$R#C_~aR7DwKXQ^sIbP9;$#v>UH{
+zGnHU@qBN*mP=R2XlWS&X$y!&kEk&fPXva`TE(21-DSJh^zGHVxc`0SCGtq)9C3U)@
+zyBT`F9!LtwIaGK?E~J1u$qF3-DigKSj8_1ofFu*S%V(*_V51kduTjToX0@PlUdyga
+z6muUDa5Dt4wkKn(Kt)jXkZnAyic})1g7DVpH8v{VQ-v1XDQJoyda^8JL=r8!g^}mD
+z>|W+@_-`#60T7q&p*h4Dr~t}S&{RkIsX&yd8BaP)0WMz-sFoXvNSC_Kqg2`9AU1i#
+z2`;hWsp7OEPk}gP9Wg2LW;13y(Xn~TcyNl8A!=w?!5@C|m5aPLSq3tl6^DnbBIQ6n
+z&lf5Klr8ds8Gjy`ESy{HF(cEtOhs8e4$p5$dn_$*D3d8xAOVvD+L+x904AW6xn1B}
+zyUb57P@w*-@D!xlG&enQS{TRL)+weXDQ{GWk#?oHW?S$4W14uIfHTnnMCp()4?>f^
+zcB<bU<x|n7I4<C3H6#4M>A+!Pk*b&;eX*&^{A^TLz18z9RBSz)uoZ6e^3KI+?j=Mc
+zK_k#;Jj58pHNoRdcNTaN<8BCUsiI0|4Mbb$iF-GGCj8bMEO8qD#_B3HPxS@nGPHB`
+z2dvht^!Hx?fPf0Nr~-|H2xP2NfRg0WHRG|ujDsNG!y?rF&5{-rbJTM$p=71!u_4^N
+z*+G4Cs7;BuI6bO#iJ$(#A{1Q_38}t(S}Lpc<JsAr;s;|eD2N54W@&z~Lq9Qh|F~sG
+zcCOZ{HH7rmALF&q(O`CCrPF}}p3hFWIZ!;#N$?DZC=@5>NHZP=CJtOLc>bp<Cay+J
+zkKDl@hZntQMjJWuJ~;nNfVZ~VNQyHRU>U+a<s_BUFbqKBKtnNmrv?}gG9v{ix*L|b
+zppM<J^#ulInJ5<D!Rhh)(?@Y}C4V_VLPHW_D<r{53sT_NEJev_)r@D8CJH2(N5~OH
+zCSpKE*TRQCgQyYU3?j$ksz?zKYMFS-0EtD&oAE@{goD7?W7cdORFu`{L-jC{Y@i1J
+zIV=+r1!xQe*b_Vx3WC9Wb}9~1O`4H9+CCoGvMI2;^qW*}aw%}e0Yt&zD;|U<cnwF!
+zb;g)YapCY$;OHtIr3Rg4aaE*1@TN>B8K3~+x6F7tV*EjS*<(f~+D1iLJ^nteg@wtl
+zRe^i9nO;_ae8Dw6%{4xt=}b7$Ylq0*`ukLc_sIr%#94!S%I2y_qrq7-6=i_Dgws2$
+z4x{k|W#<`NWTK2zl+~|takk>)nE}*-qX6;%+w)}4cz_}cS-TT}918g{5gI_YJ(-?g
+zOjCUq(=N|rkJ@htEe~#g*y?bfX-BnO<3Q>ii4|^IWgW(?Bqh5@({=tG4bIiKL#pXB
+zdFn`7poy)3nfRtPl3mH)$4=-vTQ%qXc)+WYNNvFwCYO?lX;~p7S7H1KSiW&73CA`A
+zb&v)Tdq(t<%gx)x-yj6+ge!mqU|4g4gx-LhgdsQM(YbK~{>By^DEb4rfE%nV*Cyd2
+z6g^AkVN$$Y>9-qY;Gjc7asci2h;1BzEzd$!92GDDHe7^B#%iuX51Zg+;I~y~%$ZIq
+zkUeN>gH?feLXDd7Xk<nKwb)}uCRC=PtgBd+^zhr{_6x?xc$ijv<|PUhA+jwgkM$TE
+zAS=(bh0O#=$Al9j?5cRp;_t9-BF|(z+(7Uh0g@FcyeDXft<H}31`yz;`o*dD{a?oF
+z%Ha%IfDCzjVJ%cla3nRlJ)MO46lb>>syFz5*w|!=DN4y^N{~T^bz}w>-=ou*fgHGk
+z*5caLYRwfC?$}Ry)`dj7QdeK_x8ILso`Z?RYKjv`Hum)L!hvudX(JObnVwV|lQq0(
+zh>RgEgS8%^2gJldLPntfcz7El;BBDgA>(&U^FQ1(slM0qn!PhkZ&OCR{w%fRBt#|5
+z=G|%LpwU0H=?&A#=T%!v2G5`pD!Cvh{XHsrc{Pl_!SzHM1{bVoQzFJc9^Tl|8_g0w
+zVS`lijGro!F31j$bQY^3=~P4YRzk!!CTZ`HDJ$cN&~QOa*pZQmfQlKje?8dXnYiHx
+z+zM`Pf!H8A8OISIt@u~>UB)&TO<)PTdTL-z8#O(y?KhCz@ZB2{ORP7?tT&uFZdFrT
+z)9bc}Q_VF~l#mtiL`oRhz=$d#HCgKrc?Bssvo)Hj+XsIRSTvI?q5;s(9Y!qS!^4Q=
+z!aFfQ0S*8FZJ+>@1K0o%e+F=tu4*BC=fS`X$DIeV@pl8LfIb26Xn>Rz{qk<*h_)!o
+z8VP_!K1?I}Spl=wm;{vM#zBQJO$qBm2K3}8*@VI%=S4<iBCEtiSaiXQ#KbfnOuFzC
+zWEuc!6!&M`zi`?v+qKmSjzA>bBK(PM!n5Mp@%TIe&xaSxlSCIW$9{2qn9%s9s{aXe
+zfz3;>p5UqQivR*aAiu<zXTh`iXx_Y_-@EwY86W`wHJLm>b^PAfyn4mI3{=~%B>?dI
+zUAf<WZy^!izrQut^w+;WBOed|VF0;50U+z#t0Zhcl0{ht|6}{V#SU5JQ#1(|hpo54
+zO5e@5S+~^|SQtP>jiup$fD3KtLLVkfnK5U>mYq>}_=Mbf5b@;2kG}wcg7sQsQ&`xZ
+zI)sQKAr)(^agxYnm_RN|wp^vkD3z;JrCx(ZO<HY?F?vGr))F6l@zK|q5FJuWbTQGs
+zFxV13(o75p!5ni_Pc(=&mZt@?O|oC74qcYf1O*FhXg~`b=)jl(Lq@Dwuw+FK_5>U_
+za^Yl{Ghd^5^AW^Ng>a$9h!93BQnW;I;w4CzEJdmqISS>;SFFH@B6X_OsMSoNg{zWE
+zNEP<jYlmHS+lhdv)${>?bOOMb0F(>ZeE`=ZpkW6v>i_@)s=nz!zaZYiMwmz*z?NPG
+zpLC(UX_POf9YX?07NDhRI#ydtd2EkuV-tC+qU0f@6+12!BFRaFBeGyeOi(=N=<N<C
+zUA(;Q`#nB4gk8FFLw0x1ZO=ZxGHfPVr^3CIyO=~F)3^i=<r`Rf?88h?dUO8_<j9pG
+z?8E0-cm?#3EmW;f5m%Qhi=B`Zf*@-&Qi$9BIibMsnCZbLblWA_h|1cnYKtA%vD;(L
+zVy2uGS+`WI+FpY_r7Zh>aFf4h+v!}*o$ko!>a})GB^<TSer9%jFCz^HdwYIfWmyNh
+z%PcGUv0rWRZp(I6q`4moCWSJ%K)@;L6l1wY=eGpl8&=iP5fP@C0Q>@lz~0l=5z6F2
+zE?q+OO;S<5E=x@Mo5XT;QjS$X5Zx#j9-wD$s&B>HH%Rfmo*CCZOIt*1ns?(K(bXXy
+zfi@=~5@#c$x#&*0ZLjsnd%VY-OGfsVwwa3)XmZbQz%3{vsG^UMpR&B=#aov|b(ydt
+z7D*Z1%k@*|m`;X~HFj&%gdmQTvFV$<iX0Sp%rINHBzi#ztO6E3Ky!yIIG8ae7Sq2U
+z5|jNgH*fu(iwF1CgP1Kjkqun=G4*aZzYzS32VZgHl)^ez#ftW@_g1s<%)@#_LLdo1
+zievRqYFlBnplu$M^8d?G=h|rbjSN?=Fep#*b%=z+?O_{Og}W`uXVAftrl6irW28H8
+zT!$|oUQYqSRF5Oz1RJNdvC!Lh&k@B?9>s(rM!^WbW}+6dFbIoZfDi=<B>)Fy!VyUU
+zv=4x0Lm?j(gq6)BZb=)!@hIS~%q(2B%Uj%Tg2n!DR4nbA%ab8Fxw@<!rxR-nsHBCG
+zucfakP5Wm|A3c}eke0S6ohfj41<9Bj$3||Cc3h*iJS3}L3BuOGibi)pQ|S;Uc5e<4
+z+?x<<JgGW0l?k3u05m?gAk_V>ixC7`8q<L~{0tpY4wH4ZhyoCffKAuXy1Q8JZVnzR
+zs}`#ZvIaA{VOU>>*m+rzwIx;OW1=co;M*_@Q_a{0*DZ!!T4&3U8X+ZHi`=@w!{h<@
+zl;VhXA~HEqx;8`^?<pIhZ#by1>>u!1W@q+j8}f)AvYu6d3`?(j6?W}kZVN(#a%8or
+z0+!wO>1A%b(?iBNv96?c1uD|SRv!sT5v1|q5SIo#lr7i_Vj*!WcuxgaHiH9(Pwklr
+zz8KeI2w`{bdqG$}acDofSR;n17q*(6#Sf0O`SUHr4v5_XRmkgq04Pk;x>4;}=!QiI
+zg~2kJTq*%ok~GXBlbw9<AkmZ%fN<n(zY?)*Ck}N{5xFE7sTl<zM3OwJTrc2ED-;n&
+zp=L=z)tERioK}W6J{+UfA*;~<xTO+XaICmep{uHS`zPoWc3ire=DLf_XUYw@1OF)E
+z%amB7p-LFQf)H(kA%{U{MD>f;&e_Q){0|7LWDqzJ(j5?(0AA^y9Trb*xr?=GXmi?@
+zy(}|ghp57)iaTLPf7DnP_9BnLiW<^m8uXMrc-OnPhY0R60-b=HuJbLt!h!{F;A~6B
+z7Aw+Ta(v9lSR3#YbS5tNDfU?q)W)sJI~3SP8{uu1)67VoNV(l<kDh?eUy<7NUsHiW
+zD!6zl&M%65Jfle;klJ`ZuDj~e>qbUiT}x{^Dq&EJF$K*Iv<U28zh`ha_dUn@Q*}hh
+zL}f}H=BVw|+!H3#WyRarATZj-NXJbQv%N5X*ocp*eh_>w4)hg#JmS62T{^hw%G5rk
+zNGWS8*>V}~j}BseU#Hzl^J>AGU7}R|wQSn&d-BJsjNhtP?2(&UjIhxtK)&O#%{l_;
+z6vGPCpzUjlK&!$vP^~5mOnL27*fG8CkGfFkK5FbViz(>hVIhwdJc3?{YrQ^_Zn2C^
+z^D9NFq7h+rt5%evd~O++*_d?RULzjywli8B9$Keffh4(RWc{YAU^lMlLT%~tr8a|N
+zT{2*n8un<>T9nHJsmBc?+KHPWp(0VmJ}-trT{{{O#JaaZ;p*<34C{95huHThdJ3#F
+z57QIdzvS8)g9c1f?w#cqk2Ctgq0hNzQr?u&c4;ZD^i<+&qMI4eGe~%GichZ7^wCQ)
+zTu(G*e+K<C>zVw6Xv1qkT#X?qgVam=9o+rux)#=Udv6;_tcR_6`zBs`w4~}APwksP
+zzO%FM3Nkg%%W$_}jOgd-JLRKQ*v#D-6Q;aUOV3KV$Vvtz*%U*rk{ODLN33A9Z7{rR
+z9kfyF*X%kAqZNgz&bPKLgFtYpLy&4U<VuDdF6}y6vA7v5GVV_yZo&#zLzLnoHLf%J
+zxN3u&SX~p`b6rd|znkdV<}wHU{ZZp=BR%KP_LocLt4MM6mXdrtMi}A=@^L^U*Xui#
+znXOPpsZ)+fl_EdNEG=W662)Z0po0WZLtAT?%Y2W_-N&(*M(&go>Pf>WZP}<(kbBx(
+zElyXBNneTRs-lH*h$uaXvK4)L4ct+8>>^RXNKMx*%a3(|`!nT;dYCt?bYOTA4tOh4
+zLdnD|Ib&RxjvBJBp;BYVuH~ll_oaUqo>w1U?MfThq|+u+k?@4`iD9wMEyFI;csZZQ
+z+5Dqc(i*=t8WIw^OC!g|p-S~#$TQ*Dri3UIF1V;GX(P;BGHQb#(!sTCTmcD1Byvgu
+z<IYgkj<SB#l1nrT*Qu*JQXTKRr>Cowxwo~qDb3&eqEKLd%5^#`jYIqBW!xtge7OUI
+z`T})?o$X|TOt7w0O!FRB%P3XpG&d=k#&0c{yST_cIB@fmKp%5UPaFCMd)z!eYmYwM
+zQN3Vc;7F5>x(j5uyT#2PXVKQ)EZ}!*ItD{@c-VX~8T8iv>>vH<yXRsm@&6Of_ups3
+zAB~z=w2_|`#zyRY?e>&pLE?xM$#<-eHb0*(kfFDpJ1Hj`5)&z7&Q_~McN`<y8Ua{m
+zQ)MRF?Rc^~Ik{ub9yji&Hb-n$ukO{}b|_kv$LSOOT#8>cbshvb30(;oXmcQEdt^?{
+zM%E)v36^T+^n5(6HL1&rz!Hy^w3pWO&SY$glWsDVThnPSBecfM#7nd(rI`gLAWUQZ
+z!>CDoMQCwI3mJcF?j~fPX<Q~G6q1z9)A^=K&G{_?G5fn!GoJ-}HU5~XSWj5NVtieM
+z*el47_S0{1re(zJdo_$$@L|@pzGMmm*JsA;7GmGnQRitN7}>QDaT2A`j?~^`hnq8;
+znJ?+07|w6!XF4d2d!fgar%4a5=MFzu|1jTZ!=1l<lq_M;`gJWs!6P0WN(~u2)410l
+zEhxB^CDV=S<&){5H3F353VlH!Yg5XHU#^fZwUTDi=N!Tz5FXN_bIza^JLUA+yc*E<
+z^pBeL?bB3$qeIptsN9rM@*#p1o^YpqrtUuRb-EZjTX%M4v-WN8x+8yQXZ3?nzE2y}
+zwxAzZzDg>7^Cn}fJabY$Ss6i<DnV8RnT&Beh1?=Yo4rWcN}8jx;zX&kM5`kJ^@J#@
+zpX>!X&)bi4G0ogt$&5D9EaQwELRhSMzpz2v|760tO^32hb~l}zd$<JMC<5|s+xq<`
+zP|sSb(6mUYLC~iti&nyf4b4kkPghY2CM0I=>^L_~$;v#+85}FK%B+jrq#n?bPaFZa
+z>RiTvB=@<(oaq^j;+cS#Ti4(whN{MX(%Bf2p^BNWR?OKErYu*Fr)8MAY{-J1rodzy
+zI_2}^JeAxjpP}=7j<T;wqHVVk?Wj==lpt2r2sxTbCQZ>IMp;TvdJJHLF#%b#7+kea
+znYz8;n8}Q|0zB5o5zBJLnhP_rMrhI}3Qkm?Nx4c9OWjz#zRgZOo$*mlckal~CpQ$H
+zGrh{sT;xkA+2Y27B$G*9W?;Epy2Qn`d=&Ts^>mHy*=FX0O!&Vw{%nm~*l)|UW&)j}
+z?LSFhAbwvjJ`+0V@QX;9J~yYF6{d|hWxGqP8y^eZvwTjq1f-E@2ZFPFMpy)4dYy)`
+zea>EoGHv=Ki56r#o%Nz(Ek!GYj#=r-XildktTQagir|zdq@K-HphioLP#X=ZdH~QU
+zOLr>*BYkrDnOECs@%Wiqz0>R4UtSmvk4}?9`+&qmtFL^G;up(uY^pF4$*-S6chHzB
+zrOOz1k-NmGeMnBBclx556)?o+x6}9Ye?Qtx!BcNvsuIh6TVKpY1|E4QM9H^yRWOL%
+zd`xx^-zy9dueXtLXk+eCHXipIqpnw513UO*BY3j5c3$}{vzs#f#}C+7KNYq6%p=J9
+zmY4YvDZ5<K&PkmZ?;DLzjb4q!Z&My>Vb&cq@70LarzU<~$)g2TeNbxM+4!o_L>Q79
+z;dDCsJdWtp@m-UB6RvP$`vh{q7De5@r5ev<qO7^);{%gxI{cFf;pVE^h7s<^HAvRm
+zI+vR~donrKo9CGs-Z`8jD>9(38+{RwpBtKZb|_2w<uBeRBIRVjh?)yzW%1){6n4vp
+zy6EHg*3+9ofAWND^9!!}nZDPh1)<?@iaY8n<%M=v0i3ivwYVf;KonJxQgRWThuR3e
+z(dIzsmCeu-CY1^|>1P5dD>7fE4C4+$8LE*HL`1F#;S7Qi1_Oa3PJ|d?Wg!fv2&aF2
+z1B2HBr0iWOhDv!}Sm#>V?aR!=OV!C|%llUkpR+cqw6!Fk)Yh3M);do;;jj~YT#oyC
+zz$#0a;{0P-`mf69@J`x!M>JmaMnW=({Ct2e|4V4H-h3S#iO7M~^oxCT*h9mN_DP_;
+zYXzS`5Tn<q*U*c1{vd^=Y?<E3kdzI>_z6TFKS;BZOIxRd>S0FLx=mX*5I#R=>TYk0
+z2HnHVM-CdehG#gR9^{o`ql;pm%oq-`iZp6C)40t6(_14mS}9heR+mQSXcpwdvwrKC
+zk{C;&<A#diS-*C?^F}O%P8)z5D>7Fmr#vDLh4BhNcj6JC1BV8LKpco<40`kkFa#8E
+z?wY0Y7T3ou;`<fHE4ny8pzku|`^{A@<^QsZKUT(}4?b8$uNys>%z_$utAF7n3IFX=
+zulToc?T_r?r;>W5Izr&;8haa?R}}TEFi<uVLRk$ffP9$gTTj%;RF%f6>8<ta2NG8Y
+z<CsQEpt|*7>*3}@YZA}0qY9O(8XO~35zLe3S|ywp0wZ<xwrOA7{uUy&n=pj386a;%
+zFjG(j)x&op%KsNVggRU?JZ&A?+^d?d{_rC$N$CxwMf(x(WW|<BHI*q$fCD8_%A_eO
+z!Ozz59BkNPHz>;^rFczuGYB$j%xKVK8hNo4zfqrUV|(Hbqoy({1Ft(SCqJPte+=AM
+zr4=2usZ6R-Z!sAS7Go-tTG!kTUYr=pnfvl<!%Ve$a`5XpFRRWDp~^Q@uI9Xr6i&2t
+zEfbKOkclHGv!|rEj(c0np#wvmCIQ>28m}E4A|wPrG+1|WYE#FL?+Y1+@cphI>o3+0
+z&YU{$;rl|TQ}BMzBcL|?c_3%G<m4@L^E*eEN<u$hHbj826`Sd;jIG#5ga2?Uih?e8
+zeMMl8MsYE4G%g~TWU9ee5sBCO=LBPuUW8^_)D-4L<z;^;mPtzPVJ9an)`=Mr+D17X
+zMgMTH$>j!6o6A_B+nJNdTgGydxB`w9zbOT7UXGU=Ks_#8kg+f)kvFJhyK;I2F<W*j
+z&&bU^p3spXbme9ng}})&kGG-esWE1l=}(wql8(@J(pMjkYzx=NJKQ>)#QHFt)M+pa
+z(uZIcAZ0}s%2Z*zk5Gl`WJIL9VN8WQAJb|L76Ms|SV)5w)A5-x6%7sGrZPdSl~ekP
+zk7p$p$HUtq^>LrsYe&-46Q=Yq!%QqS9rfA-ZY@d?NV}HC+Zl*i5`{+FK$6P3uo~qK
+zeyh;aee4r6+nsQx##+~OVU-!iO5Gh7luI#6*VL%9crcd-FUrI2O2S4NXMZ4JMdT}#
+zVYClZhJfLL2X+XnEmz^V*`)kyu{_z_2nz@Sj#&^BZo#=@@$>qAx<7(@9ky-sw(JSE
+zdAI4?n?cWE`k=T$L?zT4O$<%4kb&B^@U(DkJV1IZ#)*c?O1*;#c=PkGAQ(f49>av_
+zp#K^T#M1I{H)ZkFHUztvCIf=0wU`A9g8=>Y{5^EycgJYpKkEAcF%za^50bH@+Lq1+
+z5E*9HHgCP7I63yjsMyxOR(wKBsZ~&5kv>00r=fY}IR|M#2t7pVk0K4BNJb)`i3>^u
+zVx`uNZTIcS`=gEZJ^mKk4*oqGn}NKYAX~_gpu8ZCG$l!qd77A88Hn&QrM?P}V07Rf
+z1CC=WG07P81OQk&C_dg&b)w}!nkH-07g}rc7zwkfk95*#Zg&#tGZAKRloK_!-2U(Q
+zu>n$4xEin~&ngs=?tr83w_>3&JJX{JY<AkTqQZrf6S2&d>&i9?|1Aj3&Z%}*_Q}`K
+zO-fFj164<b<!ou2*;m&Z*@hNXL7A5HiIO?%A3<Wl0m<kzxC3y41m(N$%kQt*Di<Bw
+z4rh6h*KYRJ3`S~O>Eat1{356U1R)o;T^NkLorP7p7*|DOYbck=z!9@v*Ts*h%%s5N
+zyh#c2YP?9S(&zIZ4aJRzx@EDHBLu@jPsF~3sT_3`DDDgR@9naW59-1Mo2#b04pg%d
+zMRiz?VG*&CHp<2BGKryZe=(^-5hYI0TBC*1>&>{Ss7$OyEGqr$w+6@cY|vyab6Uua
+z^u~?M#$S?uAyH!=4aBUxx{lf~6Gl+8MvIw|`MlJ2cYv2i1l6-U`?E^1tmQL0tAf)8
+zb1MW;y+}|udGdULaZ$Mu0`vcfXcxJv1ois4hPBz*Go7ZnK>n3g|G4tX-OX1t&R5Fg
+zyJN@4pR+8Vezf_zP5W%pjHBS-Vfg(urg*xq<~)j?hckV(6NeyY6tj!y6^w4Sg$C0u
+zYM5?wF)ve<E4N&c`TZ`uusG2px1gX$)*x!gyku&YkyUUsd%TDCT2CN3t9<M!lRoy{
+z7Xxe+T*wq`E0C~mUNRoR%1OA4HkS!A*@mcBW_V#uY^(vt-;h}ekkc1UmzG9%&YAns
+zb{bSy|Msj~5iT+j7CmOOqD%rFSQAx{M9oCy3=n*_!+rFWn+7?o$imU@e!-Z`W)nhM
+z^-6>!5hpWnP(&|azB)U;xT&*7iK;{OO0c2Fu{392o#=w-)gk##;L4g%SH*J69isu^
+z2#Ht`d6*Qe`%<2`s*Nrj^FHgC)S*IypsuanTHDzHidfPzy)H&+c(IY=!s!1y<r17*
+zXspmk8z@Q_Yt&O7%<ZQrw;wyS1gBVYO<I}rmoop`&X(J<L{(wHsgNtbrer`$7M4Er
+z_kZN&QbI1MDfZ-B!$jqbrl`k6Au36+WoM+sBeYhcTA8;>f}#v))1uZOEz;JxpvWv%
+zQz$rtpEm^8)M&Blnx^V4^v!ItZsLR-VjdS8mSGFTv&%g-R3z4ffzOszY?~EX!WM4e
+z^EU{oF?f<2GrL_lztHM<FFcF^&L?J%6SMHw3-}-N`Lp;uvO0JIdzIAKmPNR&2<CAD
+zCOU)`4}lPDrkO8dbLCubGp3nMYAs(ydG@tA)rxVw%h_=`XSICBGquU?@1+)FAgx6{
+zvaFET7IqP8<p)+%2Vu_v%i^<>yDN=@=W}>}fAw!)rnl&%#te5h&z;d-G%imEkxlX+
+z1Ip=C4XKk#ExK9D%3NkQmf*UR^9_OEhO^T(Y}x2h&;LLTB<lq~@%cYF2`<A{FFS1x
+zbYN$4d4Vo>eQwU4oOH%hQ}CE$b}EC)ILCfx|8e8{SB2Vs?f}|9m~_r+o^>sj{A^{I
+z=?ors#5hwk!QT&0O<#<`lT8mYl`G?LP;NRG;bh6U;MR>kIp&}Y1_y=r1bV1Or8Yw7
+zq>NwH6*CT2aE89!)<(G|jOj`${EGQ8rqqjYgWf@G!UxqTosz%$Mv+PtN$~AJ5Go}>
+zf`J^XOy&McDgIe#|5q-Rk<FzmvZ>1(o<<Rero9shM&6lrh$jEjIUo(D0sPeCKIR5I
+z73UvTyWavhZ-?W>-XyO_{7aCMe<=;G<zFhq+a_6hQhRn)FY{jP9*5gd5FckN_C>fG
+z?0vbvJ!@H-xB15MfjZlk#qlb3U^FLH(c>9#%X`A~DC%ccViQBj@*ekqN6{1VkEUg_
+z7sYK`>IT+qzJUi-2ES0^;IlS6hVeGohKKX5F0m)<hGJMO&CCp(j5ykbjYXyI5zerY
+zrCJ~G$Kh~JpkuR=!-`SOw&zd7+9D1TM{97sYTw^vYbUIgfi+bJ```AU%N}ANd#>o@
+zN#?;I1crL&h!g0=MpXj?l-?v6&T5kbdYhZ4deiyp{{#P*-*|rWUGhnXmSVoW)>B@@
+zlbr;z+u)Edz4rW8F}d7%j{y!Rhsyoq@5*bLaf7A@9VBYLd_`^FxaDxqg<Ih|*1^PS
+z{y7){;DwNS`e$mJ9|&Ixl;>VJtj-N%0Gh8&vBwNXQ(Jbx9rGA6wUvVZ3H(Gk+YH+C
+zLXqR}c<R)XM|5Es!CKOM-uBW2AM-D%E~)=`S@oViWTPaIvw6ll=AC*TCH0>wqUdL-
+zl%IQ5mNJ%Kl%3fs?p-35n)yPk$QUr@1adg7`rdiK(8?dZ8+L<sMg#kpeLxc5_W>-J
+z;4C{BYR_%Ao~HLfTPjUPdBQ}9!|nLekMAIUuJa&*;%AD83e{TCgu3>uWWQC+{vV2c
+zoq5_~<7qpB8`OO1J{`|`D1-`JoqtA<e>&gi1!wq@9#-fKI+H&A_<8BHKw^An7u?mj
+zHANQDaey(#bhsOh$<Ung2V-Ovy>qBtW%K?fwHI3lwW*@lYmB+n=O+I5$d4z`b;B`e
+zx<Ld_yp)}U^5w6HJ1?8VtulMdSNY<nLi@jQsOCa0&5{CHwI|ra6aN<Dbu|kDfxM#y
+z3;`&4m#V)y(agY3F!p(?MR<ERgs0#ieS|&u$?dBAbKGMs)r2oa41T2H2zKX~a1rBn
+ztm=f$g&Q2j_JA_c#p0lq!xD4n*uz0yA#2C;%A>POjVO?fO7?f+M){KN-N96FzCN|z
+z9SZ1V&usR;PSt)=`EzEk-TpxakNdveK0kAqg`$=wJedqM68cDs(r#~2>FY>SNyw*J
+z6=e>}ajTuc%N!QUV?~W`I$Wv4dr+-?-uK+FERKwuJ_>C*ct}U%Ti-pY5}o|z20Hz%
+zA>d`xL3r-5^+5gEDr-S{yq;$@XV-zU1E86h1z7n-BvOzCZxK|hQwEa0geT#Nf5{Gp
+z-MrlD=IDBj#H~I5@WPSr3BlXq_uD_PKk6NWhBIhoZa1+<CQo9IOE$OK_tIH4i0G94
+zcEcR_%}d!$Xj+*(A!ru-#V%M`1E9a=6%PU!-5#&LHX1Gywhu{<?*Boq>JyEtYaeIv
+z=PQjqtlkMbpd8fq@gR;y%RBt~1jdXMI~OI%wH74+PQ6p>1n=}BMuh*tvdM$%MQwR`
+zsEwE17WeyqrG0<rWb>x{BQ5PkMMXTsLq}6muG93xe~cQH{4&)KP{DSNP{`RX5FC*R
+zg_0w{sCPjqsktm6AeZegfAjON-7XZYo9ati7`lK?s#gFnBOQ17>y$6tCZU^JDv}or
+zYGrwSNq6!`4fd4d8g9NQbrOWzRYj2(_eMD;vaik;5-QP_w=w~<QDd}NQPF4kXHmF6
+ziBPlEq%j)<Oslp$R05pQu5?j`1o`@Qpg^afBSi!eDN^{yN4#-^M*mO0QOLD(#*w9x
+zJX?NG7ra&~Yl6U#lJL9p_ceCYvSu#7t>ty@*B9W0uQPWR*3RWGdD@reEnTvFIsX8?
+ztXLf_C=xoCI|m1~!N${Oyp#d|dUycte<|At{McBK7=v|i92vI+NU77eah}K9$0>k~
+zN<*xaUZA6X_?L<KTn-gj<tVEm%$xPz_TcP|88hMaTS)R9S>!*o$lIRKeX%g;yO~`H
+zV8YR1dDN)I5LAa5qfE3W))J9oQ%Fx@!ldF!<F-NXPeV#yYD`2EtSEjLJq|_8IDwNm
+zZVNHuNr4pkxJhzA9-aq)n$1Hea5r2&x;d8jcit!EvCZ^e%eX9eb~1#l@C(nV#_5F0
+z@}`;YS^usA^U**LWu71OGuQ{SEPhv9uaCP9ST$LE;g(X|T;`hPGMC|{TME9j;6!Wa
+zoZPkoHB;Z+<c~IYg(zoYp=+(OUD{G8nkStlod@o7lCvw^Ju0=WB=(pSlV4h7g+jI7
+zUs&u^G2Ge5vN;R<nHl!Nz0aiYhC41!>#s-3?KNRf-m{FASD(GKpDKC=)!{d3O(7R_
+zH&qAVr_87DQ(&`R9TaNKJ(2f+658p`7vz^@RHd3ze3^Qk-5X8fta(@EXetl$JgpuU
+zme;zVfT!pc=9COgNTnuv(@c7s$Cz{ha1xL0_W%8gvN%&Wk$!M(9-luTv`_s0+Uz{x
+zE;f+FU0nvW#nxv-Te=J`cjqhWJS~~AvP2fp_332(N~zJvFc3!$C=Sf8H6zOTN-?xr
+zaxB9+Ad>?)^V!M-99+4r8Rc=8(iOhWM67$avg*^9RffCNkG#Ad`TH+9ug?6%%HL-G
+zpsQ0Il_z=^t3Palxee}5xZGxUPD5Ff=2v42<@l6)BHKnq&Q#H03MXHb_AA`JjG{d_
+z&S}!@9RSYEEH6wGOVSEOZ@3BHz!qzvs@0Gjt(vY5Rh>hbd6iPhfz<jQG9~e273wRq
+z6KrX#K;mbRI`1aD<1e+DvjsRM6;JuUFW2Vm7LT2{cT9T+^wxjEL*Y%#)n0lMr6)dG
+zkWk#RKMJSI-hy}6zbznR_QR~eeJC$})=u~{1VKN^%-aEX%ml;;e;o7L90FFCG%Lf~
+zL#@UXhu!w<$JPzI*$4e66%wBr!NNYdV|#H~7vaU3$wQF@+T{TvZ}J#CQ@S%sw>F(k
+z$thm7y0QA~Tlu&|rJvQ;d8f<!$MQRYU}1-BM?c11U&p|Q|0$o-1Q_!FnfovWV$L??
+zq5Mlq4}b*0ICDqOUwI4vl3-4{RnaX!$c24{|E+6hvEL{8qCU8lw(~|Vc_mAyLHOoG
+z9xCI-q~S$>d&j){#O^i`7>`tCQ`W;=*!cb{NaVbvRI19rSM!biO8X7HK)F@(GQoDc
+zsIcOtBRQ$|nUf(7ptAs#Fe2S01Mc`>@nOdMU!NK{!*5<3%mJ`Eho^;X0|2)o%Z1cl
+zF>HS9Rm#LruKnrdurIP)R_<=+J3I4Yi|e5P@w^NHj4q-@@7ZVFx01wnZ-KWOx9VWr
+zIt_1w-$#tFW1}DVm5B=m1CZS0LuTC2Z9}hbOxTs}73a-s4fFW(vCs39YMzgMy(?Hd
+z60QA$=@?V;DBd`|aW0Q7?iVe2ThRN5A2xxddc!<GJ~_);E{(ot-VaQc2S`o{3iTNX
+zQyUddh2D{g8xiD@@m0-*a};xwr=B2S!~tRp=KyE81`?afRdaIZ>$cPm^n<Ia`;M!l
+zS%vdpdOo-c+gZ8{TuCVH9Z)G>2wsq=^d!4-YHIkUA}CiXKDD2E0+q}jE{7K&)8Q19
+zKZF$)`X;00(=WBZ+8t4{%e$I;=_cNtFq|&vlT^AjN_R43<<yR|Z&f$0UKI_2nSRye
+z78@+8CE+xdr?s4&6jHoub%WvT+f(h3sCGp=-BtssOPwwW?A+-WpM5LdGl!W2-sqkA
+zWlaW^`JA#Jni=EGFJ3rQonD*tc^uo@>@eNmwbl7yQheX|B^5^A_O_tLqgxcZi0_#~
+zFiNiMn-=Ho{H4g>727ZMksoVUN0qXsE2BPV)$a<}n2=`?dVbb!o9r03yC)-!3+rmV
+zWa%3DWFr#$q6f7}$q(|n+S@@-`?`1wh{?x<#O@#NEA*rs0-<F|k}89^+XU5^)KIvj
+z+DFuy6d+X$ZMg}=WjO3B-x_vhV!PHek|8!86DaMEEsi}Dywn41D_}iuj%~&=AiDN{
+zvB!stduh3Qx2{Ddo1N_6Z`(U%1CDK+0=#*wAJ(66`u~{~0rRoowR0@3)TactA!R6x
+z!xBf+!jA;6LW1k)iI8fW4xZ+v3j{j##n&dLk1zYX3IrMKT|*}3^Eje_NKe@eA$n6b
+z)zMH|C@5?>NmHY5R-O_}KXxCT&oWLo>lG}bB+CqZ<;u1<Eh`Dl4O%IDdvXFdx1u5M
+zzu(NWkI%PsW(ZlwgESrLXJ-if3Yy*Pssuv*jj#k|w~;mRoQhlI92a+pto;_rCkkrM
+zB;R;${l85=4xRX&8Mo_s&3H=l+yCrSDEhf@$|r_aPIg0%F<>kbVitahc*!S{*36s=
+z-dH2qU`}*Cn692rT@bmgNNtx^lmxYQdyzu$IQ@s+>|KotP(t`?7dRz$Nx8h7w1*}5
+zENzsqaXrZy{;_*a!c%L%F=A1PrBI+#|G)-*+navDR;ykV5OI3h=^_3qsjHYk%OHU;
+z(eCtjrd-W`1;V>yAbh`@o8biixs!3}kDF89sgd}u3H<s9dKY1aiwG=jHgwVV*sfdj
+zoyUu-FXi|*r0kd7pE0s(Kbw7H^V|{s|3MsDHhvrCadWx6JT5nnH#Yvqw}9lMT(5a1
+zotsNvM_wRW*wq`2_k#PgV!gF(y`XvFC%wMj-g>Xw;|7w58b=fg*3<{5p98Y860EHg
+z+=T$3?qi;R<FvO@V8p|D#czq+857_BE)vkS-ibLu!a}=Sx+Xk`$Ak|Ycw-wN`402g
+z*ME7ln?S}<8RfauRbpaux}?zCs#dqqJI&OuopQh8FDW9%S$*WH?;LZnY-hOru3$Tx
+zuby6pePP418LYfplaBq|5-wz(tN4ZO@YPTO2mnno$xf}KS%^)6I$3RvP5d)96*P_X
+zW0SmNlTFmt@`<0>JbgVHQ>x~wxz9`E^TSlW%2)X+U-eSGR4>)b4+MogQsywmlp1PD
+zO!3k$=UfFSHdbaAQ$j6qiu5%8ky3rc$~;O+Wk}P;(sISSQl<*h{OnxRTs2qC4Rh}S
+zRrpn5YL!~0R{2fRmL`9#7P@<h9?a?Gvlzt2395<BotQ77KU+Ceadr?|FIj%jIymc{
+z&V~13-O4)DJ$*lk?rU=BFEE*%*jo(h$UM1~0a`p(Ks$n^tyZX7zf`%(z=G*3-?88t
+zox@wEAa2sa;F4coS0NzlSwL2`>^MO*t3~dK6{>lMEZ8wYpl%H3g-K}Pz~bqdDqs9q
+zw{+IKs{5*9!IO?`G7sJ-Rt~L9o@@_OvGPazYaN*K)p&L0t5+_!%pf4~0Ikvo&!fYD
+zATKZOG@yB2Gqg0D@x@cbc;wkD)G8h5Llc{xtajhfzd%5-!C+23@_>3oJ!~;Z&`6DV
+z$g9qg|AxBzy!>%gU@{lQ<8UQoxdK#1N-C!cs-zlfrHM3&Ceu`!CZ_+@gl})(=5D>D
+zv#l$>>I(pt1-l#0{E=en0vUh>=qy?Xs}0l$-vD?66)^o~uY-2WpB#$8PSd>*$|sZm
+z(Q*)wTa}&5oCAt98A_9oOQKqb?xmaqP(O;;%Mg2U5K3xwkR~a!9y|`lfx6iVH6o=_
+zl!Rtg28OaBb}&qlLE2`W6817wEgV`2n47VO=B|Ali%ciG7E46xGon?(?l<TTpWH}2
+zwl4Wvu+od}<Y;T5CwEiNuvNR3*w|sJ`#uv-tQ!{^Sfe%<O;c3uFP>9R=4`u)A#dip
+zlH=5C_-Y$|!|f6twU<J57`ENU#)Qx^yGg#$v_^Hw4-(?D%fTXrv9^E{r=B~kEqCZL
+zbYxN=AR9LFK`>GkCY_Iljm2_vjc92@Nv*2CAlXV)L1e;*b>z`>s!$0N_pnlit3(XO
+zG;&Qbwrr^F$0rh}J_1umN1iqZ{WUxD+7N>V8_|M4-q%<8WJ^oXU7fknI!0{xse0|^
+z^doCnnYxT7Py3+$7Ls}0Z_r>PTJXo}zEWjN{~03NQ%mxMSTn=O=Td*x?6qk!&=38@
+zW|&t1Jbi3igX^Dn-hT^nN;AV=4QPS_00{7Vm^G(8@=+2bb>Bv2x>m04$6Lb=IbkNU
+z!M#v1@;FnvpAzg5iUuSyH5pte$b7>hIT(ftwm`Fyf}Ar#m=6Rl7H57;KLAIm4FF?H
+zP`X7R0v?EiR;vuZF%Patfp*8xCd*|FSUwtU2nTU0gs?GXBfw@ALTtoZ{z%F^jZ6&j
+zX9jy<<lDf9+{XI@buT*U1ORGFZq38*E*Uq_=a!Hm05+yUfSm>p{Qi7+l}4ZVyHxo`
+zKYkY5q$;~@WMuTVsy3A&AxfN(--aXA0)&bC(eOf18>!lnE$&9cSFMC_*t(NT_8Emu
+z;*uQsDu47;sg|R_X1HQ)afIv$UCedyy8XxEFV1@?`qAJ%<Y{7-%<_wVe21~+Lp<vS
+z&=RPx4J5E34NmaEFkV;0ylCCiUlKlbePAMw(<o+*-??o=nB@1hr}P?KBM)jFUa;Fo
+z+~X4@{*uF6I=^2vPZ}Qb!`SldBu?>3`9_->r(0>rcEjozK3sR(0lsY)g)q8vxT>bQ
+zB`Gq}wr^2n|Fh92R>|R(==(Ihuv)a&X@B$WP{TFGvA*QT#O6=wGJTyYq1&l4Y`doV
+z>%^{5#h^NlVG6)hjpyjcAX?BDcJn=7@+E_*=*J*hyuL3XO%m3Nv2S;r1iH)nb%(wL
+zf&hG-NT<cv=%e{V<Ki)(0Ccbd1H$3}I2qCSG6I{7UPhruSTAD`YT#uoxLfx!4Op4+
+zGEE3&zEltX_>82{%+SD!mmvDwD%=~&09*jcYE&suEl#5Xm6VEPD50cKrcvYWRckc}
+z=Be2>_-uV=Ydbw=MH;TJBvPZELY<vNDp9<WT%>vhwpw7v4z?P79+LT-LX%4E%cUz(
+zPs%wSZz63+cN>Ja@cQ%c?hUXZ{nLsRl00o~KB0}$E43!7uS}Aw^P)bUR0kzn$hl9Z
+z-Yk?WQ4~55p{c_8+7(25yHtBXLFw&lQux6YHETc51PApjmtB9o8G*WFc8&D?A0(Xs
+zM^~e`qR?JN_F2S<Krv^pxhOH<n(JH%xp8;HO}E^h&EWe-E9LEuyA<wQY`+71{L6Qq
+zgXax;pv;gU!QI+We;Y$WsQA2c)vEM}CRHQG8?kEZ!F6*8T%YKnM$KAisma(_vm^Y<
+z@meLDXtF6L={40sDgKixO}Y*lGELK_-Sl}B7XEQu&O8n+#<Mh-84mtmShGokXc8@)
+z^wB4u8PbO>JG-&48Q&%s%%uxW7zvL}IM9X;a^(vnW)K&L92V)KOZxnz-w`|Qa@rXh
+z;Jyx0X=5ESg-W9{m@GDj%i{}#BC$j&lPi?2Dz!%I=I-IC(;K{uCU3LFYO_0heE9|d
+zAsC5qF}zt$(ej#YMOb>h^vaDVSGH9OY!Q(X+o$D#)ko&&(y80bC`Nf+g<-KdTpnK_
+z6p1BLnOvb%sWn=i-e5GDS1Y^6(RVplJo^l<&%f^3e-DVm6Nn@-g-W9{m@GDj%i{}#
+zBC$j&lPi=ewMMIp1)|LN$ghSB`z^h}Xfi_<tIh6ky4)VG&u^y>cNTC1v8a(EH~s#6
+zI$KYpR;N2OM_QNTu+!N!R`Sj60?rG^^j}?k|EJy#AoJ$9)fd-%xSxe6fhRpoMS-pD
+ze?^C#qKEaE({0OKb8LGz!9QZS$hU02WO3SbCB?Mzf9$0jMXM<F;O!OOS@U?m&Tu*T
+zLfro|fvbL6l{LGxRB;kaNOIa0bI4#><g<~hlK2WI@I?Eq=CD%~iJrv|^QDy2o0g+R
+zrt^7%e=~gqTSAuiHhV}P+X#4q5yLf_Vjf-d=x-P);+?vLlgO1FhrJJXZfZ}!hF=|z
+z8Y_yUxeYNlIFng8fJKWt|7g5S$6My@ZUNT=KMoZ6PDoH{5t!vNeNJJk)#Z@Df8nOT
+zbZnL`QbE@UmzE4230{|C;0zAc_gL;gAI$4@v^w~Li*5NY?n+W)%z;)JPs_1CuzTgO
+zRlg{lWuq;Tb@d5`@<tzOc=_bXak3F?CYmW6=5jphn8gfq+dLe;<vwX0qR;0yw>P)9
+z$AA1|-#_nk+WoKRGqbD~2cB-%GYtLu>C@?2_S5Nt?*Gc$E1}gsR_)0wyksi{oak+`
+z<R^DT)$n!ZV}a@)C}Beq<{ESe*S=Owq`rkBM)j2%Hu#kJ7*GXno?|q0odhvQ#UlCq
+zR|pu@^nVEd0&F>%gBYziERf`yOnsS@I9tsPSuusOraPe`Pn^q19ph`!98WpM?DttH
+z1Z^{7MDZ<a0jI+=4`q(vC1?i(2FdPq2pt}cg2t(%H8){^5LckT>kELjBAPox^%bk^
+zN{Z)^fhc~&T$uZZS6|Je@>|s}(Wxk*s^(ze6)ECET#k@*KqI~35=%hoa<2(BEz(ou
+zAXZW_&=XbIAk>zU(JTZ}R*Lu16{U454zpCWHcut!h=otQQM3}xY3!I8gSf}?31-2H
+z(PPv=2^$(pmBIc6NYkqHW~lg0oq*j-@g8pc{~&1w@f_#O<<<ReYjju+v3;N08|b2m
+zgW1h-bqes@dA@RiVF2j&J!(WKu^m+EDe0lrUo@c}E_8-u9L<snje&zykAO_#g6D}r
+zeNku<0ABYBPmH8(a1=>oFXct>f0{>5#OdL4PYZ*@aP6s|!d-ZQ{nHwBig?}hv?M0g
+T=ND-DucNQ`tADQ-AuI&|D5jKI
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/assets/style.css b/app/src/main/assets/style.css
+index 7cbfc3e..c3d61e2 100755
+--- a/app/src/main/assets/style.css
++++ b/app/src/main/assets/style.css
+@@ -101,7 +101,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--blue)}
+ .breadcrumbs{padding:9px 13px;color:#aebdcc;font-size:12px;background:#252525;overflow-wrap:anywhere}
+ .editorInfo{height:22px;display:flex;align-items:center;justify-content:space-between;padding:0 15px;font-size:12px;line-height:20px;background:var(--bar);border-bottom:1px solid var(--line)}
+ .editorInfo span:first-child{max-width:75%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+-.CodeMirror{height:100%;font-family:'Droid Sans Mono',monospace;font-size:12px;line-height:1.4;background:var(--code);color:#b4bec8}
++.CodeMirror{height:100%;font-family:"JetBrains Mono","Droid Sans Mono",monospace;font-size:12px;line-height:1.4;background:var(--code);color:#b4bec8}
+ .CodeMirror-gutters{background:var(--gutter);border-right:1px solid #4b4b4b}
+ .CodeMirror-linenumber{color:#888;min-width:0;padding:0 3px 0 2px}
+ .CodeMirror-lines{padding:0}
+@@ -402,7 +402,7 @@ body.light .pane:not(.active){background:#f2f2f2}
+   --text:#f2f2f3;--muted:#9a9ca3;--faint:#8a8c92;
+   --accent:#4a8ad6;--positive:#5fc39c;--negative:#e5566f;--warning:#d9a441;
+   --radius-card:6px;--radius-control:8px;--radius-pill:999px;
+-  --mono:monospace;
++  --mono:"JetBrains Mono","Droid Sans Mono",monospace;
+   --bg:var(--ground);--bar:var(--ground);--code:#131217;--dialog:var(--raised);
+   --line:var(--border);--blue:var(--accent);--icon:transparent;--hover:var(--raised);--gutter:#1b1b20;
+ }
+@@ -692,6 +692,10 @@ body.light .multidexDialog .dexPickIcon,body.light .optionIcon{color:var(--muted
+ .dialog.dangerDialog:not(.stackedActions) .actions button:last-child{background:var(--negative);border-color:var(--negative);color:#fff}
+ /* bundled face + file list as a two-line table row */
+ @font-face{font-family:"Public Sans";src:url("fonts/PublicSans.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
++/* Bundled monospace face: identical code alignment on every ROM (MT ships Mono.ttf). */
++@font-face{font-family:"JetBrains Mono";src:url("fonts/JetBrainsMono-Regular.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}
++.findOpts{margin:6px 0 2px}
++.findOpts .toggleRow{min-height:36px;font-size:13px!important}
+ body{font-family:"Public Sans",Roboto,"Noto Sans SC","Noto Sans CJK SC",system-ui,-apple-system,sans-serif}
+ h1.title,h1.editorTitle{margin:0}
+ .fileline{display:flex;align-items:baseline;gap:8px;min-width:0}
+diff --git a/app/src/main/assets/vendor/brainfuck.js b/app/src/main/assets/vendor/brainfuck.js
+new file mode 100644
+index 0000000..b5a30f8
+--- /dev/null
++++ b/app/src/main/assets/vendor/brainfuck.js
+@@ -0,0 +1,85 @@
++// CodeMirror, copyright (c) by Marijn Haverbeke and others
++// Distributed under an MIT license: https://codemirror.net/5/LICENSE
++
++// Brainfuck mode created by Michael Kaminsky https://github.com/mkaminsky11
++
++(function(mod) {
++  if (typeof exports == "object" && typeof module == "object")
++    mod(require("../../lib/codemirror"))
++  else if (typeof define == "function" && define.amd)
++    define(["../../lib/codemirror"], mod)
++  else
++    mod(CodeMirror)
++})(function(CodeMirror) {
++  "use strict"
++  var reserve = "><+-.,[]".split("");
++  /*
++  comments can be either:
++  placed behind lines
++
++        +++    this is a comment
++
++  where reserved characters cannot be used
++  or in a loop
++  [
++    this is ok to use [ ] and stuff
++  ]
++  or preceded by #
++  */
++  CodeMirror.defineMode("brainfuck", function() {
++    return {
++      startState: function() {
++        return {
++          commentLine: false,
++          left: 0,
++          right: 0,
++          commentLoop: false
++        }
++      },
++      token: function(stream, state) {
++        if (stream.eatSpace()) return null
++        if(stream.sol()){
++          state.commentLine = false;
++        }
++        var ch = stream.next().toString();
++        if(reserve.indexOf(ch) !== -1){
++          if(state.commentLine === true){
++            if(stream.eol()){
++              state.commentLine = false;
++            }
++            return "comment";
++          }
++          if(ch === "]" || ch === "["){
++            if(ch === "["){
++              state.left++;
++            }
++            else{
++              state.right++;
++            }
++            return "bracket";
++          }
++          else if(ch === "+" || ch === "-"){
++            return "keyword";
++          }
++          else if(ch === "<" || ch === ">"){
++            return "atom";
++          }
++          else if(ch === "." || ch === ","){
++            return "def";
++          }
++        }
++        else{
++          state.commentLine = true;
++          if(stream.eol()){
++            state.commentLine = false;
++          }
++          return "comment";
++        }
++        if(stream.eol()){
++          state.commentLine = false;
++        }
++      }
++    };
++  });
++CodeMirror.defineMIME("text/x-brainfuck","brainfuck")
++});
+diff --git a/app/src/main/assets/vendor/cmake.js b/app/src/main/assets/vendor/cmake.js
+new file mode 100644
+index 0000000..f08c7d7
+--- /dev/null
++++ b/app/src/main/assets/vendor/cmake.js
+@@ -0,0 +1,97 @@
++// CodeMirror, copyright (c) by Marijn Haverbeke and others
++// Distributed under an MIT license: https://codemirror.net/5/LICENSE
++
++(function(mod) {
++  if (typeof exports == "object" && typeof module == "object")
++    mod(require("../../lib/codemirror"));
++  else if (typeof define == "function" && define.amd)
++    define(["../../lib/codemirror"], mod);
++  else
++    mod(CodeMirror);
++})(function(CodeMirror) {
++"use strict";
++
++CodeMirror.defineMode("cmake", function () {
++  var variable_regex = /({)?[a-zA-Z0-9_]+(})?/;
++
++  function tokenString(stream, state) {
++    var current, prev, found_var = false;
++    while (!stream.eol() && (current = stream.next()) != state.pending) {
++      if (current === '$' && prev != '\\' && state.pending == '"') {
++        found_var = true;
++        break;
++      }
++      prev = current;
++    }
++    if (found_var) {
++      stream.backUp(1);
++    }
++    if (current == state.pending) {
++      state.continueString = false;
++    } else {
++      state.continueString = true;
++    }
++    return "string";
++  }
++
++  function tokenize(stream, state) {
++    var ch = stream.next();
++
++    // Have we found a variable?
++    if (ch === '$') {
++      if (stream.match(variable_regex)) {
++        return 'variable-2';
++      }
++      return 'variable';
++    }
++    // Should we still be looking for the end of a string?
++    if (state.continueString) {
++      // If so, go through the loop again
++      stream.backUp(1);
++      return tokenString(stream, state);
++    }
++    // Do we just have a function on our hands?
++    // In 'cmake_minimum_required (VERSION 2.8.8)', 'cmake_minimum_required' is matched
++    if (stream.match(/(\s+)?\w+\(/) || stream.match(/(\s+)?\w+\ \(/)) {
++      stream.backUp(1);
++      return 'def';
++    }
++    if (ch == "#") {
++      stream.skipToEnd();
++      return "comment";
++    }
++    // Have we found a string?
++    if (ch == "'" || ch == '"') {
++      // Store the type (single or double)
++      state.pending = ch;
++      // Perform the looping function to find the end
++      return tokenString(stream, state);
++    }
++    if (ch == '(' || ch == ')') {
++      return 'bracket';
++    }
++    if (ch.match(/[0-9]/)) {
++      return 'number';
++    }
++    stream.eatWhile(/[\w-]/);
++    return null;
++  }
++  return {
++    startState: function () {
++      var state = {};
++      state.inDefinition = false;
++      state.inInclude = false;
++      state.continueString = false;
++      state.pending = false;
++      return state;
++    },
++    token: function (stream, state) {
++      if (stream.eatSpace()) return null;
++      return tokenize(stream, state);
++    }
++  };
++});
++
++CodeMirror.defineMIME("text/x-cmake", "cmake");
++
++});
+diff --git a/app/src/main/assets/vendor/dart.js b/app/src/main/assets/vendor/dart.js
+new file mode 100644
+index 0000000..ba9ff3d
+--- /dev/null
++++ b/app/src/main/assets/vendor/dart.js
+@@ -0,0 +1,166 @@
++// CodeMirror, copyright (c) by Marijn Haverbeke and others
++// Distributed under an MIT license: https://codemirror.net/5/LICENSE
++
++(function(mod) {
++  if (typeof exports == "object" && typeof module == "object") // CommonJS
++    mod(require("../../lib/codemirror"), require("../clike/clike"));
++  else if (typeof define == "function" && define.amd) // AMD
++    define(["../../lib/codemirror", "../clike/clike"], mod);
++  else // Plain browser env
++    mod(CodeMirror);
++})(function(CodeMirror) {
++  "use strict";
++
++  var keywords = ("this super static final const abstract class extends external factory " +
++    "implements mixin get native set typedef with enum throw rethrow assert break case " +
++    "continue default in return new deferred async await covariant try catch finally " +
++    "do else for if switch while import library export part of show hide is as extension " +
++    "on yield late required sealed base interface when").split(" ");
++  var blockKeywords = "try catch finally do else for if switch while".split(" ");
++  var atoms = "true false null".split(" ");
++  var builtins = "void bool num int double dynamic var String Null Never".split(" ");
++
++  function set(words) {
++    var obj = {};
++    for (var i = 0; i < words.length; ++i) obj[words[i]] = true;
++    return obj;
++  }
++
++  function pushInterpolationStack(state) {
++    (state.interpolationStack || (state.interpolationStack = [])).push(state.tokenize);
++  }
++
++  function popInterpolationStack(state) {
++    return (state.interpolationStack || (state.interpolationStack = [])).pop();
++  }
++
++  function sizeInterpolationStack(state) {
++    return state.interpolationStack ? state.interpolationStack.length : 0;
++  }
++
++  CodeMirror.defineMIME("application/dart", {
++    name: "clike",
++    keywords: set(keywords),
++    blockKeywords: set(blockKeywords),
++    builtin: set(builtins),
++    atoms: set(atoms),
++    hooks: {
++      "@": function(stream) {
++        stream.eatWhile(/[\w\$_\.]/);
++        return "meta";
++      },
++
++      // custom string handling to deal with triple-quoted strings and string interpolation
++      "'": function(stream, state) {
++        return tokenString("'", stream, state, false);
++      },
++      "\"": function(stream, state) {
++        return tokenString("\"", stream, state, false);
++      },
++      "r": function(stream, state) {
++        var peek = stream.peek();
++        if (peek == "'" || peek == "\"") {
++          return tokenString(stream.next(), stream, state, true);
++        }
++        return false;
++      },
++
++      "}": function(_stream, state) {
++        // "}" is end of interpolation, if interpolation stack is non-empty
++        if (sizeInterpolationStack(state) > 0) {
++          state.tokenize = popInterpolationStack(state);
++          return null;
++        }
++        return false;
++      },
++
++      "/": function(stream, state) {
++        if (!stream.eat("*")) return false
++        state.tokenize = tokenNestedComment(1)
++        return state.tokenize(stream, state)
++      },
++      token: function(stream, _, style) {
++        if (style == "variable") {
++          // Assume uppercase symbols are classes using variable-2
++          var isUpper = RegExp('^[_$]*[A-Z][a-zA-Z0-9_$]*$','g');
++          if (isUpper.test(stream.current())) {
++            return 'variable-2';
++          }
++        }
++      }
++    }
++  });
++
++  function tokenString(quote, stream, state, raw) {
++    var tripleQuoted = false;
++    if (stream.eat(quote)) {
++      if (stream.eat(quote)) tripleQuoted = true;
++      else return "string"; //empty string
++    }
++    function tokenStringHelper(stream, state) {
++      var escaped = false;
++      while (!stream.eol()) {
++        if (!raw && !escaped && stream.peek() == "$") {
++          pushInterpolationStack(state);
++          state.tokenize = tokenInterpolation;
++          return "string";
++        }
++        var next = stream.next();
++        if (next == quote && !escaped && (!tripleQuoted || stream.match(quote + quote))) {
++          state.tokenize = null;
++          break;
++        }
++        escaped = !raw && !escaped && next == "\\";
++      }
++      return "string";
++    }
++    state.tokenize = tokenStringHelper;
++    return tokenStringHelper(stream, state);
++  }
++
++  function tokenInterpolation(stream, state) {
++    stream.eat("$");
++    if (stream.eat("{")) {
++      // let clike handle the content of ${...},
++      // we take over again when "}" appears (see hooks).
++      state.tokenize = null;
++    } else {
++      state.tokenize = tokenInterpolationIdentifier;
++    }
++    return null;
++  }
++
++  function tokenInterpolationIdentifier(stream, state) {
++    stream.eatWhile(/[\w_]/);
++    state.tokenize = popInterpolationStack(state);
++    return "variable";
++  }
++
++  function tokenNestedComment(depth) {
++    return function (stream, state) {
++      var ch
++      while (ch = stream.next()) {
++        if (ch == "*" && stream.eat("/")) {
++          if (depth == 1) {
++            state.tokenize = null
++            break
++          } else {
++            state.tokenize = tokenNestedComment(depth - 1)
++            return state.tokenize(stream, state)
++          }
++        } else if (ch == "/" && stream.eat("*")) {
++          state.tokenize = tokenNestedComment(depth + 1)
++          return state.tokenize(stream, state)
++        }
++      }
++      return "comment"
++    }
++  }
++
++  CodeMirror.registerHelper("hintWords", "application/dart", keywords.concat(atoms).concat(builtins));
++
++  // This is needed to make loading through meta.js work.
++  CodeMirror.defineMode("dart", function(conf) {
++    return CodeMirror.getMode(conf, "application/dart");
++  }, "clike");
++});
+diff --git a/app/src/main/assets/vendor/gas.js b/app/src/main/assets/vendor/gas.js
+new file mode 100644
+index 0000000..db09a8a
+--- /dev/null
++++ b/app/src/main/assets/vendor/gas.js
+@@ -0,0 +1,353 @@
++// CodeMirror, copyright (c) by Marijn Haverbeke and others
++// Distributed under an MIT license: https://codemirror.net/5/LICENSE
++
++(function(mod) {
++  if (typeof exports == "object" && typeof module == "object") // CommonJS
++    mod(require("../../lib/codemirror"));
++  else if (typeof define == "function" && define.amd) // AMD
++    define(["../../lib/codemirror"], mod);
++  else // Plain browser env
++    mod(CodeMirror);
++})(function(CodeMirror) {
++"use strict";
++
++CodeMirror.defineMode("gas", function(_config, parserConfig) {
++  'use strict';
++
++  // If an architecture is specified, its initialization function may
++  // populate this array with custom parsing functions which will be
++  // tried in the event that the standard functions do not find a match.
++  var custom = [];
++
++  // The symbol used to start a line comment changes based on the target
++  // architecture.
++  // If no architecture is pased in "parserConfig" then only multiline
++  // comments will have syntax support.
++  var lineCommentStartSymbol = "";
++
++  // These directives are architecture independent.
++  // Machine specific directives should go in their respective
++  // architecture initialization function.
++  // Reference:
++  // http://sourceware.org/binutils/docs/as/Pseudo-Ops.html#Pseudo-Ops
++  var directives = {
++    ".abort" : "builtin",
++    ".align" : "builtin",
++    ".altmacro" : "builtin",
++    ".ascii" : "builtin",
++    ".asciz" : "builtin",
++    ".balign" : "builtin",
++    ".balignw" : "builtin",
++    ".balignl" : "builtin",
++    ".bundle_align_mode" : "builtin",
++    ".bundle_lock" : "builtin",
++    ".bundle_unlock" : "builtin",
++    ".byte" : "builtin",
++    ".cfi_startproc" : "builtin",
++    ".comm" : "builtin",
++    ".data" : "builtin",
++    ".def" : "builtin",
++    ".desc" : "builtin",
++    ".dim" : "builtin",
++    ".double" : "builtin",
++    ".eject" : "builtin",
++    ".else" : "builtin",
++    ".elseif" : "builtin",
++    ".end" : "builtin",
++    ".endef" : "builtin",
++    ".endfunc" : "builtin",
++    ".endif" : "builtin",
++    ".equ" : "builtin",
++    ".equiv" : "builtin",
++    ".eqv" : "builtin",
++    ".err" : "builtin",
++    ".error" : "builtin",
++    ".exitm" : "builtin",
++    ".extern" : "builtin",
++    ".fail" : "builtin",
++    ".file" : "builtin",
++    ".fill" : "builtin",
++    ".float" : "builtin",
++    ".func" : "builtin",
++    ".global" : "builtin",
++    ".gnu_attribute" : "builtin",
++    ".hidden" : "builtin",
++    ".hword" : "builtin",
++    ".ident" : "builtin",
++    ".if" : "builtin",
++    ".incbin" : "builtin",
++    ".include" : "builtin",
++    ".int" : "builtin",
++    ".internal" : "builtin",
++    ".irp" : "builtin",
++    ".irpc" : "builtin",
++    ".lcomm" : "builtin",
++    ".lflags" : "builtin",
++    ".line" : "builtin",
++    ".linkonce" : "builtin",
++    ".list" : "builtin",
++    ".ln" : "builtin",
++    ".loc" : "builtin",
++    ".loc_mark_labels" : "builtin",
++    ".local" : "builtin",
++    ".long" : "builtin",
++    ".macro" : "builtin",
++    ".mri" : "builtin",
++    ".noaltmacro" : "builtin",
++    ".nolist" : "builtin",
++    ".octa" : "builtin",
++    ".offset" : "builtin",
++    ".org" : "builtin",
++    ".p2align" : "builtin",
++    ".popsection" : "builtin",
++    ".previous" : "builtin",
++    ".print" : "builtin",
++    ".protected" : "builtin",
++    ".psize" : "builtin",
++    ".purgem" : "builtin",
++    ".pushsection" : "builtin",
++    ".quad" : "builtin",
++    ".reloc" : "builtin",
++    ".rept" : "builtin",
++    ".sbttl" : "builtin",
++    ".scl" : "builtin",
++    ".section" : "builtin",
++    ".set" : "builtin",
++    ".short" : "builtin",
++    ".single" : "builtin",
++    ".size" : "builtin",
++    ".skip" : "builtin",
++    ".sleb128" : "builtin",
++    ".space" : "builtin",
++    ".stab" : "builtin",
++    ".string" : "builtin",
++    ".struct" : "builtin",
++    ".subsection" : "builtin",
++    ".symver" : "builtin",
++    ".tag" : "builtin",
++    ".text" : "builtin",
++    ".title" : "builtin",
++    ".type" : "builtin",
++    ".uleb128" : "builtin",
++    ".val" : "builtin",
++    ".version" : "builtin",
++    ".vtable_entry" : "builtin",
++    ".vtable_inherit" : "builtin",
++    ".warning" : "builtin",
++    ".weak" : "builtin",
++    ".weakref" : "builtin",
++    ".word" : "builtin"
++  };
++
++  var registers = {};
++
++  function x86(_parserConfig) {
++    lineCommentStartSymbol = "#";
++
++    registers.al  = "variable";
++    registers.ah  = "variable";
++    registers.ax  = "variable";
++    registers.eax = "variable-2";
++    registers.rax = "variable-3";
++
++    registers.bl  = "variable";
++    registers.bh  = "variable";
++    registers.bx  = "variable";
++    registers.ebx = "variable-2";
++    registers.rbx = "variable-3";
++
++    registers.cl  = "variable";
++    registers.ch  = "variable";
++    registers.cx  = "variable";
++    registers.ecx = "variable-2";
++    registers.rcx = "variable-3";
++
++    registers.dl  = "variable";
++    registers.dh  = "variable";
++    registers.dx  = "variable";
++    registers.edx = "variable-2";
++    registers.rdx = "variable-3";
++
++    registers.si  = "variable";
++    registers.esi = "variable-2";
++    registers.rsi = "variable-3";
++
++    registers.di  = "variable";
++    registers.edi = "variable-2";
++    registers.rdi = "variable-3";
++
++    registers.sp  = "variable";
++    registers.esp = "variable-2";
++    registers.rsp = "variable-3";
++
++    registers.bp  = "variable";
++    registers.ebp = "variable-2";
++    registers.rbp = "variable-3";
++
++    registers.ip  = "variable";
++    registers.eip = "variable-2";
++    registers.rip = "variable-3";
++
++    registers.cs  = "keyword";
++    registers.ds  = "keyword";
++    registers.ss  = "keyword";
++    registers.es  = "keyword";
++    registers.fs  = "keyword";
++    registers.gs  = "keyword";
++  }
++
++  function armv6(_parserConfig) {
++    // Reference:
++    // http://infocenter.arm.com/help/topic/com.arm.doc.qrc0001l/QRC0001_UAL.pdf
++    // http://infocenter.arm.com/help/topic/com.arm.doc.ddi0301h/DDI0301H_arm1176jzfs_r0p7_trm.pdf
++    lineCommentStartSymbol = "@";
++    directives.syntax = "builtin";
++
++    registers.r0  = "variable";
++    registers.r1  = "variable";
++    registers.r2  = "variable";
++    registers.r3  = "variable";
++    registers.r4  = "variable";
++    registers.r5  = "variable";
++    registers.r6  = "variable";
++    registers.r7  = "variable";
++    registers.r8  = "variable";
++    registers.r9  = "variable";
++    registers.r10 = "variable";
++    registers.r11 = "variable";
++    registers.r12 = "variable";
++
++    registers.sp  = "variable-2";
++    registers.lr  = "variable-2";
++    registers.pc  = "variable-2";
++    registers.r13 = registers.sp;
++    registers.r14 = registers.lr;
++    registers.r15 = registers.pc;
++
++    custom.push(function(ch, stream) {
++      if (ch === '#') {
++        stream.eatWhile(/\w/);
++        return "number";
++      }
++    });
++  }
++
++  var arch = (parserConfig.architecture || "x86").toLowerCase();
++  if (arch === "x86") {
++    x86(parserConfig);
++  } else if (arch === "arm" || arch === "armv6") {
++    armv6(parserConfig);
++  }
++
++  function nextUntilUnescaped(stream, end) {
++    var escaped = false, next;
++    while ((next = stream.next()) != null) {
++      if (next === end && !escaped) {
++        return false;
++      }
++      escaped = !escaped && next === "\\";
++    }
++    return escaped;
++  }
++
++  function clikeComment(stream, state) {
++    var maybeEnd = false, ch;
++    while ((ch = stream.next()) != null) {
++      if (ch === "/" && maybeEnd) {
++        state.tokenize = null;
++        break;
++      }
++      maybeEnd = (ch === "*");
++    }
++    return "comment";
++  }
++
++  return {
++    startState: function() {
++      return {
++        tokenize: null
++      };
++    },
++
++    token: function(stream, state) {
++      if (state.tokenize) {
++        return state.tokenize(stream, state);
++      }
++
++      if (stream.eatSpace()) {
++        return null;
++      }
++
++      var style, cur, ch = stream.next();
++
++      if (ch === "/") {
++        if (stream.eat("*")) {
++          state.tokenize = clikeComment;
++          return clikeComment(stream, state);
++        }
++      }
++
++      if (ch === lineCommentStartSymbol) {
++        stream.skipToEnd();
++        return "comment";
++      }
++
++      if (ch === '"') {
++        nextUntilUnescaped(stream, '"');
++        return "string";
++      }
++
++      if (ch === '.') {
++        stream.eatWhile(/\w/);
++        cur = stream.current().toLowerCase();
++        style = directives[cur];
++        return style || null;
++      }
++
++      if (ch === '=') {
++        stream.eatWhile(/\w/);
++        return "tag";
++      }
++
++      if (ch === '{') {
++        return "bracket";
++      }
++
++      if (ch === '}') {
++        return "bracket";
++      }
++
++      if (/\d/.test(ch)) {
++        if (ch === "0" && stream.eat("x")) {
++          stream.eatWhile(/[0-9a-fA-F]/);
++          return "number";
++        }
++        stream.eatWhile(/\d/);
++        return "number";
++      }
++
++      if (/\w/.test(ch)) {
++        stream.eatWhile(/\w/);
++        if (stream.eat(":")) {
++          return 'tag';
++        }
++        cur = stream.current().toLowerCase();
++        style = registers[cur];
++        return style || null;
++      }
++
++      for (var i = 0; i < custom.length; i++) {
++        style = custom[i](ch, stream, state);
++        if (style) {
++          return style;
++        }
++      }
++    },
++
++    lineComment: lineCommentStartSymbol,
++    blockCommentStart: "/*",
++    blockCommentEnd: "*/"
++  };
++});
++
++});
+diff --git a/app/src/main/assets/vendor/groovy.js b/app/src/main/assets/vendor/groovy.js
+new file mode 100644
+index 0000000..89d0fe0
+--- /dev/null
++++ b/app/src/main/assets/vendor/groovy.js
+@@ -0,0 +1,247 @@
++// CodeMirror, copyright (c) by Marijn Haverbeke and others
++// Distributed under an MIT license: https://codemirror.net/5/LICENSE
++
++(function(mod) {
++  if (typeof exports == "object" && typeof module == "object") // CommonJS
++    mod(require("../../lib/codemirror"));
++  else if (typeof define == "function" && define.amd) // AMD
++    define(["../../lib/codemirror"], mod);
++  else // Plain browser env
++    mod(CodeMirror);
++})(function(CodeMirror) {
++"use strict";
++
++CodeMirror.defineMode("groovy", function(config) {
++  function words(str) {
++    var obj = {}, words = str.split(" ");
++    for (var i = 0; i < words.length; ++i) obj[words[i]] = true;
++    return obj;
++  }
++  var keywords = words(
++    "abstract as assert boolean break byte case catch char class const continue def default " +
++    "do double else enum extends final finally float for goto if implements import in " +
++    "instanceof int interface long native new package private protected public return " +
++    "short static strictfp super switch synchronized threadsafe throw throws trait transient " +
++    "try void volatile while");
++  var blockKeywords = words("catch class def do else enum finally for if interface switch trait try while");
++  var standaloneKeywords = words("return break continue");
++  var atoms = words("null true false this");
++
++  var curPunc;
++  function tokenBase(stream, state) {
++    var ch = stream.next();
++    if (ch == '"' || ch == "'") {
++      return startString(ch, stream, state);
++    }
++    if (/[\[\]{}\(\),;\:\.]/.test(ch)) {
++      curPunc = ch;
++      return null;
++    }
++    if (/\d/.test(ch)) {
++      stream.eatWhile(/[\w\.]/);
++      if (stream.eat(/eE/)) { stream.eat(/\+\-/); stream.eatWhile(/\d/); }
++      return "number";
++    }
++    if (ch == "/") {
++      if (stream.eat("*")) {
++        state.tokenize.push(tokenComment);
++        return tokenComment(stream, state);
++      }
++      if (stream.eat("/")) {
++        stream.skipToEnd();
++        return "comment";
++      }
++      if (expectExpression(state.lastToken, false)) {
++        return startString(ch, stream, state);
++      }
++    }
++    if (ch == "-" && stream.eat(">")) {
++      curPunc = "->";
++      return null;
++    }
++    if (/[+\-*&%=<>!?|\/~]/.test(ch)) {
++      stream.eatWhile(/[+\-*&%=<>|~]/);
++      return "operator";
++    }
++    stream.eatWhile(/[\w\$_]/);
++    if (ch == "@") { stream.eatWhile(/[\w\$_\.]/); return "meta"; }
++    if (state.lastToken == ".") return "property";
++    if (stream.eat(":")) { curPunc = "proplabel"; return "property"; }
++    var cur = stream.current();
++    if (atoms.propertyIsEnumerable(cur)) { return "atom"; }
++    if (keywords.propertyIsEnumerable(cur)) {
++      if (blockKeywords.propertyIsEnumerable(cur)) curPunc = "newstatement";
++      else if (standaloneKeywords.propertyIsEnumerable(cur)) curPunc = "standalone";
++      return "keyword";
++    }
++    return "variable";
++  }
++  tokenBase.isBase = true;
++
++  function startString(quote, stream, state) {
++    var tripleQuoted = false;
++    if (quote != "/" && stream.eat(quote)) {
++      if (stream.eat(quote)) tripleQuoted = true;
++      else return "string";
++    }
++    function t(stream, state) {
++      var escaped = false, next, end = !tripleQuoted;
++      while ((next = stream.next()) != null) {
++        if (next == quote && !escaped) {
++          if (!tripleQuoted) { break; }
++          if (stream.match(quote + quote)) { end = true; break; }
++        }
++        if (quote == '"' && next == "$" && !escaped) {
++          if (stream.eat("{")) {
++            state.tokenize.push(tokenBaseUntilBrace());
++            return "string";
++          } else if (stream.match(/^\w/, false)) {
++            state.tokenize.push(tokenVariableDeref);
++            return "string";
++          }
++        }
++        escaped = !escaped && next == "\\";
++      }
++      if (end) state.tokenize.pop();
++      return "string";
++    }
++    state.tokenize.push(t);
++    return t(stream, state);
++  }
++
++  function tokenBaseUntilBrace() {
++    var depth = 1;
++    function t(stream, state) {
++      if (stream.peek() == "}") {
++        depth--;
++        if (depth == 0) {
++          state.tokenize.pop();
++          return state.tokenize[state.tokenize.length-1](stream, state);
++        }
++      } else if (stream.peek() == "{") {
++        depth++;
++      }
++      return tokenBase(stream, state);
++    }
++    t.isBase = true;
++    return t;
++  }
++
++  function tokenVariableDeref(stream, state) {
++    var next = stream.match(/^(\.|[\w\$_]+)/)
++    if (!next) {
++      state.tokenize.pop()
++      return state.tokenize[state.tokenize.length-1](stream, state)
++    }
++    return next[0] == "." ? null : "variable"
++  }
++
++  function tokenComment(stream, state) {
++    var maybeEnd = false, ch;
++    while (ch = stream.next()) {
++      if (ch == "/" && maybeEnd) {
++        state.tokenize.pop();
++        break;
++      }
++      maybeEnd = (ch == "*");
++    }
++    return "comment";
++  }
++
++  function expectExpression(last, newline) {
++    return !last || last == "operator" || last == "->" || /[\.\[\{\(,;:]/.test(last) ||
++      last == "newstatement" || last == "keyword" || last == "proplabel" ||
++      (last == "standalone" && !newline);
++  }
++
++  function Context(indented, column, type, align, prev) {
++    this.indented = indented;
++    this.column = column;
++    this.type = type;
++    this.align = align;
++    this.prev = prev;
++  }
++  function pushContext(state, col, type) {
++    return state.context = new Context(state.indented, col, type, null, state.context);
++  }
++  function popContext(state) {
++    var t = state.context.type;
++    if (t == ")" || t == "]" || t == "}")
++      state.indented = state.context.indented;
++    return state.context = state.context.prev;
++  }
++
++  // Interface
++
++  return {
++    startState: function(basecolumn) {
++      return {
++        tokenize: [tokenBase],
++        context: new Context((basecolumn || 0) - config.indentUnit, 0, "top", false),
++        indented: 0,
++        startOfLine: true,
++        lastToken: null
++      };
++    },
++
++    token: function(stream, state) {
++      var ctx = state.context;
++      if (stream.sol()) {
++        if (ctx.align == null) ctx.align = false;
++        state.indented = stream.indentation();
++        state.startOfLine = true;
++        // Automatic semicolon insertion
++        if (ctx.type == "statement" && !expectExpression(state.lastToken, true)) {
++          popContext(state); ctx = state.context;
++        }
++      }
++      if (stream.eatSpace()) return null;
++      curPunc = null;
++      var style = state.tokenize[state.tokenize.length-1](stream, state);
++      if (style == "comment") return style;
++      if (ctx.align == null) ctx.align = true;
++
++      if ((curPunc == ";" || curPunc == ":") && ctx.type == "statement") popContext(state);
++      // Handle indentation for {x -> \n ... }
++      else if (curPunc == "->" && ctx.type == "statement" && ctx.prev.type == "}") {
++        popContext(state);
++        state.context.align = false;
++      }
++      else if (curPunc == "{") pushContext(state, stream.column(), "}");
++      else if (curPunc == "[") pushContext(state, stream.column(), "]");
++      else if (curPunc == "(") pushContext(state, stream.column(), ")");
++      else if (curPunc == "}") {
++        while (ctx.type == "statement") ctx = popContext(state);
++        if (ctx.type == "}") ctx = popContext(state);
++        while (ctx.type == "statement") ctx = popContext(state);
++      }
++      else if (curPunc == ctx.type) popContext(state);
++      else if (ctx.type == "}" || ctx.type == "top" || (ctx.type == "statement" && curPunc == "newstatement"))
++        pushContext(state, stream.column(), "statement");
++      state.startOfLine = false;
++      state.lastToken = curPunc || style;
++      return style;
++    },
++
++    indent: function(state, textAfter) {
++      if (!state.tokenize[state.tokenize.length-1].isBase) return CodeMirror.Pass;
++      var firstChar = textAfter && textAfter.charAt(0), ctx = state.context;
++      if (ctx.type == "statement" && !expectExpression(state.lastToken, true)) ctx = ctx.prev;
++      var closing = firstChar == ctx.type;
++      if (ctx.type == "statement") return ctx.indented + (firstChar == "{" ? 0 : config.indentUnit);
++      else if (ctx.align) return ctx.column + (closing ? 0 : 1);
++      else return ctx.indented + (closing ? 0 : config.indentUnit);
++    },
++
++    electricChars: "{}",
++    closeBrackets: {triples: "'\""},
++    fold: "brace",
++    blockCommentStart: "/*",
++    blockCommentEnd: "*/",
++    lineComment: "//"
++  };
++});
++
++CodeMirror.defineMIME("text/x-groovy", "groovy");
++
++});
+diff --git a/app/src/main/assets/vendor/lua.js b/app/src/main/assets/vendor/lua.js
+new file mode 100644
+index 0000000..7d05352
+--- /dev/null
++++ b/app/src/main/assets/vendor/lua.js
+@@ -0,0 +1,160 @@
++// CodeMirror, copyright (c) by Marijn Haverbeke and others
++// Distributed under an MIT license: https://codemirror.net/5/LICENSE
++
++// LUA mode. Ported to CodeMirror 2 from Franciszek Wawrzak's
++// CodeMirror 1 mode.
++// highlights keywords, strings, comments (no leveling supported! ("[==[")), tokens, basic indenting
++
++(function(mod) {
++  if (typeof exports == "object" && typeof module == "object") // CommonJS
++    mod(require("../../lib/codemirror"));
++  else if (typeof define == "function" && define.amd) // AMD
++    define(["../../lib/codemirror"], mod);
++  else // Plain browser env
++    mod(CodeMirror);
++})(function(CodeMirror) {
++"use strict";
++
++CodeMirror.defineMode("lua", function(config, parserConfig) {
++  var indentUnit = config.indentUnit;
++
++  function prefixRE(words) {
++    return new RegExp("^(?:" + words.join("|") + ")", "i");
++  }
++  function wordRE(words) {
++    return new RegExp("^(?:" + words.join("|") + ")$", "i");
++  }
++  var specials = wordRE(parserConfig.specials || []);
++
++  // long list of standard functions from lua manual
++  var builtins = wordRE([
++    "_G","_VERSION","assert","collectgarbage","dofile","error","getfenv","getmetatable","ipairs","load",
++    "loadfile","loadstring","module","next","pairs","pcall","print","rawequal","rawget","rawset","require",
++    "select","setfenv","setmetatable","tonumber","tostring","type","unpack","xpcall",
++
++    "coroutine.create","coroutine.resume","coroutine.running","coroutine.status","coroutine.wrap","coroutine.yield",
++
++    "debug.debug","debug.getfenv","debug.gethook","debug.getinfo","debug.getlocal","debug.getmetatable",
++    "debug.getregistry","debug.getupvalue","debug.setfenv","debug.sethook","debug.setlocal","debug.setmetatable",
++    "debug.setupvalue","debug.traceback",
++
++    "close","flush","lines","read","seek","setvbuf","write",
++
++    "io.close","io.flush","io.input","io.lines","io.open","io.output","io.popen","io.read","io.stderr","io.stdin",
++    "io.stdout","io.tmpfile","io.type","io.write",
++
++    "math.abs","math.acos","math.asin","math.atan","math.atan2","math.ceil","math.cos","math.cosh","math.deg",
++    "math.exp","math.floor","math.fmod","math.frexp","math.huge","math.ldexp","math.log","math.log10","math.max",
++    "math.min","math.modf","math.pi","math.pow","math.rad","math.random","math.randomseed","math.sin","math.sinh",
++    "math.sqrt","math.tan","math.tanh",
++
++    "os.clock","os.date","os.difftime","os.execute","os.exit","os.getenv","os.remove","os.rename","os.setlocale",
++    "os.time","os.tmpname",
++
++    "package.cpath","package.loaded","package.loaders","package.loadlib","package.path","package.preload",
++    "package.seeall",
++
++    "string.byte","string.char","string.dump","string.find","string.format","string.gmatch","string.gsub",
++    "string.len","string.lower","string.match","string.rep","string.reverse","string.sub","string.upper",
++
++    "table.concat","table.insert","table.maxn","table.remove","table.sort"
++  ]);
++  var keywords = wordRE(["and","break","elseif","false","nil","not","or","return",
++                         "true","function", "end", "if", "then", "else", "do",
++                         "while", "repeat", "until", "for", "in", "local" ]);
++
++  var indentTokens = wordRE(["function", "if","repeat","do", "\\(", "{"]);
++  var dedentTokens = wordRE(["end", "until", "\\)", "}"]);
++  var dedentPartial = prefixRE(["end", "until", "\\)", "}", "else", "elseif"]);
++
++  function readBracket(stream) {
++    var level = 0;
++    while (stream.eat("=")) ++level;
++    stream.eat("[");
++    return level;
++  }
++
++  function normal(stream, state) {
++    var ch = stream.next();
++    if (ch == "-" && stream.eat("-")) {
++      if (stream.eat("[") && stream.eat("["))
++        return (state.cur = bracketed(readBracket(stream), "comment"))(stream, state);
++      stream.skipToEnd();
++      return "comment";
++    }
++    if (ch == "\"" || ch == "'")
++      return (state.cur = string(ch))(stream, state);
++    if (ch == "[" && /[\[=]/.test(stream.peek()))
++      return (state.cur = bracketed(readBracket(stream), "string"))(stream, state);
++    if (/\d/.test(ch)) {
++      stream.eatWhile(/[\w.%]/);
++      return "number";
++    }
++    if (/[\w_]/.test(ch)) {
++      stream.eatWhile(/[\w\\\-_.]/);
++      return "variable";
++    }
++    return null;
++  }
++
++  function bracketed(level, style) {
++    return function(stream, state) {
++      var curlev = null, ch;
++      while ((ch = stream.next()) != null) {
++        if (curlev == null) {if (ch == "]") curlev = 0;}
++        else if (ch == "=") ++curlev;
++        else if (ch == "]" && curlev == level) { state.cur = normal; break; }
++        else curlev = null;
++      }
++      return style;
++    };
++  }
++
++  function string(quote) {
++    return function(stream, state) {
++      var escaped = false, ch;
++      while ((ch = stream.next()) != null) {
++        if (ch == quote && !escaped) break;
++        escaped = !escaped && ch == "\\";
++      }
++      if (!escaped) state.cur = normal;
++      return "string";
++    };
++  }
++
++  return {
++    startState: function(basecol) {
++      return {basecol: basecol || 0, indentDepth: 0, cur: normal};
++    },
++
++    token: function(stream, state) {
++      if (stream.eatSpace()) return null;
++      var style = state.cur(stream, state);
++      var word = stream.current();
++      if (style == "variable") {
++        if (keywords.test(word)) style = "keyword";
++        else if (builtins.test(word)) style = "builtin";
++        else if (specials.test(word)) style = "variable-2";
++      }
++      if ((style != "comment") && (style != "string")){
++        if (indentTokens.test(word)) ++state.indentDepth;
++        else if (dedentTokens.test(word)) --state.indentDepth;
++      }
++      return style;
++    },
++
++    indent: function(state, textAfter) {
++      var closing = dedentPartial.test(textAfter);
++      return state.basecol + indentUnit * (state.indentDepth - (closing ? 1 : 0));
++    },
++
++    electricInput: /^\s*(?:end|until|else|\)|\})$/,
++    lineComment: "--",
++    blockCommentStart: "--[[",
++    blockCommentEnd: "]]"
++  };
++});
++
++CodeMirror.defineMIME("text/x-lua", "lua");
++
++});
+diff --git a/app/src/main/assets/vendor/php.js b/app/src/main/assets/vendor/php.js
+new file mode 100644
+index 0000000..281c290
+--- /dev/null
++++ b/app/src/main/assets/vendor/php.js
+@@ -0,0 +1,234 @@
++// CodeMirror, copyright (c) by Marijn Haverbeke and others
++// Distributed under an MIT license: https://codemirror.net/5/LICENSE
++
++(function(mod) {
++  if (typeof exports == "object" && typeof module == "object") // CommonJS
++    mod(require("../../lib/codemirror"), require("../htmlmixed/htmlmixed"), require("../clike/clike"));
++  else if (typeof define == "function" && define.amd) // AMD
++    define(["../../lib/codemirror", "../htmlmixed/htmlmixed", "../clike/clike"], mod);
++  else // Plain browser env
++    mod(CodeMirror);
++})(function(CodeMirror) {
++  "use strict";
++
++  function keywords(str) {
++    var obj = {}, words = str.split(" ");
++    for (var i = 0; i < words.length; ++i) obj[words[i]] = true;
++    return obj;
++  }
++
++  // Helper for phpString
++  function matchSequence(list, end, escapes) {
++    if (list.length == 0) return phpString(end);
++    return function (stream, state) {
++      var patterns = list[0];
++      for (var i = 0; i < patterns.length; i++) if (stream.match(patterns[i][0])) {
++        state.tokenize = matchSequence(list.slice(1), end);
++        return patterns[i][1];
++      }
++      state.tokenize = phpString(end, escapes);
++      return "string";
++    };
++  }
++  function phpString(closing, escapes) {
++    return function(stream, state) { return phpString_(stream, state, closing, escapes); };
++  }
++  function phpString_(stream, state, closing, escapes) {
++    // "Complex" syntax
++    if (escapes !== false && stream.match("${", false) || stream.match("{$", false)) {
++      state.tokenize = null;
++      return "string";
++    }
++
++    // Simple syntax
++    if (escapes !== false && stream.match(/^\$[a-zA-Z_][a-zA-Z0-9_]*/)) {
++      // After the variable name there may appear array or object operator.
++      if (stream.match("[", false)) {
++        // Match array operator
++        state.tokenize = matchSequence([
++          [["[", null]],
++          [[/\d[\w\.]*/, "number"],
++           [/\$[a-zA-Z_][a-zA-Z0-9_]*/, "variable-2"],
++           [/[\w\$]+/, "variable"]],
++          [["]", null]]
++        ], closing, escapes);
++      }
++      if (stream.match(/^->\w/, false)) {
++        // Match object operator
++        state.tokenize = matchSequence([
++          [["->", null]],
++          [[/[\w]+/, "variable"]]
++        ], closing, escapes);
++      }
++      return "variable-2";
++    }
++
++    var escaped = false;
++    // Normal string
++    while (!stream.eol() &&
++           (escaped || escapes === false ||
++            (!stream.match("{$", false) &&
++             !stream.match(/^(\$[a-zA-Z_][a-zA-Z0-9_]*|\$\{)/, false)))) {
++      if (!escaped && stream.match(closing)) {
++        state.tokenize = null;
++        state.tokStack.pop(); state.tokStack.pop();
++        break;
++      }
++      escaped = stream.next() == "\\" && !escaped;
++    }
++    return "string";
++  }
++
++  var phpKeywords = "abstract and array as break case catch class clone const continue declare default " +
++    "do else elseif enddeclare endfor endforeach endif endswitch endwhile enum extends final " +
++    "for foreach function global goto if implements interface instanceof namespace " +
++    "new or private protected public static switch throw trait try use var while xor " +
++    "die echo empty exit eval include include_once isset list require require_once return " +
++    "print unset __halt_compiler self static parent yield insteadof finally readonly match";
++  var phpAtoms = "true false null TRUE FALSE NULL __CLASS__ __DIR__ __FILE__ __LINE__ __METHOD__ __FUNCTION__ __NAMESPACE__ __TRAIT__";
++  var phpBuiltin = "func_num_args func_get_arg func_get_args strlen strcmp strncmp strcasecmp strncasecmp each error_reporting define defined trigger_error user_error set_error_handler restore_error_handler get_declared_classes get_loaded_extensions extension_loaded get_extension_funcs debug_backtrace constant bin2hex hex2bin sleep usleep time mktime gmmktime strftime gmstrftime strtotime date gmdate getdate localtime checkdate flush wordwrap htmlspecialchars htmlentities html_entity_decode md5 md5_file crc32 getimagesize image_type_to_mime_type phpinfo phpversion phpcredits strnatcmp strnatcasecmp substr_count strspn strcspn strtok strtoupper strtolower strpos strrpos strrev hebrev hebrevc nl2br basename dirname pathinfo stripslashes stripcslashes strstr stristr strrchr str_shuffle str_word_count strcoll substr substr_replace quotemeta ucfirst ucwords strtr addslashes addcslashes rtrim str_replace str_repeat count_chars chunk_split trim ltrim strip_tags similar_text explode implode setlocale localeconv parse_str str_pad chop strchr sprintf printf vprintf vsprintf sscanf fscanf parse_url urlencode urldecode rawurlencode rawurldecode readlink linkinfo link unlink exec system escapeshellcmd escapeshellarg passthru shell_exec proc_open proc_close rand srand getrandmax mt_rand mt_srand mt_getrandmax base64_decode base64_encode abs ceil floor round is_finite is_nan is_infinite bindec hexdec octdec decbin decoct dechex base_convert number_format fmod ip2long long2ip getenv putenv getopt microtime gettimeofday getrusage uniqid quoted_printable_decode set_time_limit get_cfg_var magic_quotes_runtime set_magic_quotes_runtime get_magic_quotes_gpc get_magic_quotes_runtime import_request_variables error_log serialize unserialize memory_get_usage memory_get_peak_usage var_dump var_export debug_zval_dump print_r highlight_file show_source highlight_string ini_get ini_get_all ini_set ini_alter ini_restore get_include_path set_include_path restore_include_path setcookie header headers_sent connection_aborted connection_status ignore_user_abort parse_ini_file is_uploaded_file move_uploaded_file intval floatval doubleval strval gettype settype is_null is_resource is_bool is_long is_float is_int is_integer is_double is_real is_numeric is_string is_array is_object is_scalar ereg ereg_replace eregi eregi_replace split spliti join sql_regcase dl pclose popen readfile rewind rmdir umask fclose feof fgetc fgets fgetss fread fopen fpassthru ftruncate fstat fseek ftell fflush fwrite fputs mkdir rename copy tempnam tmpfile file file_get_contents file_put_contents stream_select stream_context_create stream_context_set_params stream_context_set_option stream_context_get_options stream_filter_prepend stream_filter_append fgetcsv flock get_meta_tags stream_set_write_buffer set_file_buffer set_socket_blocking stream_set_blocking socket_set_blocking stream_get_meta_data stream_register_wrapper stream_wrapper_register stream_set_timeout socket_set_timeout socket_get_status realpath fnmatch fsockopen pfsockopen pack unpack get_browser crypt opendir closedir chdir getcwd rewinddir readdir dir glob fileatime filectime filegroup fileinode filemtime fileowner fileperms filesize filetype file_exists is_writable is_writeable is_readable is_executable is_file is_dir is_link stat lstat chown touch clearstatcache mail ob_start ob_flush ob_clean ob_end_flush ob_end_clean ob_get_flush ob_get_clean ob_get_length ob_get_level ob_get_status ob_get_contents ob_implicit_flush ob_list_handlers ksort krsort natsort natcasesort asort arsort sort rsort usort uasort uksort shuffle array_walk count end prev next reset current key min max in_array array_search extract compact array_fill range array_multisort array_push array_pop array_shift array_unshift array_splice array_slice array_merge array_merge_recursive array_keys array_values array_count_values array_reverse array_reduce array_pad array_flip array_change_key_case array_rand array_unique array_intersect array_intersect_assoc array_diff array_diff_assoc array_sum array_filter array_map array_chunk array_key_exists array_intersect_key array_combine array_column pos sizeof key_exists assert assert_options version_compare ftok str_rot13 aggregate session_name session_module_name session_save_path session_id session_regenerate_id session_decode session_register session_unregister session_is_registered session_encode session_start session_destroy session_unset session_set_save_handler session_cache_limiter session_cache_expire session_set_cookie_params session_get_cookie_params session_write_close preg_match preg_match_all preg_replace preg_replace_callback preg_split preg_quote preg_grep overload ctype_alnum ctype_alpha ctype_cntrl ctype_digit ctype_lower ctype_graph ctype_print ctype_punct ctype_space ctype_upper ctype_xdigit virtual apache_request_headers apache_note apache_lookup_uri apache_child_terminate apache_setenv apache_response_headers apache_get_version getallheaders mysql_connect mysql_pconnect mysql_close mysql_select_db mysql_create_db mysql_drop_db mysql_query mysql_unbuffered_query mysql_db_query mysql_list_dbs mysql_list_tables mysql_list_fields mysql_list_processes mysql_error mysql_errno mysql_affected_rows mysql_insert_id mysql_result mysql_num_rows mysql_num_fields mysql_fetch_row mysql_fetch_array mysql_fetch_assoc mysql_fetch_object mysql_data_seek mysql_fetch_lengths mysql_fetch_field mysql_field_seek mysql_free_result mysql_field_name mysql_field_table mysql_field_len mysql_field_type mysql_field_flags mysql_escape_string mysql_real_escape_string mysql_stat mysql_thread_id mysql_client_encoding mysql_get_client_info mysql_get_host_info mysql_get_proto_info mysql_get_server_info mysql_info mysql mysql_fieldname mysql_fieldtable mysql_fieldlen mysql_fieldtype mysql_fieldflags mysql_selectdb mysql_createdb mysql_dropdb mysql_freeresult mysql_numfields mysql_numrows mysql_listdbs mysql_listtables mysql_listfields mysql_db_name mysql_dbname mysql_tablename mysql_table_name pg_connect pg_pconnect pg_close pg_connection_status pg_connection_busy pg_connection_reset pg_host pg_dbname pg_port pg_tty pg_options pg_ping pg_query pg_send_query pg_cancel_query pg_fetch_result pg_fetch_row pg_fetch_assoc pg_fetch_array pg_fetch_object pg_fetch_all pg_affected_rows pg_get_result pg_result_seek pg_result_status pg_free_result pg_last_oid pg_num_rows pg_num_fields pg_field_name pg_field_num pg_field_size pg_field_type pg_field_prtlen pg_field_is_null pg_get_notify pg_get_pid pg_result_error pg_last_error pg_last_notice pg_put_line pg_end_copy pg_copy_to pg_copy_from pg_trace pg_untrace pg_lo_create pg_lo_unlink pg_lo_open pg_lo_close pg_lo_read pg_lo_write pg_lo_read_all pg_lo_import pg_lo_export pg_lo_seek pg_lo_tell pg_escape_string pg_escape_bytea pg_unescape_bytea pg_client_encoding pg_set_client_encoding pg_meta_data pg_convert pg_insert pg_update pg_delete pg_select pg_exec pg_getlastoid pg_cmdtuples pg_errormessage pg_numrows pg_numfields pg_fieldname pg_fieldsize pg_fieldtype pg_fieldnum pg_fieldprtlen pg_fieldisnull pg_freeresult pg_result pg_loreadall pg_locreate pg_lounlink pg_loopen pg_loclose pg_loread pg_lowrite pg_loimport pg_loexport http_response_code get_declared_traits getimagesizefromstring socket_import_stream stream_set_chunk_size trait_exists header_register_callback class_uses session_status session_register_shutdown echo print global static exit array empty eval isset unset die include require include_once require_once json_decode json_encode json_last_error json_last_error_msg curl_close curl_copy_handle curl_errno curl_error curl_escape curl_exec curl_file_create curl_getinfo curl_init curl_multi_add_handle curl_multi_close curl_multi_exec curl_multi_getcontent curl_multi_info_read curl_multi_init curl_multi_remove_handle curl_multi_select curl_multi_setopt curl_multi_strerror curl_pause curl_reset curl_setopt_array curl_setopt curl_share_close curl_share_init curl_share_setopt curl_strerror curl_unescape curl_version mysqli_affected_rows mysqli_autocommit mysqli_change_user mysqli_character_set_name mysqli_close mysqli_commit mysqli_connect_errno mysqli_connect_error mysqli_connect mysqli_data_seek mysqli_debug mysqli_dump_debug_info mysqli_errno mysqli_error_list mysqli_error mysqli_fetch_all mysqli_fetch_array mysqli_fetch_assoc mysqli_fetch_field_direct mysqli_fetch_field mysqli_fetch_fields mysqli_fetch_lengths mysqli_fetch_object mysqli_fetch_row mysqli_field_count mysqli_field_seek mysqli_field_tell mysqli_free_result mysqli_get_charset mysqli_get_client_info mysqli_get_client_stats mysqli_get_client_version mysqli_get_connection_stats mysqli_get_host_info mysqli_get_proto_info mysqli_get_server_info mysqli_get_server_version mysqli_info mysqli_init mysqli_insert_id mysqli_kill mysqli_more_results mysqli_multi_query mysqli_next_result mysqli_num_fields mysqli_num_rows mysqli_options mysqli_ping mysqli_prepare mysqli_query mysqli_real_connect mysqli_real_escape_string mysqli_real_query mysqli_reap_async_query mysqli_refresh mysqli_rollback mysqli_select_db mysqli_set_charset mysqli_set_local_infile_default mysqli_set_local_infile_handler mysqli_sqlstate mysqli_ssl_set mysqli_stat mysqli_stmt_init mysqli_store_result mysqli_thread_id mysqli_thread_safe mysqli_use_result mysqli_warning_count";
++  CodeMirror.registerHelper("hintWords", "php", [phpKeywords, phpAtoms, phpBuiltin].join(" ").split(" "));
++  CodeMirror.registerHelper("wordChars", "php", /[\w$]/);
++
++  var phpConfig = {
++    name: "clike",
++    helperType: "php",
++    keywords: keywords(phpKeywords),
++    blockKeywords: keywords("catch do else elseif for foreach if switch try while finally"),
++    defKeywords: keywords("class enum function interface namespace trait"),
++    atoms: keywords(phpAtoms),
++    builtin: keywords(phpBuiltin),
++    multiLineStrings: true,
++    hooks: {
++      "$": function(stream) {
++        stream.eatWhile(/[\w\$_]/);
++        return "variable-2";
++      },
++      "<": function(stream, state) {
++        var before;
++        if (before = stream.match(/^<<\s*/)) {
++          var quoted = stream.eat(/['"]/);
++          stream.eatWhile(/[\w\.]/);
++          var delim = stream.current().slice(before[0].length + (quoted ? 2 : 1));
++          if (quoted) stream.eat(quoted);
++          if (delim) {
++            (state.tokStack || (state.tokStack = [])).push(delim, 0);
++            state.tokenize = phpString(delim, quoted != "'");
++            return "string";
++          }
++        }
++        return false;
++      },
++      "#": function(stream) {
++        while (!stream.eol() && !stream.match("?>", false)) stream.next();
++        return "comment";
++      },
++      "/": function(stream) {
++        if (stream.eat("/")) {
++          while (!stream.eol() && !stream.match("?>", false)) stream.next();
++          return "comment";
++        }
++        return false;
++      },
++      '"': function(_stream, state) {
++        (state.tokStack || (state.tokStack = [])).push('"', 0);
++        state.tokenize = phpString('"');
++        return "string";
++      },
++      "{": function(_stream, state) {
++        if (state.tokStack && state.tokStack.length)
++          state.tokStack[state.tokStack.length - 1]++;
++        return false;
++      },
++      "}": function(_stream, state) {
++        if (state.tokStack && state.tokStack.length > 0 &&
++            !--state.tokStack[state.tokStack.length - 1]) {
++          state.tokenize = phpString(state.tokStack[state.tokStack.length - 2]);
++        }
++        return false;
++      }
++    }
++  };
++
++  CodeMirror.defineMode("php", function(config, parserConfig) {
++    var htmlMode = CodeMirror.getMode(config, (parserConfig && parserConfig.htmlMode) || "text/html");
++    var phpMode = CodeMirror.getMode(config, phpConfig);
++
++    function dispatch(stream, state) {
++      var isPHP = state.curMode == phpMode;
++      if (stream.sol() && state.pending && state.pending != '"' && state.pending != "'") state.pending = null;
++      if (!isPHP) {
++        if (stream.match(/^<\?\w*/)) {
++          state.curMode = phpMode;
++          if (!state.php) state.php = CodeMirror.startState(phpMode, htmlMode.indent(state.html, "", ""))
++          state.curState = state.php;
++          return "meta";
++        }
++        if (state.pending == '"' || state.pending == "'") {
++          while (!stream.eol() && stream.next() != state.pending) {}
++          var style = "string";
++        } else if (state.pending && stream.pos < state.pending.end) {
++          stream.pos = state.pending.end;
++          var style = state.pending.style;
++        } else {
++          var style = htmlMode.token(stream, state.curState);
++        }
++        if (state.pending) state.pending = null;
++        var cur = stream.current(), openPHP = cur.search(/<\?/), m;
++        if (openPHP != -1) {
++          if (style == "string" && (m = cur.match(/[\'\"]$/)) && !/\?>/.test(cur)) state.pending = m[0];
++          else state.pending = {end: stream.pos, style: style};
++          stream.backUp(cur.length - openPHP);
++        }
++        return style;
++      } else if (isPHP && state.php.tokenize == null && stream.match("?>")) {
++        state.curMode = htmlMode;
++        state.curState = state.html;
++        if (!state.php.context.prev) state.php = null;
++        return "meta";
++      } else {
++        return phpMode.token(stream, state.curState);
++      }
++    }
++
++    return {
++      startState: function() {
++        var html = CodeMirror.startState(htmlMode)
++        var php = parserConfig.startOpen ? CodeMirror.startState(phpMode) : null
++        return {html: html,
++                php: php,
++                curMode: parserConfig.startOpen ? phpMode : htmlMode,
++                curState: parserConfig.startOpen ? php : html,
++                pending: null};
++      },
++
++      copyState: function(state) {
++        var html = state.html, htmlNew = CodeMirror.copyState(htmlMode, html),
++            php = state.php, phpNew = php && CodeMirror.copyState(phpMode, php), cur;
++        if (state.curMode == htmlMode) cur = htmlNew;
++        else cur = phpNew;
++        return {html: htmlNew, php: phpNew, curMode: state.curMode, curState: cur,
++                pending: state.pending};
++      },
++
++      token: dispatch,
++
++      indent: function(state, textAfter, line) {
++        if ((state.curMode != phpMode && /^\s*<\//.test(textAfter)) ||
++            (state.curMode == phpMode && /^\?>/.test(textAfter)))
++          return htmlMode.indent(state.html, textAfter, line);
++        return state.curMode.indent(state.curState, textAfter, line);
++      },
++
++      blockCommentStart: "/*",
++      blockCommentEnd: "*/",
++      lineComment: "//",
++
++      innerMode: function(state) { return {state: state.curState, mode: state.curMode}; }
++    };
++  }, "htmlmixed", "clike");
++
++  CodeMirror.defineMIME("application/x-httpd-php", "php");
++  CodeMirror.defineMIME("application/x-httpd-php-open", {name: "php", startOpen: true});
++  CodeMirror.defineMIME("text/x-php", phpConfig);
++});
+diff --git a/app/src/main/assets/vendor/powershell.js b/app/src/main/assets/vendor/powershell.js
+new file mode 100644
+index 0000000..c793594
+--- /dev/null
++++ b/app/src/main/assets/vendor/powershell.js
+@@ -0,0 +1,398 @@
++// CodeMirror, copyright (c) by Marijn Haverbeke and others
++// Distributed under an MIT license: https://codemirror.net/5/LICENSE
++
++(function(mod) {
++  'use strict';
++  if (typeof exports == 'object' && typeof module == 'object') // CommonJS
++    mod(require('../../lib/codemirror'));
++  else if (typeof define == 'function' && define.amd) // AMD
++    define(['../../lib/codemirror'], mod);
++  else // Plain browser env
++    mod(window.CodeMirror);
++})(function(CodeMirror) {
++'use strict';
++
++CodeMirror.defineMode('powershell', function() {
++  function buildRegexp(patterns, options) {
++    options = options || {};
++    var prefix = options.prefix !== undefined ? options.prefix : '^';
++    var suffix = options.suffix !== undefined ? options.suffix : '\\b';
++
++    for (var i = 0; i < patterns.length; i++) {
++      if (patterns[i] instanceof RegExp) {
++        patterns[i] = patterns[i].source;
++      }
++      else {
++        patterns[i] = patterns[i].replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
++      }
++    }
++
++    return new RegExp(prefix + '(' + patterns.join('|') + ')' + suffix, 'i');
++  }
++
++  var notCharacterOrDash = '(?=[^A-Za-z\\d\\-_]|$)';
++  var varNames = /[\w\-:]/
++  var keywords = buildRegexp([
++    /begin|break|catch|continue|data|default|do|dynamicparam/,
++    /else|elseif|end|exit|filter|finally|for|foreach|from|function|if|in/,
++    /param|process|return|switch|throw|trap|try|until|where|while/
++  ], { suffix: notCharacterOrDash });
++
++  var punctuation = /[\[\]{},;`\\\.]|@[({]/;
++  var wordOperators = buildRegexp([
++    'f',
++    /b?not/,
++    /[ic]?split/, 'join',
++    /is(not)?/, 'as',
++    /[ic]?(eq|ne|[gl][te])/,
++    /[ic]?(not)?(like|match|contains)/,
++    /[ic]?replace/,
++    /b?(and|or|xor)/
++  ], { prefix: '-' });
++  var symbolOperators = /[+\-*\/%]=|\+\+|--|\.\.|[+\-*&^%:=!|\/]|<(?!#)|(?!#)>/;
++  var operators = buildRegexp([wordOperators, symbolOperators], { suffix: '' });
++
++  var numbers = /^((0x[\da-f]+)|((\d+\.\d+|\d\.|\.\d+|\d+)(e[\+\-]?\d+)?))[ld]?([kmgtp]b)?/i;
++
++  var identifiers = /^[A-Za-z\_][A-Za-z\-\_\d]*\b/;
++
++  var symbolBuiltins = /[A-Z]:|%|\?/i;
++  var namedBuiltins = buildRegexp([
++    /Add-(Computer|Content|History|Member|PSSnapin|Type)/,
++    /Checkpoint-Computer/,
++    /Clear-(Content|EventLog|History|Host|Item(Property)?|Variable)/,
++    /Compare-Object/,
++    /Complete-Transaction/,
++    /Connect-PSSession/,
++    /ConvertFrom-(Csv|Json|SecureString|StringData)/,
++    /Convert-Path/,
++    /ConvertTo-(Csv|Html|Json|SecureString|Xml)/,
++    /Copy-Item(Property)?/,
++    /Debug-Process/,
++    /Disable-(ComputerRestore|PSBreakpoint|PSRemoting|PSSessionConfiguration)/,
++    /Disconnect-PSSession/,
++    /Enable-(ComputerRestore|PSBreakpoint|PSRemoting|PSSessionConfiguration)/,
++    /(Enter|Exit)-PSSession/,
++    /Export-(Alias|Clixml|Console|Counter|Csv|FormatData|ModuleMember|PSSession)/,
++    /ForEach-Object/,
++    /Format-(Custom|List|Table|Wide)/,
++    new RegExp('Get-(Acl|Alias|AuthenticodeSignature|ChildItem|Command|ComputerRestorePoint|Content|ControlPanelItem|Counter|Credential'
++      + '|Culture|Date|Event|EventLog|EventSubscriber|ExecutionPolicy|FormatData|Help|History|Host|HotFix|Item|ItemProperty|Job'
++      + '|Location|Member|Module|PfxCertificate|Process|PSBreakpoint|PSCallStack|PSDrive|PSProvider|PSSession|PSSessionConfiguration'
++      + '|PSSnapin|Random|Service|TraceSource|Transaction|TypeData|UICulture|Unique|Variable|Verb|WinEvent|WmiObject)'),
++    /Group-Object/,
++    /Import-(Alias|Clixml|Counter|Csv|LocalizedData|Module|PSSession)/,
++    /ImportSystemModules/,
++    /Invoke-(Command|Expression|History|Item|RestMethod|WebRequest|WmiMethod)/,
++    /Join-Path/,
++    /Limit-EventLog/,
++    /Measure-(Command|Object)/,
++    /Move-Item(Property)?/,
++    new RegExp('New-(Alias|Event|EventLog|Item(Property)?|Module|ModuleManifest|Object|PSDrive|PSSession|PSSessionConfigurationFile'
++      + '|PSSessionOption|PSTransportOption|Service|TimeSpan|Variable|WebServiceProxy|WinEvent)'),
++    /Out-(Default|File|GridView|Host|Null|Printer|String)/,
++    /Pause/,
++    /(Pop|Push)-Location/,
++    /Read-Host/,
++    /Receive-(Job|PSSession)/,
++    /Register-(EngineEvent|ObjectEvent|PSSessionConfiguration|WmiEvent)/,
++    /Remove-(Computer|Event|EventLog|Item(Property)?|Job|Module|PSBreakpoint|PSDrive|PSSession|PSSnapin|TypeData|Variable|WmiObject)/,
++    /Rename-(Computer|Item(Property)?)/,
++    /Reset-ComputerMachinePassword/,
++    /Resolve-Path/,
++    /Restart-(Computer|Service)/,
++    /Restore-Computer/,
++    /Resume-(Job|Service)/,
++    /Save-Help/,
++    /Select-(Object|String|Xml)/,
++    /Send-MailMessage/,
++    new RegExp('Set-(Acl|Alias|AuthenticodeSignature|Content|Date|ExecutionPolicy|Item(Property)?|Location|PSBreakpoint|PSDebug' +
++               '|PSSessionConfiguration|Service|StrictMode|TraceSource|Variable|WmiInstance)'),
++    /Show-(Command|ControlPanelItem|EventLog)/,
++    /Sort-Object/,
++    /Split-Path/,
++    /Start-(Job|Process|Service|Sleep|Transaction|Transcript)/,
++    /Stop-(Computer|Job|Process|Service|Transcript)/,
++    /Suspend-(Job|Service)/,
++    /TabExpansion2/,
++    /Tee-Object/,
++    /Test-(ComputerSecureChannel|Connection|ModuleManifest|Path|PSSessionConfigurationFile)/,
++    /Trace-Command/,
++    /Unblock-File/,
++    /Undo-Transaction/,
++    /Unregister-(Event|PSSessionConfiguration)/,
++    /Update-(FormatData|Help|List|TypeData)/,
++    /Use-Transaction/,
++    /Wait-(Event|Job|Process)/,
++    /Where-Object/,
++    /Write-(Debug|Error|EventLog|Host|Output|Progress|Verbose|Warning)/,
++    /cd|help|mkdir|more|oss|prompt/,
++    /ac|asnp|cat|cd|chdir|clc|clear|clhy|cli|clp|cls|clv|cnsn|compare|copy|cp|cpi|cpp|cvpa|dbp|del|diff|dir|dnsn|ebp/,
++    /echo|epal|epcsv|epsn|erase|etsn|exsn|fc|fl|foreach|ft|fw|gal|gbp|gc|gci|gcm|gcs|gdr|ghy|gi|gjb|gl|gm|gmo|gp|gps/,
++    /group|gsn|gsnp|gsv|gu|gv|gwmi|h|history|icm|iex|ihy|ii|ipal|ipcsv|ipmo|ipsn|irm|ise|iwmi|iwr|kill|lp|ls|man|md/,
++    /measure|mi|mount|move|mp|mv|nal|ndr|ni|nmo|npssc|nsn|nv|ogv|oh|popd|ps|pushd|pwd|r|rbp|rcjb|rcsn|rd|rdr|ren|ri/,
++    /rjb|rm|rmdir|rmo|rni|rnp|rp|rsn|rsnp|rujb|rv|rvpa|rwmi|sajb|sal|saps|sasv|sbp|sc|select|set|shcm|si|sl|sleep|sls/,
++    /sort|sp|spjb|spps|spsv|start|sujb|sv|swmi|tee|trcm|type|where|wjb|write/
++  ], { prefix: '', suffix: '' });
++  var variableBuiltins = buildRegexp([
++    /[$?^_]|Args|ConfirmPreference|ConsoleFileName|DebugPreference|Error|ErrorActionPreference|ErrorView|ExecutionContext/,
++    /FormatEnumerationLimit|Home|Host|Input|MaximumAliasCount|MaximumDriveCount|MaximumErrorCount|MaximumFunctionCount/,
++    /MaximumHistoryCount|MaximumVariableCount|MyInvocation|NestedPromptLevel|OutputEncoding|Pid|Profile|ProgressPreference/,
++    /PSBoundParameters|PSCommandPath|PSCulture|PSDefaultParameterValues|PSEmailServer|PSHome|PSScriptRoot|PSSessionApplicationName/,
++    /PSSessionConfigurationName|PSSessionOption|PSUICulture|PSVersionTable|Pwd|ShellId|StackTrace|VerbosePreference/,
++    /WarningPreference|WhatIfPreference/,
++
++    /Event|EventArgs|EventSubscriber|Sender/,
++    /Matches|Ofs|ForEach|LastExitCode|PSCmdlet|PSItem|PSSenderInfo|This/,
++    /true|false|null/
++  ], { prefix: '\\$', suffix: '' });
++
++  var builtins = buildRegexp([symbolBuiltins, namedBuiltins, variableBuiltins], { suffix: notCharacterOrDash });
++
++  var grammar = {
++    keyword: keywords,
++    number: numbers,
++    operator: operators,
++    builtin: builtins,
++    punctuation: punctuation,
++    identifier: identifiers
++  };
++
++  // tokenizers
++  function tokenBase(stream, state) {
++    // Handle Comments
++    //var ch = stream.peek();
++
++    var parent = state.returnStack[state.returnStack.length - 1];
++    if (parent && parent.shouldReturnFrom(state)) {
++      state.tokenize = parent.tokenize;
++      state.returnStack.pop();
++      return state.tokenize(stream, state);
++    }
++
++    if (stream.eatSpace()) {
++      return null;
++    }
++
++    if (stream.eat('(')) {
++      state.bracketNesting += 1;
++      return 'punctuation';
++    }
++
++    if (stream.eat(')')) {
++      state.bracketNesting -= 1;
++      return 'punctuation';
++    }
++
++    for (var key in grammar) {
++      if (stream.match(grammar[key])) {
++        return key;
++      }
++    }
++
++    var ch = stream.next();
++
++    // single-quote string
++    if (ch === "'") {
++      return tokenSingleQuoteString(stream, state);
++    }
++
++    if (ch === '$') {
++      return tokenVariable(stream, state);
++    }
++
++    // double-quote string
++    if (ch === '"') {
++      return tokenDoubleQuoteString(stream, state);
++    }
++
++    if (ch === '<' && stream.eat('#')) {
++      state.tokenize = tokenComment;
++      return tokenComment(stream, state);
++    }
++
++    if (ch === '#') {
++      stream.skipToEnd();
++      return 'comment';
++    }
++
++    if (ch === '@') {
++      var quoteMatch = stream.eat(/["']/);
++      if (quoteMatch && stream.eol()) {
++        state.tokenize = tokenMultiString;
++        state.startQuote = quoteMatch[0];
++        return tokenMultiString(stream, state);
++      } else if (stream.eol()) {
++        return 'error';
++      } else if (stream.peek().match(/[({]/)) {
++        return 'punctuation';
++      } else if (stream.peek().match(varNames)) {
++        // splatted variable
++        return tokenVariable(stream, state);
++      }
++    }
++    return 'error';
++  }
++
++  function tokenSingleQuoteString(stream, state) {
++    var ch;
++    while ((ch = stream.peek()) != null) {
++      stream.next();
++
++      if (ch === "'" && !stream.eat("'")) {
++        state.tokenize = tokenBase;
++        return 'string';
++      }
++    }
++
++    return 'error';
++  }
++
++  function tokenDoubleQuoteString(stream, state) {
++    var ch;
++    while ((ch = stream.peek()) != null) {
++      if (ch === '$') {
++        state.tokenize = tokenStringInterpolation;
++        return 'string';
++      }
++
++      stream.next();
++      if (ch === '`') {
++        stream.next();
++        continue;
++      }
++
++      if (ch === '"' && !stream.eat('"')) {
++        state.tokenize = tokenBase;
++        return 'string';
++      }
++    }
++
++    return 'error';
++  }
++
++  function tokenStringInterpolation(stream, state) {
++    return tokenInterpolation(stream, state, tokenDoubleQuoteString);
++  }
++
++  function tokenMultiStringReturn(stream, state) {
++    state.tokenize = tokenMultiString;
++    state.startQuote = '"'
++    return tokenMultiString(stream, state);
++  }
++
++  function tokenHereStringInterpolation(stream, state) {
++    return tokenInterpolation(stream, state, tokenMultiStringReturn);
++  }
++
++  function tokenInterpolation(stream, state, parentTokenize) {
++    if (stream.match('$(')) {
++      var savedBracketNesting = state.bracketNesting;
++      state.returnStack.push({
++        /*jshint loopfunc:true */
++        shouldReturnFrom: function(state) {
++          return state.bracketNesting === savedBracketNesting;
++        },
++        tokenize: parentTokenize
++      });
++      state.tokenize = tokenBase;
++      state.bracketNesting += 1;
++      return 'punctuation';
++    } else {
++      stream.next();
++      state.returnStack.push({
++        shouldReturnFrom: function() { return true; },
++        tokenize: parentTokenize
++      });
++      state.tokenize = tokenVariable;
++      return state.tokenize(stream, state);
++    }
++  }
++
++  function tokenComment(stream, state) {
++    var maybeEnd = false, ch;
++    while ((ch = stream.next()) != null) {
++      if (maybeEnd && ch == '>') {
++          state.tokenize = tokenBase;
++          break;
++      }
++      maybeEnd = (ch === '#');
++    }
++    return 'comment';
++  }
++
++  function tokenVariable(stream, state) {
++    var ch = stream.peek();
++    if (stream.eat('{')) {
++      state.tokenize = tokenVariableWithBraces;
++      return tokenVariableWithBraces(stream, state);
++    } else if (ch != undefined && ch.match(varNames)) {
++      stream.eatWhile(varNames);
++      state.tokenize = tokenBase;
++      return 'variable-2';
++    } else {
++      state.tokenize = tokenBase;
++      return 'error';
++    }
++  }
++
++  function tokenVariableWithBraces(stream, state) {
++    var ch;
++    while ((ch = stream.next()) != null) {
++      if (ch === '}') {
++        state.tokenize = tokenBase;
++        break;
++      }
++    }
++    return 'variable-2';
++  }
++
++  function tokenMultiString(stream, state) {
++    var quote = state.startQuote;
++    if (stream.sol() && stream.match(new RegExp(quote + '@'))) {
++      state.tokenize = tokenBase;
++    }
++    else if (quote === '"') {
++      while (!stream.eol()) {
++        var ch = stream.peek();
++        if (ch === '$') {
++          state.tokenize = tokenHereStringInterpolation;
++          return 'string';
++        }
++
++        stream.next();
++        if (ch === '`') {
++          stream.next();
++        }
++      }
++    }
++    else {
++      stream.skipToEnd();
++    }
++
++    return 'string';
++  }
++
++  var external = {
++    startState: function() {
++      return {
++        returnStack: [],
++        bracketNesting: 0,
++        tokenize: tokenBase
++      };
++    },
++
++    token: function(stream, state) {
++      return state.tokenize(stream, state);
++    },
++
++    blockCommentStart: '<#',
++    blockCommentEnd: '#>',
++    lineComment: '#',
++    fold: 'brace'
++  };
++  return external;
++});
++
++CodeMirror.defineMIME('application/x-powershell', 'powershell');
++});
+diff --git a/app/src/main/assets/vendor/ruby.js b/app/src/main/assets/vendor/ruby.js
+new file mode 100644
+index 0000000..b216c19
+--- /dev/null
++++ b/app/src/main/assets/vendor/ruby.js
+@@ -0,0 +1,303 @@
++// CodeMirror, copyright (c) by Marijn Haverbeke and others
++// Distributed under an MIT license: https://codemirror.net/5/LICENSE
++
++(function(mod) {
++  if (typeof exports == "object" && typeof module == "object") // CommonJS
++    mod(require("../../lib/codemirror"));
++  else if (typeof define == "function" && define.amd) // AMD
++    define(["../../lib/codemirror"], mod);
++  else // Plain browser env
++    mod(CodeMirror);
++})(function(CodeMirror) {
++"use strict";
++
++function wordObj(words) {
++  var o = {};
++  for (var i = 0, e = words.length; i < e; ++i) o[words[i]] = true;
++  return o;
++}
++
++var keywordList = [
++  "alias", "and", "BEGIN", "begin", "break", "case", "class", "def", "defined?", "do", "else",
++  "elsif", "END", "end", "ensure", "false", "for", "if", "in", "module", "next", "not", "or",
++  "redo", "rescue", "retry", "return", "self", "super", "then", "true", "undef", "unless",
++  "until", "when", "while", "yield", "nil", "raise", "throw", "catch", "fail", "loop", "callcc",
++  "caller", "lambda", "proc", "public", "protected", "private", "require", "load",
++  "require_relative", "extend", "autoload", "__END__", "__FILE__", "__LINE__", "__dir__"
++], keywords = wordObj(keywordList);
++
++var indentWords = wordObj(["def", "class", "case", "for", "while", "until", "module",
++                           "catch", "loop", "proc", "begin"]);
++var dedentWords = wordObj(["end", "until"]);
++var opening = {"[": "]", "{": "}", "(": ")"};
++var closing = {"]": "[", "}": "{", ")": "("};
++
++CodeMirror.defineMode("ruby", function(config) {
++  var curPunc;
++
++  function chain(newtok, stream, state) {
++    state.tokenize.push(newtok);
++    return newtok(stream, state);
++  }
++
++  function tokenBase(stream, state) {
++    if (stream.sol() && stream.match("=begin") && stream.eol()) {
++      state.tokenize.push(readBlockComment);
++      return "comment";
++    }
++    if (stream.eatSpace()) return null;
++    var ch = stream.next(), m;
++    if (ch == "`" || ch == "'" || ch == '"') {
++      return chain(readQuoted(ch, "string", ch == '"' || ch == "`"), stream, state);
++    } else if (ch == "/") {
++      if (regexpAhead(stream))
++        return chain(readQuoted(ch, "string-2", true), stream, state);
++      else
++        return "operator";
++    } else if (ch == "%") {
++      var style = "string", embed = true;
++      if (stream.eat("s")) style = "atom";
++      else if (stream.eat(/[WQ]/)) style = "string";
++      else if (stream.eat(/[r]/)) style = "string-2";
++      else if (stream.eat(/[wxq]/)) { style = "string"; embed = false; }
++      var delim = stream.eat(/[^\w\s=]/);
++      if (!delim) return "operator";
++      if (opening.propertyIsEnumerable(delim)) delim = opening[delim];
++      return chain(readQuoted(delim, style, embed, true), stream, state);
++    } else if (ch == "#") {
++      stream.skipToEnd();
++      return "comment";
++    } else if (ch == "<" && (m = stream.match(/^<([-~])[\`\"\']?([a-zA-Z_?]\w*)[\`\"\']?(?:;|$)/))) {
++      return chain(readHereDoc(m[2], m[1]), stream, state);
++    } else if (ch == "0") {
++      if (stream.eat("x")) stream.eatWhile(/[\da-fA-F]/);
++      else if (stream.eat("b")) stream.eatWhile(/[01]/);
++      else stream.eatWhile(/[0-7]/);
++      return "number";
++    } else if (/\d/.test(ch)) {
++      stream.match(/^[\d_]*(?:\.[\d_]+)?(?:[eE][+\-]?[\d_]+)?/);
++      return "number";
++    } else if (ch == "?") {
++      while (stream.match(/^\\[CM]-/)) {}
++      if (stream.eat("\\")) stream.eatWhile(/\w/);
++      else stream.next();
++      return "string";
++    } else if (ch == ":") {
++      if (stream.eat("'")) return chain(readQuoted("'", "atom", false), stream, state);
++      if (stream.eat('"')) return chain(readQuoted('"', "atom", true), stream, state);
++
++      // :> :>> :< :<< are valid symbols
++      if (stream.eat(/[\<\>]/)) {
++        stream.eat(/[\<\>]/);
++        return "atom";
++      }
++
++      // :+ :- :/ :* :| :& :! are valid symbols
++      if (stream.eat(/[\+\-\*\/\&\|\:\!]/)) {
++        return "atom";
++      }
++
++      // Symbols can't start by a digit
++      if (stream.eat(/[a-zA-Z$@_\xa1-\uffff]/)) {
++        stream.eatWhile(/[\w$\xa1-\uffff]/);
++        // Only one ? ! = is allowed and only as the last character
++        stream.eat(/[\?\!\=]/);
++        return "atom";
++      }
++      return "operator";
++    } else if (ch == "@" && stream.match(/^@?[a-zA-Z_\xa1-\uffff]/)) {
++      stream.eat("@");
++      stream.eatWhile(/[\w\xa1-\uffff]/);
++      return "variable-2";
++    } else if (ch == "$") {
++      if (stream.eat(/[a-zA-Z_]/)) {
++        stream.eatWhile(/[\w]/);
++      } else if (stream.eat(/\d/)) {
++        stream.eat(/\d/);
++      } else {
++        stream.next(); // Must be a special global like $: or $!
++      }
++      return "variable-3";
++    } else if (/[a-zA-Z_\xa1-\uffff]/.test(ch)) {
++      stream.eatWhile(/[\w\xa1-\uffff]/);
++      stream.eat(/[\?\!]/);
++      if (stream.eat(":")) return "atom";
++      return "ident";
++    } else if (ch == "|" && (state.varList || state.lastTok == "{" || state.lastTok == "do")) {
++      curPunc = "|";
++      return null;
++    } else if (/[\(\)\[\]{}\\;]/.test(ch)) {
++      curPunc = ch;
++      return null;
++    } else if (ch == "-" && stream.eat(">")) {
++      return "arrow";
++    } else if (/[=+\-\/*:\.^%<>~|]/.test(ch)) {
++      var more = stream.eatWhile(/[=+\-\/*:\.^%<>~|]/);
++      if (ch == "." && !more) curPunc = ".";
++      return "operator";
++    } else {
++      return null;
++    }
++  }
++
++  function regexpAhead(stream) {
++    var start = stream.pos, depth = 0, next, found = false, escaped = false
++    while ((next = stream.next()) != null) {
++      if (!escaped) {
++        if ("[{(".indexOf(next) > -1) {
++          depth++
++        } else if ("]})".indexOf(next) > -1) {
++          depth--
++          if (depth < 0) break
++        } else if (next == "/" && depth == 0) {
++          found = true
++          break
++        }
++        escaped = next == "\\"
++      } else {
++        escaped = false
++      }
++    }
++    stream.backUp(stream.pos - start)
++    return found
++  }
++
++  function tokenBaseUntilBrace(depth) {
++    if (!depth) depth = 1;
++    return function(stream, state) {
++      if (stream.peek() == "}") {
++        if (depth == 1) {
++          state.tokenize.pop();
++          return state.tokenize[state.tokenize.length-1](stream, state);
++        } else {
++          state.tokenize[state.tokenize.length - 1] = tokenBaseUntilBrace(depth - 1);
++        }
++      } else if (stream.peek() == "{") {
++        state.tokenize[state.tokenize.length - 1] = tokenBaseUntilBrace(depth + 1);
++      }
++      return tokenBase(stream, state);
++    };
++  }
++  function tokenBaseOnce() {
++    var alreadyCalled = false;
++    return function(stream, state) {
++      if (alreadyCalled) {
++        state.tokenize.pop();
++        return state.tokenize[state.tokenize.length-1](stream, state);
++      }
++      alreadyCalled = true;
++      return tokenBase(stream, state);
++    };
++  }
++  function readQuoted(quote, style, embed, unescaped) {
++    return function(stream, state) {
++      var escaped = false, ch;
++
++      if (state.context.type === 'read-quoted-paused') {
++        state.context = state.context.prev;
++        stream.eat("}");
++      }
++
++      while ((ch = stream.next()) != null) {
++        if (ch == quote && (unescaped || !escaped)) {
++          state.tokenize.pop();
++          break;
++        }
++        if (embed && ch == "#" && !escaped) {
++          if (stream.eat("{")) {
++            if (quote == "}") {
++              state.context = {prev: state.context, type: 'read-quoted-paused'};
++            }
++            state.tokenize.push(tokenBaseUntilBrace());
++            break;
++          } else if (/[@\$]/.test(stream.peek())) {
++            state.tokenize.push(tokenBaseOnce());
++            break;
++          }
++        }
++        escaped = !escaped && ch == "\\";
++      }
++      return style;
++    };
++  }
++  function readHereDoc(phrase, mayIndent) {
++    return function(stream, state) {
++      if (mayIndent) stream.eatSpace()
++      if (stream.match(phrase)) state.tokenize.pop();
++      else stream.skipToEnd();
++      return "string";
++    };
++  }
++  function readBlockComment(stream, state) {
++    if (stream.sol() && stream.match("=end") && stream.eol())
++      state.tokenize.pop();
++    stream.skipToEnd();
++    return "comment";
++  }
++
++  return {
++    startState: function() {
++      return {tokenize: [tokenBase],
++              indented: 0,
++              context: {type: "top", indented: -config.indentUnit},
++              continuedLine: false,
++              lastTok: null,
++              varList: false};
++    },
++
++    token: function(stream, state) {
++      curPunc = null;
++      if (stream.sol()) state.indented = stream.indentation();
++      var style = state.tokenize[state.tokenize.length-1](stream, state), kwtype;
++      var thisTok = curPunc;
++      if (style == "ident") {
++        var word = stream.current();
++        style = state.lastTok == "." ? "property"
++          : keywords.propertyIsEnumerable(stream.current()) ? "keyword"
++          : /^[A-Z]/.test(word) ? "tag"
++          : (state.lastTok == "def" || state.lastTok == "class" || state.varList) ? "def"
++          : "variable";
++        if (style == "keyword") {
++          thisTok = word;
++          if (indentWords.propertyIsEnumerable(word)) kwtype = "indent";
++          else if (dedentWords.propertyIsEnumerable(word)) kwtype = "dedent";
++          else if ((word == "if" || word == "unless") && stream.column() == stream.indentation())
++            kwtype = "indent";
++          else if (word == "do" && state.context.indented < state.indented)
++            kwtype = "indent";
++        }
++      }
++      if (curPunc || (style && style != "comment")) state.lastTok = thisTok;
++      if (curPunc == "|") state.varList = !state.varList;
++
++      if (kwtype == "indent" || /[\(\[\{]/.test(curPunc))
++        state.context = {prev: state.context, type: curPunc || style, indented: state.indented};
++      else if ((kwtype == "dedent" || /[\)\]\}]/.test(curPunc)) && state.context.prev)
++        state.context = state.context.prev;
++
++      if (stream.eol())
++        state.continuedLine = (curPunc == "\\" || style == "operator");
++      return style;
++    },
++
++    indent: function(state, textAfter) {
++      if (state.tokenize[state.tokenize.length-1] != tokenBase) return CodeMirror.Pass;
++      var firstChar = textAfter && textAfter.charAt(0);
++      var ct = state.context;
++      var closed = ct.type == closing[firstChar] ||
++        ct.type == "keyword" && /^(?:end|until|else|elsif|when|rescue)\b/.test(textAfter);
++      return ct.indented + (closed ? 0 : config.indentUnit) +
++        (state.continuedLine ? config.indentUnit : 0);
++    },
++
++    electricInput: /^\s*(?:end|rescue|elsif|else|\})$/,
++    lineComment: "#",
++    fold: "indent"
++  };
++});
++
++CodeMirror.defineMIME("text/x-ruby", "ruby");
++
++CodeMirror.registerHelper("hintWords", "ruby", keywordList);
++
++});
+diff --git a/app/src/main/assets/vendor/sass.js b/app/src/main/assets/vendor/sass.js
+new file mode 100644
+index 0000000..3cfac0a
+--- /dev/null
++++ b/app/src/main/assets/vendor/sass.js
+@@ -0,0 +1,459 @@
++// CodeMirror, copyright (c) by Marijn Haverbeke and others
++// Distributed under an MIT license: https://codemirror.net/5/LICENSE
++
++(function(mod) {
++  if (typeof exports == "object" && typeof module == "object") // CommonJS
++    mod(require("../../lib/codemirror"), require("../css/css"));
++  else if (typeof define == "function" && define.amd) // AMD
++    define(["../../lib/codemirror", "../css/css"], mod);
++  else // Plain browser env
++    mod(CodeMirror);
++})(function(CodeMirror) {
++"use strict";
++
++CodeMirror.defineMode("sass", function(config) {
++  var cssMode = CodeMirror.mimeModes["text/css"];
++  var propertyKeywords = cssMode.propertyKeywords || {},
++      colorKeywords = cssMode.colorKeywords || {},
++      valueKeywords = cssMode.valueKeywords || {},
++      fontProperties = cssMode.fontProperties || {};
++
++  function tokenRegexp(words) {
++    return new RegExp("^" + words.join("|"));
++  }
++
++  var keywords = ["true", "false", "null", "auto"];
++  var keywordsRegexp = new RegExp("^" + keywords.join("|"));
++
++  var operators = ["\\(", "\\)", "=", ">", "<", "==", ">=", "<=", "\\+", "-",
++                   "\\!=", "/", "\\*", "%", "and", "or", "not", ";","\\{","\\}",":"];
++  var opRegexp = tokenRegexp(operators);
++
++  var pseudoElementsRegexp = /^::?[a-zA-Z_][\w\-]*/;
++
++  var word;
++
++  function isEndLine(stream) {
++    return !stream.peek() || stream.match(/\s+$/, false);
++  }
++
++  function urlTokens(stream, state) {
++    var ch = stream.peek();
++
++    if (ch === ")") {
++      stream.next();
++      state.tokenizer = tokenBase;
++      return "operator";
++    } else if (ch === "(") {
++      stream.next();
++      stream.eatSpace();
++
++      return "operator";
++    } else if (ch === "'" || ch === '"') {
++      state.tokenizer = buildStringTokenizer(stream.next());
++      return "string";
++    } else {
++      state.tokenizer = buildStringTokenizer(")", false);
++      return "string";
++    }
++  }
++  function comment(indentation, multiLine) {
++    return function(stream, state) {
++      if (stream.sol() && stream.indentation() <= indentation) {
++        state.tokenizer = tokenBase;
++        return tokenBase(stream, state);
++      }
++
++      if (multiLine && stream.skipTo("*/")) {
++        stream.next();
++        stream.next();
++        state.tokenizer = tokenBase;
++      } else {
++        stream.skipToEnd();
++      }
++
++      return "comment";
++    };
++  }
++
++  function buildStringTokenizer(quote, greedy) {
++    if (greedy == null) { greedy = true; }
++
++    function stringTokenizer(stream, state) {
++      var nextChar = stream.next();
++      var peekChar = stream.peek();
++      var previousChar = stream.string.charAt(stream.pos-2);
++
++      var endingString = ((nextChar !== "\\" && peekChar === quote) || (nextChar === quote && previousChar !== "\\"));
++
++      if (endingString) {
++        if (nextChar !== quote && greedy) { stream.next(); }
++        if (isEndLine(stream)) {
++          state.cursorHalf = 0;
++        }
++        state.tokenizer = tokenBase;
++        return "string";
++      } else if (nextChar === "#" && peekChar === "{") {
++        state.tokenizer = buildInterpolationTokenizer(stringTokenizer);
++        stream.next();
++        return "operator";
++      } else {
++        return "string";
++      }
++    }
++
++    return stringTokenizer;
++  }
++
++  function buildInterpolationTokenizer(currentTokenizer) {
++    return function(stream, state) {
++      if (stream.peek() === "}") {
++        stream.next();
++        state.tokenizer = currentTokenizer;
++        return "operator";
++      } else {
++        return tokenBase(stream, state);
++      }
++    };
++  }
++
++  function indent(state) {
++    if (state.indentCount == 0) {
++      state.indentCount++;
++      var lastScopeOffset = state.scopes[0].offset;
++      var currentOffset = lastScopeOffset + config.indentUnit;
++      state.scopes.unshift({ offset:currentOffset });
++    }
++  }
++
++  function dedent(state) {
++    if (state.scopes.length == 1) return;
++
++    state.scopes.shift();
++  }
++
++  function tokenBase(stream, state) {
++    var ch = stream.peek();
++
++    // Comment
++    if (stream.match("/*")) {
++      state.tokenizer = comment(stream.indentation(), true);
++      return state.tokenizer(stream, state);
++    }
++    if (stream.match("//")) {
++      state.tokenizer = comment(stream.indentation(), false);
++      return state.tokenizer(stream, state);
++    }
++
++    // Interpolation
++    if (stream.match("#{")) {
++      state.tokenizer = buildInterpolationTokenizer(tokenBase);
++      return "operator";
++    }
++
++    // Strings
++    if (ch === '"' || ch === "'") {
++      stream.next();
++      state.tokenizer = buildStringTokenizer(ch);
++      return "string";
++    }
++
++    if(!state.cursorHalf){// state.cursorHalf === 0
++    // first half i.e. before : for key-value pairs
++    // including selectors
++
++      if (ch === "-") {
++        if (stream.match(/^-\w+-/)) {
++          return "meta";
++        }
++      }
++
++      if (ch === ".") {
++        stream.next();
++        if (stream.match(/^[\w-]+/)) {
++          indent(state);
++          return "qualifier";
++        } else if (stream.peek() === "#") {
++          indent(state);
++          return "tag";
++        }
++      }
++
++      if (ch === "#") {
++        stream.next();
++        // ID selectors
++        if (stream.match(/^[\w-]+/)) {
++          indent(state);
++          return "builtin";
++        }
++        if (stream.peek() === "#") {
++          indent(state);
++          return "tag";
++        }
++      }
++
++      // Variables
++      if (ch === "$") {
++        stream.next();
++        stream.eatWhile(/[\w-]/);
++        return "variable-2";
++      }
++
++      // Numbers
++      if (stream.match(/^-?[0-9\.]+/))
++        return "number";
++
++      // Units
++      if (stream.match(/^(px|em|in)\b/))
++        return "unit";
++
++      if (stream.match(keywordsRegexp))
++        return "keyword";
++
++      if (stream.match(/^url/) && stream.peek() === "(") {
++        state.tokenizer = urlTokens;
++        return "atom";
++      }
++
++      if (ch === "=") {
++        // Match shortcut mixin definition
++        if (stream.match(/^=[\w-]+/)) {
++          indent(state);
++          return "meta";
++        }
++      }
++
++      if (ch === "+") {
++        // Match shortcut mixin definition
++        if (stream.match(/^\+[\w-]+/)){
++          return "variable-3";
++        }
++      }
++
++      if(ch === "@"){
++        if(stream.match('@extend')){
++          if(!stream.match(/\s*[\w]/))
++            dedent(state);
++        }
++      }
++
++
++      // Indent Directives
++      if (stream.match(/^@(else if|if|media|else|for|each|while|mixin|function)/)) {
++        indent(state);
++        return "def";
++      }
++
++      // Other Directives
++      if (ch === "@") {
++        stream.next();
++        stream.eatWhile(/[\w-]/);
++        return "def";
++      }
++
++      if (stream.eatWhile(/[\w-]/)){
++        if(stream.match(/ *: *[\w-\+\$#!\("']/,false)){
++          word = stream.current().toLowerCase();
++          var prop = state.prevProp + "-" + word;
++          if (propertyKeywords.hasOwnProperty(prop)) {
++            return "property";
++          } else if (propertyKeywords.hasOwnProperty(word)) {
++            state.prevProp = word;
++            return "property";
++          } else if (fontProperties.hasOwnProperty(word)) {
++            return "property";
++          }
++          return "tag";
++        }
++        else if(stream.match(/ *:/,false)){
++          indent(state);
++          state.cursorHalf = 1;
++          state.prevProp = stream.current().toLowerCase();
++          return "property";
++        }
++        else if(stream.match(/ *,/,false)){
++          return "tag";
++        }
++        else{
++          indent(state);
++          return "tag";
++        }
++      }
++
++      if(ch === ":"){
++        if (stream.match(pseudoElementsRegexp)){ // could be a pseudo-element
++          return "variable-3";
++        }
++        stream.next();
++        state.cursorHalf=1;
++        return "operator";
++      }
++
++    } // cursorHalf===0 ends here
++    else{
++
++      if (ch === "#") {
++        stream.next();
++        // Hex numbers
++        if (stream.match(/[0-9a-fA-F]{6}|[0-9a-fA-F]{3}/)){
++          if (isEndLine(stream)) {
++            state.cursorHalf = 0;
++          }
++          return "number";
++        }
++      }
++
++      // Numbers
++      if (stream.match(/^-?[0-9\.]+/)){
++        if (isEndLine(stream)) {
++          state.cursorHalf = 0;
++        }
++        return "number";
++      }
++
++      // Units
++      if (stream.match(/^(px|em|in)\b/)){
++        if (isEndLine(stream)) {
++          state.cursorHalf = 0;
++        }
++        return "unit";
++      }
++
++      if (stream.match(keywordsRegexp)){
++        if (isEndLine(stream)) {
++          state.cursorHalf = 0;
++        }
++        return "keyword";
++      }
++
++      if (stream.match(/^url/) && stream.peek() === "(") {
++        state.tokenizer = urlTokens;
++        if (isEndLine(stream)) {
++          state.cursorHalf = 0;
++        }
++        return "atom";
++      }
++
++      // Variables
++      if (ch === "$") {
++        stream.next();
++        stream.eatWhile(/[\w-]/);
++        if (isEndLine(stream)) {
++          state.cursorHalf = 0;
++        }
++        return "variable-2";
++      }
++
++      // bang character for !important, !default, etc.
++      if (ch === "!") {
++        stream.next();
++        state.cursorHalf = 0;
++        return stream.match(/^[\w]+/) ? "keyword": "operator";
++      }
++
++      if (stream.match(opRegexp)){
++        if (isEndLine(stream)) {
++          state.cursorHalf = 0;
++        }
++        return "operator";
++      }
++
++      // attributes
++      if (stream.eatWhile(/[\w-]/)) {
++        if (isEndLine(stream)) {
++          state.cursorHalf = 0;
++        }
++        word = stream.current().toLowerCase();
++        if (valueKeywords.hasOwnProperty(word)) {
++          return "atom";
++        } else if (colorKeywords.hasOwnProperty(word)) {
++          return "keyword";
++        } else if (propertyKeywords.hasOwnProperty(word)) {
++          state.prevProp = stream.current().toLowerCase();
++          return "property";
++        } else {
++          return "tag";
++        }
++      }
++
++      //stream.eatSpace();
++      if (isEndLine(stream)) {
++        state.cursorHalf = 0;
++        return null;
++      }
++
++    } // else ends here
++
++    if (stream.match(opRegexp))
++      return "operator";
++
++    // If we haven't returned by now, we move 1 character
++    // and return an error
++    stream.next();
++    return null;
++  }
++
++  function tokenLexer(stream, state) {
++    if (stream.sol()) state.indentCount = 0;
++    var style = state.tokenizer(stream, state);
++    var current = stream.current();
++
++    if (current === "@return" || current === "}"){
++      dedent(state);
++    }
++
++    if (style !== null) {
++      var startOfToken = stream.pos - current.length;
++
++      var withCurrentIndent = startOfToken + (config.indentUnit * state.indentCount);
++
++      var newScopes = [];
++
++      for (var i = 0; i < state.scopes.length; i++) {
++        var scope = state.scopes[i];
++
++        if (scope.offset <= withCurrentIndent)
++          newScopes.push(scope);
++      }
++
++      state.scopes = newScopes;
++    }
++
++
++    return style;
++  }
++
++  return {
++    startState: function() {
++      return {
++        tokenizer: tokenBase,
++        scopes: [{offset: 0, type: "sass"}],
++        indentCount: 0,
++        cursorHalf: 0,  // cursor half tells us if cursor lies after (1)
++                        // or before (0) colon (well... more or less)
++        definedVars: [],
++        definedMixins: []
++      };
++    },
++    token: function(stream, state) {
++      var style = tokenLexer(stream, state);
++
++      state.lastToken = { style: style, content: stream.current() };
++
++      return style;
++    },
++
++    indent: function(state) {
++      return state.scopes[0].offset;
++    },
++
++    blockCommentStart: "/*",
++    blockCommentEnd: "*/",
++    lineComment: "//",
++    fold: "indent"
++  };
++}, "css");
++
++CodeMirror.defineMIME("text/x-sass", "sass");
++
++});
+diff --git a/app/src/main/assets/vendor/stex.js b/app/src/main/assets/vendor/stex.js
+new file mode 100644
+index 0000000..2b73bc9
+--- /dev/null
++++ b/app/src/main/assets/vendor/stex.js
+@@ -0,0 +1,264 @@
++// CodeMirror, copyright (c) by Marijn Haverbeke and others
++// Distributed under an MIT license: https://codemirror.net/5/LICENSE
++
++/*
++ * Author: Constantin Jucovschi (c.jucovschi@jacobs-university.de)
++ * Licence: MIT
++ */
++
++(function(mod) {
++  if (typeof exports == "object" && typeof module == "object") // CommonJS
++    mod(require("../../lib/codemirror"));
++  else if (typeof define == "function" && define.amd) // AMD
++    define(["../../lib/codemirror"], mod);
++  else // Plain browser env
++    mod(CodeMirror);
++})(function(CodeMirror) {
++  "use strict";
++
++  CodeMirror.defineMode("stex", function(_config, parserConfig) {
++    "use strict";
++
++    function pushCommand(state, command) {
++      state.cmdState.push(command);
++    }
++
++    function peekCommand(state) {
++      if (state.cmdState.length > 0) {
++        return state.cmdState[state.cmdState.length - 1];
++      } else {
++        return null;
++      }
++    }
++
++    function popCommand(state) {
++      var plug = state.cmdState.pop();
++      if (plug) {
++        plug.closeBracket();
++      }
++    }
++
++    // returns the non-default plugin closest to the end of the list
++    function getMostPowerful(state) {
++      var context = state.cmdState;
++      for (var i = context.length - 1; i >= 0; i--) {
++        var plug = context[i];
++        if (plug.name == "DEFAULT") {
++          continue;
++        }
++        return plug;
++      }
++      return { styleIdentifier: function() { return null; } };
++    }
++
++    function addPluginPattern(pluginName, cmdStyle, styles) {
++      return function () {
++        this.name = pluginName;
++        this.bracketNo = 0;
++        this.style = cmdStyle;
++        this.styles = styles;
++        this.argument = null;   // \begin and \end have arguments that follow. These are stored in the plugin
++
++        this.styleIdentifier = function() {
++          return this.styles[this.bracketNo - 1] || null;
++        };
++        this.openBracket = function() {
++          this.bracketNo++;
++          return "bracket";
++        };
++        this.closeBracket = function() {};
++      };
++    }
++
++    var plugins = {};
++
++    plugins["importmodule"] = addPluginPattern("importmodule", "tag", ["string", "builtin"]);
++    plugins["documentclass"] = addPluginPattern("documentclass", "tag", ["", "atom"]);
++    plugins["usepackage"] = addPluginPattern("usepackage", "tag", ["atom"]);
++    plugins["begin"] = addPluginPattern("begin", "tag", ["atom"]);
++    plugins["end"] = addPluginPattern("end", "tag", ["atom"]);
++
++    plugins["label"    ] = addPluginPattern("label"    , "tag", ["atom"]);
++    plugins["ref"      ] = addPluginPattern("ref"      , "tag", ["atom"]);
++    plugins["eqref"    ] = addPluginPattern("eqref"    , "tag", ["atom"]);
++    plugins["cite"     ] = addPluginPattern("cite"     , "tag", ["atom"]);
++    plugins["bibitem"  ] = addPluginPattern("bibitem"  , "tag", ["atom"]);
++    plugins["Bibitem"  ] = addPluginPattern("Bibitem"  , "tag", ["atom"]);
++    plugins["RBibitem" ] = addPluginPattern("RBibitem" , "tag", ["atom"]);
++
++    plugins["DEFAULT"] = function () {
++      this.name = "DEFAULT";
++      this.style = "tag";
++
++      this.styleIdentifier = this.openBracket = this.closeBracket = function() {};
++    };
++
++    function setState(state, f) {
++      state.f = f;
++    }
++
++    // called when in a normal (no environment) context
++    function normal(source, state) {
++      var plug;
++      // Do we look like '\command' ?  If so, attempt to apply the plugin 'command'
++      if (source.match(/^\\[a-zA-Z@]+/)) {
++        var cmdName = source.current().slice(1);
++        plug = plugins.hasOwnProperty(cmdName) ? plugins[cmdName] : plugins["DEFAULT"];
++        plug = new plug();
++        pushCommand(state, plug);
++        setState(state, beginParams);
++        return plug.style;
++      }
++
++      // escape characters
++      if (source.match(/^\\[$&%#{}_]/)) {
++        return "tag";
++      }
++
++      // white space control characters
++      if (source.match(/^\\[,;!\/\\]/)) {
++        return "tag";
++      }
++
++      // find if we're starting various math modes
++      if (source.match("\\[")) {
++        setState(state, function(source, state){ return inMathMode(source, state, "\\]"); });
++        return "keyword";
++      }
++      if (source.match("\\(")) {
++        setState(state, function(source, state){ return inMathMode(source, state, "\\)"); });
++        return "keyword";
++      }
++      if (source.match("$$")) {
++        setState(state, function(source, state){ return inMathMode(source, state, "$$"); });
++        return "keyword";
++      }
++      if (source.match("$")) {
++        setState(state, function(source, state){ return inMathMode(source, state, "$"); });
++        return "keyword";
++      }
++
++      var ch = source.next();
++      if (ch == "%") {
++        source.skipToEnd();
++        return "comment";
++      } else if (ch == '}' || ch == ']') {
++        plug = peekCommand(state);
++        if (plug) {
++          plug.closeBracket(ch);
++          setState(state, beginParams);
++        } else {
++          return "error";
++        }
++        return "bracket";
++      } else if (ch == '{' || ch == '[') {
++        plug = plugins["DEFAULT"];
++        plug = new plug();
++        pushCommand(state, plug);
++        return "bracket";
++      } else if (/\d/.test(ch)) {
++        source.eatWhile(/[\w.%]/);
++        return "atom";
++      } else {
++        source.eatWhile(/[\w\-_]/);
++        plug = getMostPowerful(state);
++        if (plug.name == 'begin') {
++          plug.argument = source.current();
++        }
++        return plug.styleIdentifier();
++      }
++    }
++
++    function inMathMode(source, state, endModeSeq) {
++      if (source.eatSpace()) {
++        return null;
++      }
++      if (endModeSeq && source.match(endModeSeq)) {
++        setState(state, normal);
++        return "keyword";
++      }
++      if (source.match(/^\\[a-zA-Z@]+/)) {
++        return "tag";
++      }
++      if (source.match(/^[a-zA-Z]+/)) {
++        return "variable-2";
++      }
++      // escape characters
++      if (source.match(/^\\[$&%#{}_]/)) {
++        return "tag";
++      }
++      // white space control characters
++      if (source.match(/^\\[,;!\/]/)) {
++        return "tag";
++      }
++      // special math-mode characters
++      if (source.match(/^[\^_&]/)) {
++        return "tag";
++      }
++      // non-special characters
++      if (source.match(/^[+\-<>|=,\/@!*:;'"`~#?]/)) {
++        return null;
++      }
++      if (source.match(/^(\d+\.\d*|\d*\.\d+|\d+)/)) {
++        return "number";
++      }
++      var ch = source.next();
++      if (ch == "{" || ch == "}" || ch == "[" || ch == "]" || ch == "(" || ch == ")") {
++        return "bracket";
++      }
++
++      if (ch == "%") {
++        source.skipToEnd();
++        return "comment";
++      }
++      return "error";
++    }
++
++    function beginParams(source, state) {
++      var ch = source.peek(), lastPlug;
++      if (ch == '{' || ch == '[') {
++        lastPlug = peekCommand(state);
++        lastPlug.openBracket(ch);
++        source.eat(ch);
++        setState(state, normal);
++        return "bracket";
++      }
++      if (/[ \t\r]/.test(ch)) {
++        source.eat(ch);
++        return null;
++      }
++      setState(state, normal);
++      popCommand(state);
++
++      return normal(source, state);
++    }
++
++    return {
++      startState: function() {
++        var f = parserConfig.inMathMode ? function(source, state){ return inMathMode(source, state); } : normal;
++        return {
++          cmdState: [],
++          f: f
++        };
++      },
++      copyState: function(s) {
++        return {
++          cmdState: s.cmdState.slice(),
++          f: s.f
++        };
++      },
++      token: function(stream, state) {
++        return state.f(stream, state);
++      },
++      blankLine: function(state) {
++        state.f = normal;
++        state.cmdState.length = 0;
++      },
++      lineComment: "%"
++    };
++  });
++
++  CodeMirror.defineMIME("text/x-stex", "stex");
++  CodeMirror.defineMIME("text/x-latex", "stex");
++
++});
+diff --git a/app/src/main/assets/vendor/swift.js b/app/src/main/assets/vendor/swift.js
+new file mode 100644
+index 0000000..4edc450
+--- /dev/null
++++ b/app/src/main/assets/vendor/swift.js
+@@ -0,0 +1,221 @@
++// CodeMirror, copyright (c) by Marijn Haverbeke and others
++// Distributed under an MIT license: https://codemirror.net/5/LICENSE
++
++// Swift mode created by Michael Kaminsky https://github.com/mkaminsky11
++
++(function(mod) {
++  if (typeof exports == "object" && typeof module == "object")
++    mod(require("../../lib/codemirror"))
++  else if (typeof define == "function" && define.amd)
++    define(["../../lib/codemirror"], mod)
++  else
++    mod(CodeMirror)
++})(function(CodeMirror) {
++  "use strict"
++
++  function wordSet(words) {
++    var set = {}
++    for (var i = 0; i < words.length; i++) set[words[i]] = true
++    return set
++  }
++
++  var keywords = wordSet(["_","var","let","actor","class","enum","extension","import","protocol","struct","func","typealias","associatedtype",
++                          "open","public","internal","fileprivate","private","deinit","init","new","override","self","subscript","super",
++                          "convenience","dynamic","final","indirect","lazy","required","static","unowned","unowned(safe)","unowned(unsafe)","weak","as","is",
++                          "break","case","continue","default","else","fallthrough","for","guard","if","in","repeat","switch","where","while",
++                          "defer","return","inout","mutating","nonmutating","isolated","nonisolated","catch","do","rethrows","throw","throws","async","await","try","didSet","get","set","willSet",
++                          "assignment","associativity","infix","left","none","operator","postfix","precedence","precedencegroup","prefix","right",
++                          "Any","AnyObject","Type","dynamicType","Self","Protocol","__COLUMN__","__FILE__","__FUNCTION__","__LINE__"])
++  var definingKeywords = wordSet(["var","let","actor","class","enum","extension","import","protocol","struct","func","typealias","associatedtype","for"])
++  var atoms = wordSet(["true","false","nil","self","super","_"])
++  var types = wordSet(["Array","Bool","Character","Dictionary","Double","Float","Int","Int8","Int16","Int32","Int64","Never","Optional","Set","String",
++                       "UInt8","UInt16","UInt32","UInt64","Void"])
++  var operators = "+-/*%=|&<>~^?!"
++  var punc = ":;,.(){}[]"
++  var binary = /^\-?0b[01][01_]*/
++  var octal = /^\-?0o[0-7][0-7_]*/
++  var hexadecimal = /^\-?0x[\dA-Fa-f][\dA-Fa-f_]*(?:(?:\.[\dA-Fa-f][\dA-Fa-f_]*)?[Pp]\-?\d[\d_]*)?/
++  var decimal = /^\-?\d[\d_]*(?:\.\d[\d_]*)?(?:[Ee]\-?\d[\d_]*)?/
++  var identifier = /^\$\d+|(`?)[_A-Za-z][_A-Za-z$0-9]*\1/
++  var property = /^\.(?:\$\d+|(`?)[_A-Za-z][_A-Za-z$0-9]*\1)/
++  var instruction = /^\#[A-Za-z]+/
++  var attribute = /^@(?:\$\d+|(`?)[_A-Za-z][_A-Za-z$0-9]*\1)/
++  //var regexp = /^\/(?!\s)(?:\/\/)?(?:\\.|[^\/])+\//
++
++  function tokenBase(stream, state, prev) {
++    if (stream.sol()) state.indented = stream.indentation()
++    if (stream.eatSpace()) return null
++
++    var ch = stream.peek()
++    if (ch == "/") {
++      if (stream.match("//")) {
++        stream.skipToEnd()
++        return "comment"
++      }
++      if (stream.match("/*")) {
++        state.tokenize.push(tokenComment)
++        return tokenComment(stream, state)
++      }
++    }
++    if (stream.match(instruction)) return "builtin"
++    if (stream.match(attribute)) return "attribute"
++    if (stream.match(binary)) return "number"
++    if (stream.match(octal)) return "number"
++    if (stream.match(hexadecimal)) return "number"
++    if (stream.match(decimal)) return "number"
++    if (stream.match(property)) return "property"
++    if (operators.indexOf(ch) > -1) {
++      stream.next()
++      return "operator"
++    }
++    if (punc.indexOf(ch) > -1) {
++      stream.next()
++      stream.match("..")
++      return "punctuation"
++    }
++    var stringMatch
++    if (stringMatch = stream.match(/("""|"|')/)) {
++      var tokenize = tokenString.bind(null, stringMatch[0])
++      state.tokenize.push(tokenize)
++      return tokenize(stream, state)
++    }
++
++    if (stream.match(identifier)) {
++      var ident = stream.current()
++      if (types.hasOwnProperty(ident)) return "variable-2"
++      if (atoms.hasOwnProperty(ident)) return "atom"
++      if (keywords.hasOwnProperty(ident)) {
++        if (definingKeywords.hasOwnProperty(ident))
++          state.prev = "define"
++        return "keyword"
++      }
++      if (prev == "define") return "def"
++      return "variable"
++    }
++
++    stream.next()
++    return null
++  }
++
++  function tokenUntilClosingParen() {
++    var depth = 0
++    return function(stream, state, prev) {
++      var inner = tokenBase(stream, state, prev)
++      if (inner == "punctuation") {
++        if (stream.current() == "(") ++depth
++        else if (stream.current() == ")") {
++          if (depth == 0) {
++            stream.backUp(1)
++            state.tokenize.pop()
++            return state.tokenize[state.tokenize.length - 1](stream, state)
++          }
++          else --depth
++        }
++      }
++      return inner
++    }
++  }
++
++  function tokenString(openQuote, stream, state) {
++    var singleLine = openQuote.length == 1
++    var ch, escaped = false
++    while (ch = stream.peek()) {
++      if (escaped) {
++        stream.next()
++        if (ch == "(") {
++          state.tokenize.push(tokenUntilClosingParen())
++          return "string"
++        }
++        escaped = false
++      } else if (stream.match(openQuote)) {
++        state.tokenize.pop()
++        return "string"
++      } else {
++        stream.next()
++        escaped = ch == "\\"
++      }
++    }
++    if (singleLine) {
++      state.tokenize.pop()
++    }
++    return "string"
++  }
++
++  function tokenComment(stream, state) {
++    var ch
++    while (ch = stream.next()) {
++      if (ch === "/" && stream.eat("*")) {
++        state.tokenize.push(tokenComment)
++      } else if (ch === "*" && stream.eat("/")) {
++        state.tokenize.pop()
++        break
++      }
++    }
++    return "comment"
++  }
++
++  function Context(prev, align, indented) {
++    this.prev = prev
++    this.align = align
++    this.indented = indented
++  }
++
++  function pushContext(state, stream) {
++    var align = stream.match(/^\s*($|\/[\/\*])/, false) ? null : stream.column() + 1
++    state.context = new Context(state.context, align, state.indented)
++  }
++
++  function popContext(state) {
++    if (state.context) {
++      state.indented = state.context.indented
++      state.context = state.context.prev
++    }
++  }
++
++  CodeMirror.defineMode("swift", function(config) {
++    return {
++      startState: function() {
++        return {
++          prev: null,
++          context: null,
++          indented: 0,
++          tokenize: []
++        }
++      },
++
++      token: function(stream, state) {
++        var prev = state.prev
++        state.prev = null
++        var tokenize = state.tokenize[state.tokenize.length - 1] || tokenBase
++        var style = tokenize(stream, state, prev)
++        if (!style || style == "comment") state.prev = prev
++        else if (!state.prev) state.prev = style
++
++        if (style == "punctuation") {
++          var bracket = /[\(\[\{]|([\]\)\}])/.exec(stream.current())
++          if (bracket) (bracket[1] ? popContext : pushContext)(state, stream)
++        }
++
++        return style
++      },
++
++      indent: function(state, textAfter) {
++        var cx = state.context
++        if (!cx) return 0
++        var closing = /^[\]\}\)]/.test(textAfter)
++        if (cx.align != null) return cx.align - (closing ? 1 : 0)
++        return cx.indented + (closing ? 0 : config.indentUnit)
++      },
++
++      electricInput: /^\s*[\)\}\]]$/,
++
++      lineComment: "//",
++      blockCommentStart: "/*",
++      blockCommentEnd: "*/",
++      fold: "brace",
++      closeBrackets: "()[]{}''\"\"``"
++    }
++  })
++
++  CodeMirror.defineMIME("text/x-swift","swift")
++});
+diff --git a/app/src/main/assets/vendor/tcl.js b/app/src/main/assets/vendor/tcl.js
+new file mode 100644
+index 0000000..fd0c517
+--- /dev/null
++++ b/app/src/main/assets/vendor/tcl.js
+@@ -0,0 +1,140 @@
++// CodeMirror, copyright (c) by Marijn Haverbeke and others
++// Distributed under an MIT license: https://codemirror.net/5/LICENSE
++
++//tcl mode by Ford_Lawnmower :: Based on Velocity mode by Steve O'Hara
++
++(function(mod) {
++  if (typeof exports == "object" && typeof module == "object") // CommonJS
++    mod(require("../../lib/codemirror"));
++  else if (typeof define == "function" && define.amd) // AMD
++    define(["../../lib/codemirror"], mod);
++  else // Plain browser env
++    mod(CodeMirror);
++})(function(CodeMirror) {
++"use strict";
++
++CodeMirror.defineMode("tcl", function() {
++  function parseWords(str) {
++    var obj = {}, words = str.split(" ");
++    for (var i = 0; i < words.length; ++i) obj[words[i]] = true;
++    return obj;
++  }
++  var keywords = parseWords("Tcl safe after append array auto_execok auto_import auto_load " +
++        "auto_mkindex auto_mkindex_old auto_qualify auto_reset bgerror " +
++        "binary break catch cd close concat continue dde eof encoding error " +
++        "eval exec exit expr fblocked fconfigure fcopy file fileevent filename " +
++        "filename flush for foreach format gets glob global history http if " +
++        "incr info interp join lappend lindex linsert list llength load lrange " +
++        "lreplace lsearch lset lsort memory msgcat namespace open package parray " +
++        "pid pkg::create pkg_mkIndex proc puts pwd re_syntax read regex regexp " +
++        "registry regsub rename resource return scan seek set socket source split " +
++        "string subst switch tcl_endOfWord tcl_findLibrary tcl_startOfNextWord " +
++        "tcl_wordBreakAfter tcl_startOfPreviousWord tcl_wordBreakBefore tcltest " +
++        "tclvars tell time trace unknown unset update uplevel upvar variable " +
++    "vwait");
++    var functions = parseWords("if elseif else and not or eq ne in ni for foreach while switch");
++    var isOperatorChar = /[+\-*&%=<>!?^\/\|]/;
++    function chain(stream, state, f) {
++      state.tokenize = f;
++      return f(stream, state);
++    }
++    function tokenBase(stream, state) {
++      var beforeParams = state.beforeParams;
++      state.beforeParams = false;
++      var ch = stream.next();
++      if ((ch == '"' || ch == "'") && state.inParams) {
++        return chain(stream, state, tokenString(ch));
++      } else if (/[\[\]{}\(\),;\.]/.test(ch)) {
++        if (ch == "(" && beforeParams) state.inParams = true;
++        else if (ch == ")") state.inParams = false;
++          return null;
++      } else if (/\d/.test(ch)) {
++        stream.eatWhile(/[\w\.]/);
++        return "number";
++      } else if (ch == "#") {
++        if (stream.eat("*"))
++          return chain(stream, state, tokenComment);
++        if (ch == "#" && stream.match(/ *\[ *\[/))
++          return chain(stream, state, tokenUnparsed);
++        stream.skipToEnd();
++        return "comment";
++      } else if (ch == '"') {
++        stream.skipTo(/"/);
++        return "comment";
++      } else if (ch == "$") {
++        stream.eatWhile(/[$_a-z0-9A-Z\.{:]/);
++        stream.eatWhile(/}/);
++        state.beforeParams = true;
++        return "builtin";
++      } else if (isOperatorChar.test(ch)) {
++        stream.eatWhile(isOperatorChar);
++        return "comment";
++      } else {
++        stream.eatWhile(/[\w\$_{}\xa1-\uffff]/);
++        var word = stream.current().toLowerCase();
++        if (keywords && keywords.propertyIsEnumerable(word))
++          return "keyword";
++        if (functions && functions.propertyIsEnumerable(word)) {
++          state.beforeParams = true;
++          return "keyword";
++        }
++        return null;
++      }
++    }
++    function tokenString(quote) {
++      return function(stream, state) {
++      var escaped = false, next, end = false;
++      while ((next = stream.next()) != null) {
++        if (next == quote && !escaped) {
++          end = true;
++          break;
++        }
++        escaped = !escaped && next == "\\";
++      }
++      if (end) state.tokenize = tokenBase;
++        return "string";
++      };
++    }
++    function tokenComment(stream, state) {
++      var maybeEnd = false, ch;
++      while (ch = stream.next()) {
++        if (ch == "#" && maybeEnd) {
++          state.tokenize = tokenBase;
++          break;
++        }
++        maybeEnd = (ch == "*");
++      }
++      return "comment";
++    }
++    function tokenUnparsed(stream, state) {
++      var maybeEnd = 0, ch;
++      while (ch = stream.next()) {
++        if (ch == "#" && maybeEnd == 2) {
++          state.tokenize = tokenBase;
++          break;
++        }
++        if (ch == "]")
++          maybeEnd++;
++        else if (ch != " ")
++          maybeEnd = 0;
++      }
++      return "meta";
++    }
++    return {
++      startState: function() {
++        return {
++          tokenize: tokenBase,
++          beforeParams: false,
++          inParams: false
++        };
++      },
++      token: function(stream, state) {
++        if (stream.eatSpace()) return null;
++        return state.tokenize(stream, state);
++      },
++      lineComment: "#"
++    };
++});
++CodeMirror.defineMIME("text/x-tcl", "tcl");
++
++});
+diff --git a/app/src/main/assets/vendor/toml.js b/app/src/main/assets/vendor/toml.js
+new file mode 100644
+index 0000000..ee0c239
+--- /dev/null
++++ b/app/src/main/assets/vendor/toml.js
+@@ -0,0 +1,88 @@
++// CodeMirror, copyright (c) by Marijn Haverbeke and others
++// Distributed under an MIT license: https://codemirror.net/5/LICENSE
++
++(function(mod) {
++  if (typeof exports == "object" && typeof module == "object") // CommonJS
++    mod(require("../../lib/codemirror"));
++  else if (typeof define == "function" && define.amd) // AMD
++    define(["../../lib/codemirror"], mod);
++  else // Plain browser env
++    mod(CodeMirror);
++})(function(CodeMirror) {
++"use strict";
++
++CodeMirror.defineMode("toml", function () {
++  return {
++    startState: function () {
++      return {
++        inString: false,
++        stringType: "",
++        lhs: true,
++        inArray: 0
++      };
++    },
++    token: function (stream, state) {
++      //check for state changes
++      if (!state.inString && ((stream.peek() == '"') || (stream.peek() == "'"))) {
++        state.stringType = stream.peek();
++        stream.next(); // Skip quote
++        state.inString = true; // Update state
++      }
++      if (stream.sol() && state.inArray === 0) {
++        state.lhs = true;
++      }
++      //return state
++      if (state.inString) {
++        while (state.inString && !stream.eol()) {
++          if (stream.peek() === state.stringType) {
++            stream.next(); // Skip quote
++            state.inString = false; // Clear flag
++          } else if (stream.peek() === '\\') {
++            stream.next();
++            stream.next();
++          } else {
++            stream.match(/^.[^\\\"\']*/);
++          }
++        }
++        return state.lhs ? "property string" : "string"; // Token style
++      } else if (state.inArray && stream.peek() === ']') {
++        stream.next();
++        state.inArray--;
++        return 'bracket';
++      } else if (state.lhs && stream.peek() === '[' && stream.skipTo(']')) {
++        stream.next();//skip closing ]
++        // array of objects has an extra open & close []
++        if (stream.peek() === ']') stream.next();
++        return "atom";
++      } else if (stream.peek() === "#") {
++        stream.skipToEnd();
++        return "comment";
++      } else if (stream.eatSpace()) {
++        return null;
++      } else if (state.lhs && stream.eatWhile(function (c) { return c != '=' && c != ' '; })) {
++        return "property";
++      } else if (state.lhs && stream.peek() === "=") {
++        stream.next();
++        state.lhs = false;
++        return null;
++      } else if (!state.lhs && stream.match(/^\d\d\d\d[\d\-\:\.T]*Z/)) {
++        return 'atom'; //date
++      } else if (!state.lhs && (stream.match('true') || stream.match('false'))) {
++        return 'atom';
++      } else if (!state.lhs && stream.peek() === '[') {
++        state.inArray++;
++        stream.next();
++        return 'bracket';
++      } else if (!state.lhs && stream.match(/^\-?\d+(?:\.\d+)?/)) {
++        return 'number';
++      } else if (!stream.eatSpace()) {
++        stream.next();
++      }
++      return null;
++    }
++  };
++});
++
++CodeMirror.defineMIME('text/x-toml', 'toml');
++
++});
+diff --git a/app/src/main/assets/vendor/vb.js b/app/src/main/assets/vendor/vb.js
+new file mode 100644
+index 0000000..d77fdfb
+--- /dev/null
++++ b/app/src/main/assets/vendor/vb.js
+@@ -0,0 +1,275 @@
++// CodeMirror, copyright (c) by Marijn Haverbeke and others
++// Distributed under an MIT license: https://codemirror.net/5/LICENSE
++
++(function(mod) {
++  if (typeof exports == "object" && typeof module == "object") // CommonJS
++    mod(require("../../lib/codemirror"));
++  else if (typeof define == "function" && define.amd) // AMD
++    define(["../../lib/codemirror"], mod);
++  else // Plain browser env
++    mod(CodeMirror);
++})(function(CodeMirror) {
++"use strict";
++
++CodeMirror.defineMode("vb", function(conf, parserConf) {
++    var ERRORCLASS = 'error';
++
++    function wordRegexp(words) {
++        return new RegExp("^((" + words.join(")|(") + "))\\b", "i");
++    }
++
++    var singleOperators = new RegExp("^[\\+\\-\\*/%&\\\\|\\^~<>!]");
++    var singleDelimiters = new RegExp('^[\\(\\)\\[\\]\\{\\}@,:`=;\\.]');
++    var doubleOperators = new RegExp("^((==)|(<>)|(<=)|(>=)|(<>)|(<<)|(>>)|(//)|(\\*\\*))");
++    var doubleDelimiters = new RegExp("^((\\+=)|(\\-=)|(\\*=)|(%=)|(/=)|(&=)|(\\|=)|(\\^=))");
++    var tripleDelimiters = new RegExp("^((//=)|(>>=)|(<<=)|(\\*\\*=))");
++    var identifiers = new RegExp("^[_A-Za-z][_A-Za-z0-9]*");
++
++    var openingKeywords = ['class','module', 'sub','enum','select','while','if','function', 'get','set','property', 'try', 'structure', 'synclock', 'using', 'with'];
++    var middleKeywords = ['else','elseif','case', 'catch', 'finally'];
++    var endKeywords = ['next','loop'];
++
++    var operatorKeywords = ['and', "andalso", 'or', 'orelse', 'xor', 'in', 'not', 'is', 'isnot', 'like'];
++    var wordOperators = wordRegexp(operatorKeywords);
++
++    var commonKeywords = ["#const", "#else", "#elseif", "#end", "#if", "#region", "addhandler", "addressof", "alias", "as", "byref", "byval", "cbool", "cbyte", "cchar", "cdate", "cdbl", "cdec", "cint", "clng", "cobj", "compare", "const", "continue", "csbyte", "cshort", "csng", "cstr", "cuint", "culng", "cushort", "declare", "default", "delegate", "dim", "directcast", "each", "erase", "error", "event", "exit", "explicit", "false", "for", "friend", "gettype", "goto", "handles", "implements", "imports", "infer", "inherits", "interface", "isfalse", "istrue", "lib", "me", "mod", "mustinherit", "mustoverride", "my", "mybase", "myclass", "namespace", "narrowing", "new", "nothing", "notinheritable", "notoverridable", "of", "off", "on", "operator", "option", "optional", "out", "overloads", "overridable", "overrides", "paramarray", "partial", "private", "protected", "public", "raiseevent", "readonly", "redim", "removehandler", "resume", "return", "shadows", "shared", "static", "step", "stop", "strict", "then", "throw", "to", "true", "trycast", "typeof", "until", "until", "when", "widening", "withevents", "writeonly"];
++
++    var commontypes = ['object', 'boolean', 'char', 'string', 'byte', 'sbyte', 'short', 'ushort', 'int16', 'uint16', 'integer', 'uinteger', 'int32', 'uint32', 'long', 'ulong', 'int64', 'uint64', 'decimal', 'single', 'double', 'float', 'date', 'datetime', 'intptr', 'uintptr'];
++
++    var keywords = wordRegexp(commonKeywords);
++    var types = wordRegexp(commontypes);
++    var stringPrefixes = '"';
++
++    var opening = wordRegexp(openingKeywords);
++    var middle = wordRegexp(middleKeywords);
++    var closing = wordRegexp(endKeywords);
++    var doubleClosing = wordRegexp(['end']);
++    var doOpening = wordRegexp(['do']);
++
++    var indentInfo = null;
++
++    CodeMirror.registerHelper("hintWords", "vb", openingKeywords.concat(middleKeywords).concat(endKeywords)
++                                .concat(operatorKeywords).concat(commonKeywords).concat(commontypes));
++
++    function indent(_stream, state) {
++      state.currentIndent++;
++    }
++
++    function dedent(_stream, state) {
++      state.currentIndent--;
++    }
++    // tokenizers
++    function tokenBase(stream, state) {
++        if (stream.eatSpace()) {
++            return null;
++        }
++
++        var ch = stream.peek();
++
++        // Handle Comments
++        if (ch === "'") {
++            stream.skipToEnd();
++            return 'comment';
++        }
++
++
++        // Handle Number Literals
++        if (stream.match(/^((&H)|(&O))?[0-9\.a-f]/i, false)) {
++            var floatLiteral = false;
++            // Floats
++            if (stream.match(/^\d*\.\d+F?/i)) { floatLiteral = true; }
++            else if (stream.match(/^\d+\.\d*F?/)) { floatLiteral = true; }
++            else if (stream.match(/^\.\d+F?/)) { floatLiteral = true; }
++
++            if (floatLiteral) {
++                // Float literals may be "imaginary"
++                stream.eat(/J/i);
++                return 'number';
++            }
++            // Integers
++            var intLiteral = false;
++            // Hex
++            if (stream.match(/^&H[0-9a-f]+/i)) { intLiteral = true; }
++            // Octal
++            else if (stream.match(/^&O[0-7]+/i)) { intLiteral = true; }
++            // Decimal
++            else if (stream.match(/^[1-9]\d*F?/)) {
++                // Decimal literals may be "imaginary"
++                stream.eat(/J/i);
++                // TODO - Can you have imaginary longs?
++                intLiteral = true;
++            }
++            // Zero by itself with no other piece of number.
++            else if (stream.match(/^0(?![\dx])/i)) { intLiteral = true; }
++            if (intLiteral) {
++                // Integer literals may be "long"
++                stream.eat(/L/i);
++                return 'number';
++            }
++        }
++
++        // Handle Strings
++        if (stream.match(stringPrefixes)) {
++            state.tokenize = tokenStringFactory(stream.current());
++            return state.tokenize(stream, state);
++        }
++
++        // Handle operators and Delimiters
++        if (stream.match(tripleDelimiters) || stream.match(doubleDelimiters)) {
++            return null;
++        }
++        if (stream.match(doubleOperators)
++            || stream.match(singleOperators)
++            || stream.match(wordOperators)) {
++            return 'operator';
++        }
++        if (stream.match(singleDelimiters)) {
++            return null;
++        }
++        if (stream.match(doOpening)) {
++            indent(stream,state);
++            state.doInCurrentLine = true;
++            return 'keyword';
++        }
++        if (stream.match(opening)) {
++            if (! state.doInCurrentLine)
++              indent(stream,state);
++            else
++              state.doInCurrentLine = false;
++            return 'keyword';
++        }
++        if (stream.match(middle)) {
++            return 'keyword';
++        }
++
++        if (stream.match(doubleClosing)) {
++            dedent(stream,state);
++            dedent(stream,state);
++            return 'keyword';
++        }
++        if (stream.match(closing)) {
++            dedent(stream,state);
++            return 'keyword';
++        }
++
++        if (stream.match(types)) {
++            return 'keyword';
++        }
++
++        if (stream.match(keywords)) {
++            return 'keyword';
++        }
++
++        if (stream.match(identifiers)) {
++            return 'variable';
++        }
++
++        // Handle non-detected items
++        stream.next();
++        return ERRORCLASS;
++    }
++
++    function tokenStringFactory(delimiter) {
++        var singleline = delimiter.length == 1;
++        var OUTCLASS = 'string';
++
++        return function(stream, state) {
++            while (!stream.eol()) {
++                stream.eatWhile(/[^'"]/);
++                if (stream.match(delimiter)) {
++                    state.tokenize = tokenBase;
++                    return OUTCLASS;
++                } else {
++                    stream.eat(/['"]/);
++                }
++            }
++            if (singleline) {
++                if (parserConf.singleLineStringErrors) {
++                    return ERRORCLASS;
++                } else {
++                    state.tokenize = tokenBase;
++                }
++            }
++            return OUTCLASS;
++        };
++    }
++
++
++    function tokenLexer(stream, state) {
++        var style = state.tokenize(stream, state);
++        var current = stream.current();
++
++        // Handle '.' connected identifiers
++        if (current === '.') {
++            style = state.tokenize(stream, state);
++            if (style === 'variable') {
++                return 'variable';
++            } else {
++                return ERRORCLASS;
++            }
++        }
++
++
++        var delimiter_index = '[({'.indexOf(current);
++        if (delimiter_index !== -1) {
++            indent(stream, state );
++        }
++        if (indentInfo === 'dedent') {
++            if (dedent(stream, state)) {
++                return ERRORCLASS;
++            }
++        }
++        delimiter_index = '])}'.indexOf(current);
++        if (delimiter_index !== -1) {
++            if (dedent(stream, state)) {
++                return ERRORCLASS;
++            }
++        }
++
++        return style;
++    }
++
++    var external = {
++        electricChars:"dDpPtTfFeE ",
++        startState: function() {
++            return {
++              tokenize: tokenBase,
++              lastToken: null,
++              currentIndent: 0,
++              nextLineIndent: 0,
++              doInCurrentLine: false
++
++
++          };
++        },
++
++        token: function(stream, state) {
++            if (stream.sol()) {
++              state.currentIndent += state.nextLineIndent;
++              state.nextLineIndent = 0;
++              state.doInCurrentLine = 0;
++            }
++            var style = tokenLexer(stream, state);
++
++            state.lastToken = {style:style, content: stream.current()};
++
++
++
++            return style;
++        },
++
++        indent: function(state, textAfter) {
++            var trueText = textAfter.replace(/^\s+|\s+$/g, '') ;
++            if (trueText.match(closing) || trueText.match(doubleClosing) || trueText.match(middle)) return conf.indentUnit*(state.currentIndent-1);
++            if(state.currentIndent < 0) return 0;
++            return state.currentIndent * conf.indentUnit;
++        },
++
++        lineComment: "'"
++    };
++    return external;
++});
++
++CodeMirror.defineMIME("text/x-vb", "vb");
++
++});
+diff --git a/licenses/JetBrains-Mono-OFL.txt b/licenses/JetBrains-Mono-OFL.txt
+new file mode 100644
+index 0000000..29401e9
+--- /dev/null
++++ b/licenses/JetBrains-Mono-OFL.txt
+@@ -0,0 +1,93 @@
++Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
++
++This Font Software is licensed under the SIL Open Font License, Version 1.1.
++This license is copied below, and is also available with a FAQ at:
++http://scripts.sil.org/OFL
++
++
++-----------------------------------------------------------
++SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
++-----------------------------------------------------------
++
++PREAMBLE
++The goals of the Open Font License (OFL) are to stimulate worldwide
++development of collaborative font projects, to support the font creation
++efforts of academic and linguistic communities, and to provide a free and
++open framework in which fonts may be shared and improved in partnership
++with others.
++
++The OFL allows the licensed fonts to be used, studied, modified and
++redistributed freely as long as they are not sold by themselves. The
++fonts, including any derivative works, can be bundled, embedded,
++redistributed and/or sold with any software provided that any reserved
++names are not used by derivative works. The fonts and derivatives,
++however, cannot be released under any other type of license. The
++requirement for fonts to remain under this license does not apply
++to any document created using the fonts or their derivatives.
++
++DEFINITIONS
++"Font Software" refers to the set of files released by the Copyright
++Holder(s) under this license and clearly marked as such. This may
++include source files, build scripts and documentation.
++
++"Reserved Font Name" refers to any names specified as such after the
++copyright statement(s).
++
++"Original Version" refers to the collection of Font Software components as
++distributed by the Copyright Holder(s).
++
++"Modified Version" refers to any derivative made by adding to, deleting,
++or substituting -- in part or in whole -- any of the components of the
++Original Version, by changing formats or by porting the Font Software to a
++new environment.
++
++"Author" refers to any designer, engineer, programmer, technical
++writer or other person who contributed to the Font Software.
++
++PERMISSION & CONDITIONS
++Permission is hereby granted, free of charge, to any person obtaining
++a copy of the Font Software, to use, study, copy, merge, embed, modify,
++redistribute, and sell modified and unmodified copies of the Font
++Software, subject to the following conditions:
++
++1) Neither the Font Software nor any of its individual components,
++in Original or Modified Versions, may be sold by itself.
++
++2) Original or Modified Versions of the Font Software may be bundled,
++redistributed and/or sold with any software, provided that each copy
++contains the above copyright notice and this license. These can be
++included either as stand-alone text files, human-readable headers or
++in the appropriate machine-readable metadata fields within text or
++binary files as long as those fields can be easily viewed by the user.
++
++3) No Modified Version of the Font Software may use the Reserved Font
++Name(s) unless explicit written permission is granted by the corresponding
++Copyright Holder. This restriction only applies to the primary font name as
++presented to the users.
++
++4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
++Software shall not be used to promote, endorse or advertise any
++Modified Version, except to acknowledge the contribution(s) of the
++Copyright Holder(s) and the Author(s) or with their explicit written
++permission.
++
++5) The Font Software, modified or unmodified, in part or in whole,
++must be distributed entirely under this license, and must not be
++distributed under any other license. The requirement for fonts to
++remain under this license does not apply to any document created
++using the Font Software.
++
++TERMINATION
++This license becomes null and void if any of the above conditions are
++not met.
++
++DISCLAIMER
++THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
++EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
++MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
++OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
++COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
++INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
++DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
++OTHER DEALINGS IN THE FONT SOFTWARE.

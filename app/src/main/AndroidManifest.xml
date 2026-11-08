@@ -14,8 +14,35 @@
   <queries><package android:name="moe.shizuku.privileged.api" /></queries>
   <application android:theme="@style/AppTheme" android:label="赛博中枢管家" android:icon="@drawable/ic_launcher" android:allowBackup="false" android:usesCleartextTraffic="true" android:supportsRtl="true" android:largeHeap="true">
     <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden" android:windowSoftInputMode="adjustResize">
-      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+      <!-- The LAUNCHER filter lives on the icon aliases below: exactly one alias is
+           enabled at a time, so switching icons never duplicates chooser rows. -->
+      <!-- One "Open with" entry for every kind of file. A single WebView UI handles
+           them all, so one filter here avoids the duplicate chooser rows that
+           separate per-media activity aliases would create. -->
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <action android:name="android.intent.action.EDIT" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="content" />
+        <data android:scheme="file" />
+        <data android:mimeType="*/*" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.SEND" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:mimeType="*/*" />
+      </intent-filter>
     </activity>
+    <activity-alias android:name=".MainActivityDefault" android:targetActivity=".MainActivity" android:exported="true" android:enabled="true" android:icon="@drawable/ic_launcher" android:label="赛博中枢管家">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+    </activity-alias>
+    <activity-alias android:name=".MainActivityBlue" android:targetActivity=".MainActivity" android:exported="true" android:enabled="false" android:icon="@drawable/ic_launcher_blue" android:label="赛博中枢管家 · 极光蓝">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+    </activity-alias>
+    <activity-alias android:name=".MainActivityGreen" android:targetActivity=".MainActivity" android:exported="true" android:enabled="false" android:icon="@drawable/ic_launcher_green" android:label="赛博中枢管家 · 矩阵绿">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+    </activity-alias>
     <activity android:name=".player.MediaPlayerActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" android:launchMode="singleTop" />
     <activity android:name=".preview.HtmlPreviewActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
     <provider android:name=".ShareProvider" android:authorities="com.cyberhub.manager.files" android:exported="false" android:grantUriPermissions="true" />

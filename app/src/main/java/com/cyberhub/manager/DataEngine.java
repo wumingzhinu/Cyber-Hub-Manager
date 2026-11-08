@@ -50,6 +50,11 @@ public final class DataEngine {
    case "compress":{JSONObject r=ArchiveTools.create(a);JSONArray removed=new JSONArray(),failures=new JSONArray();if(a.optBoolean("deleteSources")){JSONArray paths=a.getJSONArray("paths");for(int i=0;i<paths.length();i++){String path=paths.getString(i);try{recycle(new File(path));removed.put(path);}catch(Exception e){failures.put(path+": "+e.getMessage());}}}r.put("removed",removed).put("cleanupErrors",failures);record("已创建归档 "+r.getJSONArray("outputs"));return r;}
    case "archiveExtract":{File src=resolve(a),dest=FileOps.child(new File(a.getString("destination")),a.getString("name"));ArchiveTools.extract(src,dest,a.optString("password"));record("已解压 "+src);return dest.getPath();}
    case "compare":return CompareTools.compare(new File(a.getString("left")),new File(a.getString("right")),a.getString("mode"));
+   case "compareFolders":return ExtraTools.compareFolders(new File(a.getString("left")),new File(a.getString("right")),a.optBoolean("hash",false));
+   case "fileData":return ExtraTools.fileData(resolve(a));
+   case "saveFileData":return ExtraTools.saveFileData(resolve(a),a.getString("data"));
+   case "mediaProbe":return ExtraTools.mediaProbe(activity,resolve(a));
+   case "signatures":return ExtraTools.signatures(activity,a.optString("path",""));
    case "zip":{File f=new File(a.getString("path")),dst=FileOps.child(f.getParentFile(),a.getString("name"));FileOps.zip(f,dst);record("已归档 "+f.getName());return dst.getPath();}
    case "fileSplit":{File src=resolve(a);JSONObject r=FileTools.split(src,a.getLong("chunkBytes"));if(a.optBoolean("deleteSource"))recycle(src);record("已分割 "+src.getName()+" 为 "+r.getInt("parts")+" 个分卷");return r;}
    case "fileMerge":{List<File> parts=new ArrayList<>();JSONArray ps=a.getJSONArray("paths");for(int i=0;i<ps.length();i++)parts.add(new File(ps.getString(i)));JSONObject merged=FileTools.merge(parts);record("已合并 "+merged.getInt("parts")+" 个分卷 → "+merged.getString("path"));return merged;}
