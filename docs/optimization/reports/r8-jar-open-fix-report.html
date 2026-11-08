@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>无法打开 JAR 文件修复报告 · r8</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1f2328;--muted:#5b6570;--line:#e3e7ec;--accent:#0969da;--ok:#1a7f37;--warn:#9a6700;--code:#f2f4f7}
+@media(prefers-color-scheme:dark){:root{--bg:#0d1117;--card:#161b22;--fg:#e6edf3;--muted:#9198a1;--line:#30363d;--accent:#58a6ff;--ok:#3fb950;--warn:#d29922;--code:#1c2128}}
+*{box-sizing:border-box}
+body{margin:0;padding:28px 18px 60px;background:var(--bg);color:var(--fg);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:960px;margin:0 auto}
+h1{font-size:26px;margin:0 0 6px;letter-spacing:.2px}
+.sub{color:var(--muted);margin:0 0 24px;font-size:14px}
+h2{font-size:19px;margin:30px 0 12px;padding-left:11px;border-left:4px solid var(--accent)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:14px 0}
+table{width:100%;border-collapse:collapse;font-size:14px;margin:10px 0}
+th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+th{background:var(--code);font-weight:600;white-space:nowrap}
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+code{background:var(--code);padding:2px 5px;border-radius:4px;word-break:break-all}
+pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:14px;overflow:auto;line-height:1.55;margin:10px 0}
+.bad{color:#cf222e;font-weight:600}
+.good{color:var(--ok);font-weight:600}
+.pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;background:rgba(9,105,218,.12);color:var(--accent)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.kv{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.kv b{display:block;font-size:12px;color:var(--muted);font-weight:500;margin-bottom:4px}
+.kv span{font-size:14px;word-break:break-all}
+ul{padding-left:22px;margin:8px 0}li{margin:5px 0}
+blockquote{margin:12px 0;padding:10px 14px;border-left:3px solid var(--accent);background:var(--code);border-radius:0 8px 8px 0;color:var(--muted)}
+.foot{margin-top:34px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>无法打开 JAR 文件修复报告 <span class="pill">r8</span></h1>
+<p class="sub">真机报错「文件过大，无法执行此操作（上限 8 MB）」 · 提交 <code>bd55744</code> · Release <code>build-59</code> · 2026-11-09</p>
+
+<div class="grid">
+  <div class="kv"><b>根因</b><span><code>.jar</code> 未纳入 <code>archiveExtensions</code>，被判为普通文件而误走文本读取，撞上 8 MB 上限</span></div>
+  <div class="kv"><b>新 APK</b><span>Cyber-Hub-Manager-0.1.59-r8.apk（21,366,028 字节）</span></div>
+  <div class="kv"><b>SHA256</b><span>0a40d0c99d719b79228457b2097e70bed9d86a534ba7b0d6224b20da39983808</span></div>
+  <div class="kv"><b>构建结果</b><span class="good">Actions run 42535379819 · success（2m15s）</span></div>
+</div>
+
+<h2>一、症状</h2>
+<div class="card">
+<p>在文件管理器中点击 JAR 文件（例如上一轮 r7「DEX 转 JAR」生成的产物）时无法打开，界面直接报错：</p>
+<pre>文件过大，无法执行此操作（上限 8 MB)</pre>
+<p>这不是「文件真的太大打不开」，而是<b>打开方式走错了</b>：JAR 是 ZIP 容器，本应像 ZIP / APK 一样进入双窗格压缩包浏览，却被当成普通文本读入编辑器，于是撞上文本编辑器的 8 MB 保护上限。</p>
+</div>
+
+<h2>二、根因：前端分类链路</h2>
+<div class="card">
+<p>报错文案精确来自 <code>FileOps.read(File, long)</code>：</p>
+<pre>public static final long MAX_TEXT = 8L * 1024 * 1024;
+public static byte[] read(File f, long limit) throws IOException {
+    if (f.length() > limit)
+        throw new IOException("文件过大，无法执行此操作（上限 " + limit / 1048576 + " MB)");
+    ...
+}</pre>
+<p>调用链一路回溯到点击动作：</p>
+<pre>openFile(f)                          // app.js
+  └─ fileType(f)                     // archiveExtensions 不含 'jar' → 返回 'file'
+       └─ return openText(...)       // 兜底分支：未知类型一律当文本打开
+            └─ rpc('read')           // DataEngine.read()
+                 └─ FileOps.read(f, FileOps.MAX_TEXT)   // 8 MB 上限</pre>
+<p><code>archiveExtensions</code> 原有 <code>zip / rar / 7z / tar / gz / … / iso</code>，唯独漏了 Java 归档；<code>fileType()</code> 末尾的专属列表也只含 <code>apk / apks / dex / xml / java / smali / arsc</code>。因此 <code>x.jar</code> 落到 <code>'file'</code>，进入 <code>openFile()</code> 最后一行的文本兜底。</p>
+<blockquote>后端其实一直是好的：<code>ArchiveTools.format()</code> 对未知扩展名默认返回 <code>"zip"</code>，<code>listEntries()</code> 用 zip4j 列条目、<code>readEntry()</code> 提取条目，<code>DataEngine.list()</code> / <code>resolve()</code> 也都按归档路径分发。缺的只是前端把 JAR 归类为归档。</blockquote>
+</div>
+
+<h2>三、同一根因的两种表现</h2>
+<div class="card">
+<table>
+<tr><th>JAR 大小</th><th>命中的检查</th><th>用户看到的报错</th></tr>
+<tr><td>&lt; 8 MB</td><td><code>DataEngine.read()</code> 扫描前 2048 字节发现 <code>0x00</code></td><td>二进制文件：无法作为文本打开，请在「打开方式」中选择十六进制查看器或其他应用</td></tr>
+<tr><td>&gt; 8 MB</td><td><code>FileOps.read()</code> 的长度前置判断</td><td class="bad">文件过大，无法执行此操作（上限 8 MB)</td></tr>
+</table>
+<p>本次实测样本里，单 DEX 转出的 JAR 为 7,058,565 字节（会报「二进制文件」），3 DEX 合并转出的 JAR 为 <b>23,597,013 字节</b>（正是用户所见的 8 MB 报错）。两种症状同源，一次分类修复同时消除。</p>
+</div>
+
+<h2>四、修复内容</h2>
+<div class="card">
+<table>
+<tr><th>文件</th><th>改动</th></tr>
+<tr><td><code>app.js</code></td><td><code>archiveExtensions</code> 增加 <code>jar / war / ear / aar / jmod</code>（均为标准 ZIP 容器）；点击即命中 <code>openFile()</code> 的 <code>type==='archive'</code> 分支，进入双窗格归档浏览。<code>apk / apks / xapk</code> 专属分类保持不变。</td></tr>
+<tr><td><code>app.js</code></td><td><code>openText()</code> 增加「文件过大」兜底：即便在「打开方式」里显式选择「编辑文本」，也会提示并回退到打开方式对话框（十六进制查看器 / 浏览压缩包），不再卡在纯错误页；原有「二进制文件」引导保持不变。</td></tr>
+<tr><td><code>app.js</code></td><td><code>UI_BUILD</code> 更新为 <code>r8</code>，关于页追加 r8 版本说明，便于核对设备上的实际版本。</td></tr>
+<tr><td><code>tests/jar-open-archive-check.py</code></td><td>新增 60 项防回归自检：JAR 系归类、既有归档扩展名未丢、归档分支排在文本兜底之前、大文件兜底、13 项打开方式网格结构、后端 ZIP 分支、8 MB 边界不动，并用 node 真实执行 <code>fileType()</code> 校验 14 个分类用例。</td></tr>
+<tr><td><code>tests/jar-open-dispatch-smoke.cjs</code></td><td>在 happy-dom 中加载真实 <code>app.js</code>，验证点击 JAR 走 <code>rpc('list', {archive})</code> 而不再走 <code>rpc('read')</code>。两项新测试均已接入 CI。</td></tr>
+<tr><td><code>.github/workflows/build-apk.yml</code> / <code>README.md</code></td><td>CI 前端测试步骤加入两项新检查；优化档案追加 r8 章节。</td></tr>
+</table>
+<p><b>Java 层零改动</b>：<code>DataEngine</code> / <code>ArchiveTools</code> / <code>FileOps</code> / <code>DexEngine</code> 全部未动，仅修正前端分类与错误兜底。</p>
+</div>
+
+<h2>五、验证</h2>
+<div class="card">
+<h3>1. 后端：真实 23.6 MB JAR 可正常浏览与提取</h3>
+<p>用 r7 实测产出的 JAR（19,371 条目 / 19,370 个 <code>.class</code>）在 JVM 上直接调用被修复功能所依赖的后端方法：</p>
+<pre>JAR=Cyber-Hub-Manager-0.1.59-r6.jar size=23597013
+ROOT_ENTRIES=14          # META-INF/ android/ antlr/ com/ jadx/ javax/ …
+SUB[META-INF]=1
+READ_ENTRY=android/aapt/pb/internal/ResourcesInternal$1.class bytes=203 magic=CA FE BA BE</pre>
+<p><code>listEntries()</code> 能列出根目录与子目录，<code>readEntry()</code> 提取出的 <code>.class</code> 具备正确魔数 <code>CAFEBABE</code> —— 证明「作为压缩包打开 JAR」这条链路完整可用。</p>
+
+<h3>2. 前端：真实 app.js 的点击分发</h3>
+<pre>PASS JAR 点击直接进入归档浏览，不再触发文本读取
+PASS 普通文本仍走文本编辑器，分类未回归
+PASS APK 专属分类保持不变
+PASS 「文件过大」引导到十六进制 / 浏览压缩包，不再卡在纯错误页
+ALL 4 JAR-OPEN CHECKS PASSED</pre>
+
+<h3>3. 测试对照（无回归）</h3>
+<table>
+<tr><th>项目</th><th>结果</th></tr>
+<tr><td><code>jar-open-archive-check.py</code></td><td class="good">PASS 60 项</td></tr>
+<tr><td><code>jar-open-dispatch-smoke.cjs</code></td><td class="good">PASS 4 项</td></tr>
+<tr><td><code>startup-direct-check.py</code> / <code>dex-to-jar-no-zipfs-check.py</code></td><td class="good">12 / 11 项仍 PASS（r6 / r7 修复未受影响）</td></tr>
+<tr><td><code>node --check app.js</code> / <code>boot.js</code></td><td class="good">通过</td></tr>
+<tr><td>CI 三套前端冒烟</td><td class="good">8 / 12 / 11 全 PASS</td></tr>
+<tr><td>全套 <code>.cjs</code> 改动前后逐项 diff</td><td class="good">原有 20 项结果完全一致，仅新增 1 项 PASS；10 项 FAIL 均为沙箱环境限制，与基线相同</td></tr>
+</table>
+</div>
+
+<h2>六、签名 APK 二进制校验</h2>
+<div class="card">
+<table>
+<tr><th>项</th><th>值</th></tr>
+<tr><td>Release</td><td><code>build-59</code>，资产 <code>Cyber-Hub-Manager-0.1.59.apk</code> 21,366,028 字节</td></tr>
+<tr><td>交付文件</td><td><code>/workspace/Cyber-Hub-Manager-0.1.59-r8.apk</code></td></tr>
+<tr><td>SHA256</td><td><code>0a40d0c99d719b79228457b2097e70bed9d86a534ba7b0d6224b20da39983808</code>（与 Release 摘要一致）</td></tr>
+<tr><td>与 r7 版逐条目对比</td><td>仅 <code>assets/app.js</code> 与 3 个 <code>META-INF/*</code> 签名清单变化；<code>AndroidManifest.xml</code>、全部 <code>classes*.dex</code> 及其它 assets 字节级一致</td></tr>
+<tr><td>签名证书</td><td>v2 / v3 签名块 ID 一致、证书 SHA256 与 r7 相同 → 可直接覆盖安装</td></tr>
+<tr><td>APK 内实测</td><td><code>app.js</code> 含 <code>'jar','war','ear','aar','jmod'</code>、<code>UI_BUILD='r8'</code>、<code>msg.includes('文件过大')</code>；<code>FileOps.MAX_TEXT</code> 仍为 8 MB</td></tr>
+</table>
+</div>
+
+<h2>七、兼容边界与未改动项</h2>
+<div class="card">
+<ul>
+<li><b>8 MB 文本上限本身不变</b>：<code>FileOps.MAX_TEXT</code> 仍是 <code>8L * 1024 * 1024</code>。修复的是「JAR 不该走文本读取」，而不是放宽文本编辑器保护；显式用「编辑文本」打开超大文件仍会收到提示，但现在会给出可操作的出路。</li>
+<li><b>归档内 <code>.class</code> 条目</b>：作为二进制文件，点击后会走原有的「二进制文件」引导，可在「打开方式」中选择十六进制查看器；本轮未加入独立 <code>.class</code> 反编译（那是另一项能力，需 Java 反编译器支持）。</li>
+<li>versionCode 55、versionName 0.1.59、签名密钥、默认中文文案、13 项打开方式网格、长按菜单项数，以及 r4 / r5 / r6 / r7 的全部修复均保持不变。</li>
+</ul>
+</div>
+
+<h2>八、使用说明</h2>
+<div class="card">
+<p>覆盖安装新 APK 后，直接点击任意 <code>.jar</code> / <code>.war</code> / <code>.ear</code> / <code>.aar</code> / <code>.jmod</code>：应进入双窗格压缩包浏览，可逐层展开包路径、查看 <code>META-INF/MANIFEST.MF</code>、解压或提取条目，不再出现「文件过大」提示。建议优先用 r7 生成的 20 MB 以上 JAR 复测，效果最明显。</p>
+<blockquote>若点击后仍看到旧报错，请确认已安装本包（编辑器信息栏或「关于 → 版本说明」应显示 <code>r8</code>），并从最近任务划掉应用后冷启动，避免 WebView 复用旧 <code>app.js</code> 缓存。</blockquote>
+</div>
+
+<p class="foot">赛博中枢管家 · 优化档案 r8 · 本报告与签名 APK 一并交付，报告已归档至仓库 <code>docs/optimization/reports/</code>；文档归档提交使用 <code>[skip ci]</code>，不会触发重复打包。</p>
+</div>
+</body>
+</html>
