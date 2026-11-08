@@ -12,7 +12,15 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <queries><package android:name="moe.shizuku.privileged.api" /></queries>
+  <!-- Shizuku v11+ 服务端的 BinderSender 只向「声明了 API_V23 权限」的客户端推送 binder：
+       sendBinder() 遍历应用的 requestedPermissions，含 PERMISSION(API_V23) 才调 sendBinderToUserApp，
+       否则直接 continue。本项目由 aapt2 直接打包，没有 Gradle manifest merger，官方 provider AAR
+       不会自动注入该权限；缺了它服务端根本不会把 binder 送到本应用，pingBinder() 恒为 false。
+       与 MT 管理器 2.26.11 的接入声明保持一致。 -->
+  <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
   <application android:theme="@style/AppTheme" android:label="赛博中枢管家" android:icon="@drawable/ic_launcher" android:allowBackup="false" android:usesCleartextTraffic="true" android:supportsRtl="true" android:largeHeap="true">
+    <!-- v3 客户端标记：Shizuku Manager 据此把本应用列入「应用管理」授权列表。 -->
+    <meta-data android:name="moe.shizuku.client.V3_SUPPORT" android:value="true" />
     <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden" android:windowSoftInputMode="adjustResize">
       <!-- The LAUNCHER filter lives on the icon aliases below: exactly one alias is
            enabled at a time, so switching icons never duplicates chooser rows. -->

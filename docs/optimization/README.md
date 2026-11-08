@@ -25,3 +25,18 @@
 - 新增当前行高亮（`cm-activeLine`），并补齐浅色 / 深色主题下 def、builtin、variable-2/3、type、property、operator、meta、tag、attribute、bracket、punctuation、error 等 token 配色。
 
 验证：真实 Chromium 渲染各 token 颜色与当前行高亮均生效；放行规则模拟中 `app.html` 的 38 个引用全部放行、67 个 assets 文件仅 `development-signing.p12` 与 `compiler/android-api.jar` 被拒；前端冒烟 8 / 12 / 11 全 PASS，另两项失败与改动前基线一致。
+
+## r5 修复（Shizuku 授权：补齐 API_V23 权限与 V3_SUPPORT 元数据）
+
+真机「提权诊断」截图：`rootGranted=false`、`rootAvailable=false`、`shizukuInstalled=true`、`shizukuProviderRegistered=true`，但 `shizukuRunning=false`、`shizukuGranted=false`、`shizukuVersion=-1`、`elevatedId=null`、`npErr=IllegalStateException（Shizuku 服务未启动或 binder 未送达）`、`rootListCount=-1`。设备无 Root，Shizuku 经无线调试启动，用户反馈 MT 管理器可正常授权而本应用不行。
+
+**根因**（对照 MT 2.26.11 的清单 + Shizuku 官方源码确认）：Shizuku 服务端 `server/src/main/java/rikka/shizuku/server/BinderSender.java` 的 `sendBinder()` 用 `PackageManager.GET_PERMISSIONS` 读取客户端 `PackageInfo.requestedPermissions`，仅当包含 `moe.shizuku.manager.permission.API_V23` 时才调用 `ShizukuService.sendBinderToUserApp()`，否则直接 `continue`——**清单里没声明这个权限，服务端根本不会把 binder 推给本应用**，`pingBinder()` 恒为 false、`getVersion()` 恒为 -1，与「服务是否在运行」「provider 是否注册」都无关。本项目由 `aapt2` 直接打包、没有 Gradle manifest merger，官方 `dev.rikka.shizuku:provider` AAR 本该自动注入的 `<uses-permission>` 与 `V3_SUPPORT` 元数据从未进入 Manifest（与 0.1.54 的 `${applicationId}` 占位符属于同一类「手搓打包丢配置」问题）。MT 2.26.11 的清单明确同时声明了 `API_V23`、`V3_SUPPORT` 与带 `INTERACT_ACROSS_USERS_FULL` 权限的 `.shizuku` provider。
+
+- `AndroidManifest.xml`：补 `<uses-permission android:name="moe.shizuku.manager.permission.API_V23" />`；在 `<application>` 内补 `<meta-data android:name="moe.shizuku.client.V3_SUPPORT" android:value="true" />`（Shizuku Manager 据此把应用列入「应用管理」授权列表）。provider 的 authorities / exported / multiprocess / permission 属性本已正确，保持不变。
+- `ElevatedAccess.java`：新增 `apiV23Declared()` / `v3SupportDeclared()` 运行时自检、`binderSeen` 标志与 `Shizuku.addBinderReceivedListenerSticky` / `addBinderDeadListener` 生命周期监听；`diag()` 与 `status()` 输出 `apiV23Declared`、`v3SupportDeclared`、`binderSeen`、`shizukuUid`；`npErr` 在未声明权限时直接指出根因，不再笼统归因为「服务未启动或时序问题」。
+- `app.js`：授权页在 `apiV23Declared=false` 时提示「应用需升级」并说明真实原因；「Shizuku 未运行」提示改为正确引导（启动服务 → 应用管理里允许 → 重启服务 → 划掉应用重开）；诊断弹窗新增上述四个字段。
+- `tests/shizuku-integration-check.py`：把 `API_V23` 元素、`V3_SUPPORT` 元数据、运行时自检字段与 binder 监听纳入硬断言防回归。
+
+验证：`aapt2` 打包由 CI 完成；本地集成自检通过、Manifest XML 解析出 `API_V23` 与 `V3_SUPPORT=true`、`app.js`/`boot.js` 语法通过、`javac` 全量 134 个 class 零错误（新增 2 个 listener 内部类）、前端冒烟 8 / 12 / 11 全 PASS，`video-ui-smoke` 与 `java-edit-ui-smoke` 两项失败与改动前基线逐项一致。versionCode 仍为 55、签名密钥未变，可直接覆盖安装。
+
+覆盖安装后需在 Shizuku 应用内**停止并重新启动服务**（服务端的 `PID_LIST`/`UID_LIST` 会记住已推送过的 UID），再从最近任务划掉本应用重新打开；诊断里 `apiV23Declared=true`、`shizukuRunning=true` 即表示通道已打通。

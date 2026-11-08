@@ -26,12 +26,50 @@ public final class ElevatedAccess {
     private static CountDownLatch shizukuLatch;
     private static final AtomicInteger shizukuResult=new AtomicInteger(-1);
     private static volatile boolean listenerAdded=false;
+    private static final String PERMISSION_API_V23="moe.shizuku.manager.permission.API_V23";
+    private static volatile boolean binderSeen=false;
+    private static volatile boolean binderListenersAdded=false;
 
     private static final Shizuku.OnRequestPermissionResultListener LISTENER=(requestCode,grantResult)->{
         if(requestCode!=SHIZUKU_REQ)return;
         shizukuResult.set(grantResult);
         CountDownLatch latch=shizukuLatch;if(latch!=null)latch.countDown();
     };
+
+    /** 应用是否声明了 Shizuku 服务端筛选客户端所需的 API_V23 权限。
+     *  服务端 BinderSender.sendBinder() 只读取 PackageInfo.requestedPermissions（GET_PERMISSIONS）：
+     *  含 PERMISSION(API_V23) 才调用 sendBinderToUserApp，否则直接 continue，binder 根本不会送达。
+     *  该检查只看「是否声明」，与运行时是否已授权无关，是接入的必要前置条件。 */
+    public static boolean apiV23Declared(Context c){
+        try{
+            android.content.pm.PackageInfo pi=c.getPackageManager().getPackageInfo(c.getPackageName(),PackageManager.GET_PERMISSIONS);
+            if(pi==null||pi.requestedPermissions==null)return false;
+            for(String p:pi.requestedPermissions)if(PERMISSION_API_V23.equals(p))return true;
+            return false;
+        }catch(Throwable t){return false;}
+    }
+
+    /** Shizuku Manager 的「应用管理」按此元数据识别 v3 客户端（MT 管理器同样声明）。 */
+    public static boolean v3SupportDeclared(Context c){
+        try{
+            android.os.Bundle meta=c.getPackageManager().getApplicationInfo(c.getPackageName(),PackageManager.GET_META_DATA).metaData;
+            return meta!=null&&meta.getBoolean("moe.shizuku.client.V3_SUPPORT",false);
+        }catch(Throwable t){return false;}
+    }
+
+    /** 注册官方推荐的 binder 生命周期监听，用于区分「服务端从未推送」与「binder 已死」。 */
+    private static synchronized void ensureBinderListeners(){
+        if(binderListenersAdded)return;
+        try{
+            Shizuku.addBinderReceivedListenerSticky(new Shizuku.OnBinderReceivedListener(){
+                @Override public void onBinderReceived(){binderSeen=true;}
+            });
+            Shizuku.addBinderDeadListener(new Shizuku.OnBinderDeadListener(){
+                @Override public void onBinderDead(){binderSeen=false;}
+            });
+            binderListenersAdded=true;
+        }catch(Throwable ignored){}
+    }
 
     public static boolean rootGranted(Context c){
         Boolean cache=rootCache;if(cache!=null)return cache;
@@ -40,7 +78,11 @@ public final class ElevatedAccess {
     }
 
     public static boolean shizukuRunning(){
-        try{return Shizuku.pingBinder();}catch(Throwable t){return false;}
+        try{
+            boolean alive=Shizuku.pingBinder();
+            if(alive)binderSeen=true;
+            return alive;
+        }catch(Throwable t){return false;}
     }
 
     /** binder 由 Shizuku 服务端主动推送到 provider 所在进程（即主进程）：服务启动时、应用进程启动时都会推送；
@@ -70,6 +112,7 @@ public final class ElevatedAccess {
     }
 
     public static JSONObject call(Context c,JSONObject a)throws Exception{
+        ensureBinderListeners();
         String op=a.optString("op","status");
         if(op.equals("requestRoot"))return new JSONObject().put("granted",requestRoot(c));
         if(op.equals("requestShizuku"))return new JSONObject().put("granted",requestShizuku());
@@ -84,9 +127,13 @@ public final class ElevatedAccess {
         r.put("rootAvailable",rootBinaryExists());
         r.put("shizukuInstalled",shizukuInstalled(c));
         r.put("shizukuProviderRegistered",shizukuProviderRegistered(c));
+        r.put("apiV23Declared",apiV23Declared(c));
+        r.put("v3SupportDeclared",v3SupportDeclared(c));
         r.put("shizukuRunning",shizukuRunningWait());
+        r.put("binderSeen",binderSeen);
         r.put("shizukuGranted",shizukuGranted());
         try{r.put("shizukuVersion",shizukuRunning()?Shizuku.getVersion():-1);}catch(Throwable t){r.put("shizukuVersion","err:"+t.getClass().getSimpleName());}
+        try{r.put("shizukuUid",shizukuRunning()?Shizuku.getUid():-1);}catch(Throwable t){r.put("shizukuUid","err:"+t.getClass().getSimpleName());}
         try{String out=elevatedCommand(c,"id");r.put("elevatedId",out==null?JSONObject.NULL:out.trim());}catch(Throwable t){r.put("elevatedId","err:"+t);}
         // 单独探测 Shizuku newProcess 反射路径，带完整堆栈
         try{
@@ -98,9 +145,12 @@ public final class ElevatedAccess {
         }catch(Throwable t){
             Throwable cause=(t instanceof java.lang.reflect.InvocationTargetException&&t.getCause()!=null)?t.getCause():t;
             String msg;
-            if(cause instanceof IllegalStateException){
+            if(!apiV23Declared(c)){
+                msg="客户端未声明 API_V23 权限（根因）：Shizuku 服务端 BinderSender 只向 manifest 中声明了 moe.shizuku.manager.permission.API_V23 的应用推送 binder，未声明则完全不推送，pingBinder() 恒为 false、shizukuVersion 恒为 -1。请升级到已修复的版本；升级后重启 Shizuku 服务并重新打开本应用";
+            }
+            else if(cause instanceof IllegalStateException){
                 msg=shizukuProviderRegistered(c)
-                    ?"Shizuku 服务未启动或 binder 未送达（IllegalStateException）：请确认 Shizuku 应用内服务显示「正在运行」；若仍连不上，请在 Shizuku 应用内停止并重新启动服务，然后从最近任务划掉本应用后重新打开再试"
+                    ?"Shizuku 服务未启动，或 binder 尚未送达本进程（IllegalStateException）：请确认 Shizuku 应用内服务显示「正在运行」，并在 Shizuku「应用管理」里允许本应用；若仍连不上，请在 Shizuku 应用内停止并重新启动服务，然后从最近任务划掉本应用后重新打开再试"
                     :"ShizukuProvider 未正确注册（IllegalStateException）：请升级本应用到最新版本（旧版应用的 provider 注册名有误，导致永远连不上 Shizuku）";
             }
             else if(cause instanceof SecurityException)msg="未获得 Shizuku 授权（SecurityException）：请先在本应用「授权」页申请 Shizuku 授权";
@@ -118,7 +168,10 @@ public final class ElevatedAccess {
             .put("rootAvailable",rootBinaryExists())
             .put("shizukuInstalled",shizukuInstalled(c))
             .put("shizukuProviderRegistered",shizukuProviderRegistered(c))
+            .put("apiV23Declared",apiV23Declared(c))
+            .put("v3SupportDeclared",v3SupportDeclared(c))
             .put("shizukuRunning",shizukuRunningWait())
+            .put("binderSeen",binderSeen)
             .put("shizukuGranted",shizukuGranted());
     }
 
