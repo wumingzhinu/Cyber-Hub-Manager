@@ -45,6 +45,7 @@ jobs:
           node --check app/src/main/assets/app.js
           node --check app/src/main/assets/boot.js
           python3 tests/startup-direct-check.py
+          python3 tests/dex-to-jar-no-zipfs-check.py
           node tests/file-icons-smoke.cjs
           node tests/open-with-ui-smoke.cjs
           node tests/media-player-ui-smoke.cjs

@@ -57,6 +57,27 @@
 
 验证：`startup-direct-check.py` PASS 12 项；`node --check app.js` / `boot.js` 通过；CI 三套前端冒烟 8 / 12 / 11 全 PASS；真实 Chromium 场景 A（正常启动）在 `sync-after-appjs` 瞬间即 `panes:2`、`filepanes:1`、`bootStatus:0`、`bootRetry:0`、`toolbarBtns:2`、`bottomBtns:5`，`after-data` 为 `fileRows:6`、标题 `/sdcard/`、占位清零；场景 B（纯静态首屏）确认旧提示文案与 `.bootStatus` 均已消失。全套 `.cjs` 测试改动前后逐项一致（10 项 PASS / 10 项 FAIL 均为沙箱环境限制，与基线相同），无回归。versionCode 仍为 55、签名密钥未变、默认中文文案未改，可直接覆盖安装。
 
+## r7 修复（DEX 转 JAR：去掉 JDK zipfs 依赖）
+
+真机反馈：对 DEX 执行「DEX 转 JAR」时无法完成，错误为 `cant find zipfs support`。
+
+**根因**（反编译 `app/libs/dex-translator-v2.4.jar` 确认）：`DexEngine.toJar()` 调用 `Dex2jar.from(input).skipDebug(false).to(part.toPath())`，其中 `part` 是一个**尚不存在的 `.jar` 文件路径**。dex2jar 2.4 的 `to(Path)` 在目标不是「已存在目录」时会走 `createZip()`，用 `FileSystemProvider.installedProviders()` 遍历 provider 找 `scheme=jar` 的 zipfs；遍历不到就抛 `IOException("cant find zipfs support")`（常量池 `#63`）。Android 只有 `file` / `jrt` provider，没有 JDK 的 `jdk.zipfs` 模块，因此这一步必然失败，与 DEX 内容无关。
+
+关键发现（字节码）：`to(Path)` 开头判断 `Files.exists(path) && Files.isDirectory(path)`，命中则**直接 `doTranslate(path)`**，完全不调用 `createZip()`；`Dex2jar$1$1.visitEnd()` 只用 `Path.resolve` / `Files.createDirectories` / `Files.write` 把 `.class` 写进目录（Android API 26+ 均支持）。
+
+- `DexEngine.toJar()`：先创建 `part` 目录（`mkdirs()`），把目录 Path 传给 `to()` 走目录分支；新增 `addJarTree()` 递归目录，按相对路径把 `.class` 写入 `ZipOutputStream`。保持原有的 `names` 去重、跳过 `META-INF/MANIFEST.MF`、统一写一个 MANIFEST、多 DEX 合并与 `classes` 计数。
+- `tests/dex-to-jar-no-zipfs-check.py`：新增 11 项防回归硬断言（禁止再把 `.jar` 文件路径交给 `Dex2jar.to()`、目录必须 `mkdirs()`、必须经 `addJarTree` 打包、保留根因注释），并加入 CI 前端测试步骤。
+- `app.js` 关于页追加 r7 版本说明。
+
+验证：
+- 全量 `javac`（`assets/compiler/android-api.jar` + 59 个 libs + 生成的 R stub）编译 **134 个 class 零错误**。
+- 真实 DEX 端到端：用 build-57 的 `classes.dex`（7,651,032 字节）调用 `DexEngine.open()` + `toJar()`，生成 **5,388 个 `.class`** 的 JAR，`javap` 可正常读取生成的类、ZIP 完整。
+- 多 DEX 合并：用 APK 内 `classes.dex` / `classes2.dex` / `classes3.dex` 三个 DEX，产出 **19,370 个 `.class`**、`inputs=3`，并正确生成 `_dex` 目录。
+- **对照实验**：`java --limit-modules java.base`（providers 仅 `file jrt`，等同 Android）下，旧路径 `to(文件.jar)` 精确复现 `cant find zipfs support`，新路径 `to(已存在目录)` 返回 `OK`。
+- 前端冒烟 8 / 12 / 11 与 `dex-tools-smoke` 11 全 PASS，r6 启动直达自检 12 项仍 PASS。
+
+versionCode 仍为 55、签名密钥未变、默认中文文案未改，可直接覆盖安装。DEX 转 Smali、DEX 编辑、JADX 反编译等其它 DEX 功能不受影响。
+
 ## 交付与修复报告（`reports/`）
 
 本目录归档面向用户的 HTML 交付说明，均为只读记录，不参与构建：

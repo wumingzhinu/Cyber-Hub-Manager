@@ -144,15 +144,29 @@ public final class DexEngine {
    for(Map.Entry<String,File> e:files.entrySet()){File dst=new File(dexDir,new File(e.getKey()).getName());FileOps.writeAtomic(dst,FileOps.read(e.getValue(),256L*1024*1024),false);inputs.add(dst);}
   }else for(File f:files.values())inputs.add(f);
   File jar=unusedFile(folder,base+".jar");File work=new File(session,"jar-"+UUID.randomUUID());work.mkdirs();int classes=0;Set<String>names=new HashSet<>();
+  // Android 没有 JDK 的 zipfs（jar: FileSystemProvider）。dex2jar 的 to(Path) 在传入
+  // 「不存在的文件路径」时会走 createZip() 并遍历 installedProviders() 找 jar scheme，
+  // 找不到就抛 "cant find zipfs support"，DEX 转 JAR 因此无法完成。
+  // 传入「已存在的目录」时 to() 改走 Files.isDirectory 分支，只用 Path.resolve /
+  // Files.createDirectories / Files.write 把 .class 写进目录（Android API 26+ 均支持），
+  // 随后由 addJarTree() 按相对路径打包成 JAR，完全不依赖 zipfs。
   try(ZipOutputStream zout=new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(jar)))){
-   for(File input:inputs){File part=new File(work,input.getName()+".jar");Dex2jar.from(input).skipDebug(false).to(part.toPath());
-    try(ZipInputStream zin=new ZipInputStream(new BufferedInputStream(new FileInputStream(part)))){
-     ZipEntry ze;while((ze=zin.getNextEntry())!=null){String name=ze.getName();if(ze.isDirectory()||name.equalsIgnoreCase("META-INF/MANIFEST.MF")||!names.add(name))continue;zout.putNextEntry(new ZipEntry(name));byte[] buf=new byte[65536];int r;while((r=zin.read(buf))!=-1)zout.write(buf,0,r);zout.closeEntry();if(name.endsWith(".class"))classes++;}
-    }
+   for(File input:inputs){File part=new File(work,input.getName()+"-classes");if(!part.isDirectory()&&!part.mkdirs())throw new IOException("无法创建临时目录："+part.getName());
+    Dex2jar.from(input).skipDebug(false).to(part.toPath());classes+=addJarTree(part,"",zout,names);
    }
    ZipEntry mf=new ZipEntry("META-INF/MANIFEST.MF");zout.putNextEntry(mf);zout.write("Manifest-Version: 1.0\r\nCreated-By: Cyber Hub Manager\r\n\r\n".getBytes(StandardCharsets.UTF_8));zout.closeEntry();
   }catch(Exception e){jar.delete();throw e;}finally{FileOps.deleteTree(work);}
   return new JSONObject().put("path",jar.getPath()).put("classes",classes).put("dexDir",dexDir==null?"":dexDir.getPath()).put("inputs",inputs.size());
+ }
+ private static int addJarTree(File dir,String prefix,ZipOutputStream zout,Set<String>names)throws IOException{
+  int n=0;File[] list=dir.listFiles();if(list==null)return 0;Arrays.sort(list,Comparator.comparing(File::getName));
+  for(File f:list){String name=prefix+f.getName();
+   if(f.isDirectory()){n+=addJarTree(f,name+"/",zout,names);continue;}
+   if(!f.isFile()||name.equalsIgnoreCase("META-INF/MANIFEST.MF")||!names.add(name))continue;
+   zout.putNextEntry(new ZipEntry(name));
+   try(InputStream in=new BufferedInputStream(new FileInputStream(f))){byte[] buf=new byte[65536];int r;while((r=in.read(buf))!=-1)zout.write(buf,0,r);}
+   zout.closeEntry();if(name.endsWith(".class"))n++;
+  }return n;
  }
  public JSONObject mergeDex(JSONObject a,File folder)throws Exception{
   if(folder==null||!folder.isDirectory())throw new IOException("请选择一个已存在的输出文件夹");
