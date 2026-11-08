@@ -78,6 +78,25 @@
 
 versionCode 仍为 55、签名密钥未变、默认中文文案未改，可直接覆盖安装。DEX 转 Smali、DEX 编辑、JADX 反编译等其它 DEX 功能不受影响。
 
+## r8 修复（无法打开 JAR 文件：误走 8 MB 文本读取上限）
+
+真机反馈：点击生成的 JAR 文件无法打开，界面报错「文件过大，无法执行此操作（上限 8 MB）」。
+
+**根因**：`app.js` 的 `archiveExtensions` 不含 `jar`，`fileType('x.jar')` 返回 `'file'`，`openFile()` 兜底调用 `openText()` → `rpc('read')` → `DataEngine.read()` → `FileOps.read(f, FileOps.MAX_TEXT = 8MB)`。同一根因按文件大小有两种表现：JAR 小于 8 MB 时 `read()` 在前 2048 字节检测到二进制字节，报「二进制文件：无法作为文本打开」；大于 8 MB 时 `FileOps.read()` 直接抛出用户所见的上限报错。后端 `ArchiveTools.format()` 对未知扩展名默认返回 `"zip"`，`listEntries()` 用 zip4j 列条目、`readEntry()` 提取，链路本就可用，缺的只是前端分类。
+
+- `app.js`：`archiveExtensions` 增加 `jar` / `war` / `ear` / `aar` / `jmod`（均为标准 ZIP 容器），点击即命中 `openFile()` 的 `type==='archive'` 分支，双窗格逐层浏览 `.class` 与 `META-INF`；`apk` / `apks` / `xapk` 的专属分类保持不变。
+- `app.js`：`openText()` 增加「文件过大」兜底 —— 即便用户在「打开方式」中显式选择「编辑文本」，也会提示并回退到打开方式对话框（十六进制查看器 / 浏览压缩包），不再卡在纯错误页；原有「二进制文件」引导保持不变。
+- `app.js`：`UI_BUILD` 更新为 `r8`，关于页追加 r8 版本说明。
+- `tests/jar-open-archive-check.py`：新增 60 项防回归自检（JAR 系归类 / 既有归档扩展名未丢 / 归档分支排在文本兜底之前 / 大文件兜底 / 13 项打开方式网格结构 / 后端 ZIP 分支 / 8 MB 边界不动），并用 node 真实执行 `fileType()` 校验 14 个分类用例。
+- `tests/jar-open-dispatch-smoke.cjs`：在 happy-dom 中加载真实 `app.js`，验证点击 JAR 走 `rpc('list', {archive})` 而不再走 `rpc('read')`、普通 `.txt` 仍走文本编辑器、APK 仍走 `rpc('apkInfo')`、超大文件显式编辑文本会回退到打开方式对话框。两项新测试均已接入 CI 前端测试步骤。
+
+**未改动**：`FileOps.MAX_TEXT` 仍为 8 MB（文本编辑器保护本身不变，只是不再让归档走这条路）、`DataEngine` / `ArchiveTools` / `DexEngine` 全部未改；versionCode 55、签名密钥、默认中文文案均保持不变。
+
+验证：
+- 后端端到端：用 r7 实测产出的 **23,597,013 字节真实 JAR**（19,371 条目 / 19,370 个 `.class`）调用 `ArchiveTools.listEntries()` 正常列出 14 个根条目、可进入 `META-INF/` 子目录，`readEntry()` 提取 `android/aapt/pb/internal/ResourcesInternal$1.class` 得到 203 字节、魔数 `CA FE BA BE`。
+- 前端分发：`jar-open-dispatch-smoke.cjs` 4 项全 PASS；`jar-open-archive-check.py` 60 项全 PASS；`startup-direct-check.py` 12 项 / `dex-to-jar-no-zipfs-check.py` 11 项仍 PASS；`node --check app.js` / `boot.js` 通过。
+- CI 三套前端冒烟 `file-icons-smoke` 8 / `open-with-ui-smoke` 12 / `media-player-ui-smoke` 11 全 PASS；全套 `.cjs` 改动前后逐项一致（原有 20 项结果不变，仅新增 1 项 PASS；10 项 FAIL 均为沙箱环境限制，与基线相同），无回归。
+
 ## 交付与修复报告（`reports/`）
 
 本目录归档面向用户的 HTML 交付说明，均为只读记录，不参与构建：
