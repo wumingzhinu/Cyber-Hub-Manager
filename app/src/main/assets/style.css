@@ -1125,3 +1125,7 @@ body.light .cm-s-cyber .cm-attribute{color:#8250df}
 body.light .cm-s-cyber .cm-bracket,body.light .cm-s-cyber .cm-punctuation{color:#57606a}
 body.light .cm-s-cyber .cm-link{color:#0550ae}
 body.light .CodeMirror .cm-activeLine{background:#2f6fb514}
+
+/* r6：启动首屏的文件管理器骨架占位。只作瞬时提示，数据回填后立即消失。 */
+.bootPlaceholder{color:var(--muted);font-size:13px;padding:18px 16px;opacity:.72}
+body.light .bootPlaceholder{color:var(--muted);opacity:.8}

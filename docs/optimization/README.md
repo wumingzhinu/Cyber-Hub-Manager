@@ -43,6 +43,20 @@
 
 真机复测时收到的一张「提权诊断」截图与 r4 阶段的截图 SHA256 完全相同，且缺少 r5 新增的 `apiV23Declared` / `v3SupportDeclared` / `binderSeen` / `shizukuUid` 四个字段、`npErr` 仍为 r4 旧文案——据此判定该截图来自未升级到 build-56 的旧包，并非 r5 修复失效。核对清单见 `reports/r5-verify-checklist.html`。
 
+## r6 优化（启动直达：去掉整页启动提示，首屏即文件管理器）
+
+真机启动截图反馈：每次冷启动都先出现一张整页提示「正在打开您的工作区… / 文件管理器正在加载。」并带「重试」按钮，需等待甚至手动点击才能进入管理器。用户要求「直接进入管理器」。
+
+**根因**：`app.html` 在 `<section id="content">` 里写死一整页 `.bootStatus` 启动提示（含静态 `#bootRetry`），工具栏副标题是「正在启动…」；`app.js` 的 `init()` 要先 `await rpc('init')` 拿到原生数据、`await refresh()` 拉到目录后才会 `renderFiles()` 把提示页替换成双窗格管理器。于是 WebView 首帧必然是提示页，冷启动 / 授权弹窗等待越久，提示页停留越久；`boot.js` 还有 20 秒 watchdog 会把它变成错误兜底页。
+
+- `app.html`：删除 `.bootStatus` 整页提示与 `#bootRetry`，首屏直接给出 `.filepanes` 双窗格骨架（左右各一个 `.pane` + `.bootPlaceholder`「正在读取文件…」），工具栏副标题改为「文件管理器」，保留 `<noscript>` 兜底。
+- `app.js`：新增 `renderBootFrame()`，并让 `init()` 在**第一个 `await` 之前**同步调用它补齐工具栏按钮与底栏（`header()` + `renderFileBottom()`），使第一帧就是可见、可操作的管理器；`rpc('init')` 与目录列表随后异步回填，`refresh()` 后占位文案自然消失。`UI_BUILD` 更新为 `r6`，关于页追加版本说明。
+- `boot.js`：移除静态 `#bootRetry` 绑定，但完整保留 20 秒 watchdog 与 `report()`——脚本真正崩溃 / 加载超时时仍会整页重建出带「重试」（`window.location.reload()`）的错误兜底页。
+- `style.css`：追加 `.bootPlaceholder` 轻量占位样式（浅 / 深主题）。
+- `tests/startup-direct-check.py`：新增防回归硬断言，固定「首屏双窗格 / 无提示页与静态重试按钮 / `renderBootFrame()` 在 await 前调用 / 错误兜底保留 / 占位文案」等 12 项约束，并加入 CI 前端测试步骤。
+
+验证：`startup-direct-check.py` PASS 12 项；`node --check app.js` / `boot.js` 通过；CI 三套前端冒烟 8 / 12 / 11 全 PASS；真实 Chromium 场景 A（正常启动）在 `sync-after-appjs` 瞬间即 `panes:2`、`filepanes:1`、`bootStatus:0`、`bootRetry:0`、`toolbarBtns:2`、`bottomBtns:5`，`after-data` 为 `fileRows:6`、标题 `/sdcard/`、占位清零；场景 B（纯静态首屏）确认旧提示文案与 `.bootStatus` 均已消失。全套 `.cjs` 测试改动前后逐项一致（10 项 PASS / 10 项 FAIL 均为沙箱环境限制，与基线相同），无回归。versionCode 仍为 55、签名密钥未变、默认中文文案未改，可直接覆盖安装。
+
 ## 交付与修复报告（`reports/`）
 
 本目录归档面向用户的 HTML 交付说明，均为只读记录，不参与构建：

@@ -55,7 +55,7 @@
     var reason = event.reason;
     report(reason && reason.message ? reason.message : String(reason));
   });
-  var retry = document.getElementById('bootRetry');
-  if (retry) retry.onclick = function () { window.location.reload(); };
+  // 首屏已是文件管理器骨架，不再有静态「重试」按钮；启动失败时 report()
+  // 会自行创建一个带 reload 的重试按钮，错误兜底保持不变。
   timer = setTimeout(function () { report('打开文件管理器时启动超时。'); }, 20000);
 }());
