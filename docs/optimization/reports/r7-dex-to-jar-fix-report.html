@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DEX 转 JAR 修复报告 · r7</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1f2328;--muted:#5b6570;--line:#e3e7ec;--accent:#0969da;--ok:#1a7f37;--warn:#9a6700;--code:#f2f4f7}
+@media(prefers-color-scheme:dark){:root{--bg:#0d1117;--card:#161b22;--fg:#e6edf3;--muted:#9198a1;--line:#30363d;--accent:#58a6ff;--ok:#3fb950;--warn:#d29922;--code:#1c2128}}
+*{box-sizing:border-box}
+body{margin:0;padding:28px 18px 60px;background:var(--bg);color:var(--fg);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:960px;margin:0 auto}
+h1{font-size:26px;margin:0 0 6px;letter-spacing:.2px}
+.sub{color:var(--muted);margin:0 0 24px;font-size:14px}
+h2{font-size:19px;margin:30px 0 12px;padding-left:11px;border-left:4px solid var(--accent)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:14px 0}
+table{width:100%;border-collapse:collapse;font-size:14px;margin:10px 0}
+th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+th{background:var(--code);font-weight:600;white-space:nowrap}
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+code{background:var(--code);padding:2px 5px;border-radius:4px;word-break:break-all}
+pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:14px;overflow:auto;line-height:1.55;margin:10px 0}
+.bad{color:#cf222e;font-weight:600}
+.good{color:var(--ok);font-weight:600}
+.pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;background:rgba(9,105,218,.12);color:var(--accent)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.kv{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.kv b{display:block;font-size:12px;color:var(--muted);font-weight:500;margin-bottom:4px}
+.kv span{font-size:14px;word-break:break-all}
+ul{padding-left:22px;margin:8px 0}li{margin:5px 0}
+blockquote{margin:12px 0;padding:10px 14px;border-left:3px solid var(--accent);background:var(--code);border-radius:0 8px 8px 0;color:var(--muted)}
+.foot{margin-top:34px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>DEX 转 JAR 修复报告 <span class="pill">r7</span></h1>
+<p class="sub">真机报错 <code>cant find zipfs support</code> · 提交 <code>4c6cb54</code> · Release <code>build-58</code> · 2026-11-08</p>
+
+<div class="grid">
+  <div class="kv"><b>根因</b><span>dex2jar <code>to(Path)</code> 收到「不存在的 .jar 文件路径」，走 <code>createZip()</code> 找 JDK zipfs，Android 没有</span></div>
+  <div class="kv"><b>新 APK</b><span>Cyber-Hub-Manager-0.1.59-r7.apk（21,366,028 字节）</span></div>
+  <div class="kv"><b>SHA256</b><span>e5f227e4bc5c0defa2ec6348d6cf1240308749ddaed1c7e11568315539b65328</span></div>
+  <div class="kv"><b>构建结果</b><span class="good">Actions run 42494733423 · success（2m28s）</span></div>
+</div>
+
+<h2>一、症状</h2>
+<div class="card">
+<p>在文件管理器中对 DEX 文件执行「DEX 转 JAR」时无法完成，提示 <code>cant find zipfs support</code>。该功能入口为 <code>app.js</code> 的 <code>dexToJar()</code> → <code>DataEngine</code> 的 <code>dexToJar</code> action → <code>DexEngine.toJar()</code>。</p>
+<blockquote>报错与 DEX 内容无关：只要是转 JAR 就必失败，而 DEX 转 Smali、DEX 编辑、JADX 反编译都正常 —— 说明问题集中在「生成 JAR 压缩包」这一步。</blockquote>
+</div>
+
+<h2>二、根因（反编译依赖库确认）</h2>
+<div class="card">
+<p>项目内置 <code>app/libs/dex-translator-v2.4.jar</code>（dex2jar 2.4）。<code>DexEngine.toJar()</code> 原实现：</p>
+<pre>File part = new File(work, input.getName() + ".jar");   // 尚不存在的文件路径
+Dex2jar.from(input).skipDebug(false).to(part.toPath());</pre>
+<p>反编译 <code>com.googlecode.d2j.dex.Dex2jar</code> 发现：</p>
+<ul>
+<li>该类<b>只有 <code>to(Path)</code> 一个输出方法</b>，没有 <code>to(File)</code> / <code>to(OutputStream)</code> 重载。</li>
+<li>常量池里有字符串常量 <code>#63 = "cant find zipfs support"</code>。</li>
+<li><code>to(Path)</code> 开头判断 <code>Files.exists(path) &amp;&amp; Files.isDirectory(path)</code>：命中走 <code>doTranslate(path)</code>；否则调用私有 <code>createZip(Path)</code>。</li>
+<li><code>createZip()</code> 遍历 <code>FileSystemProvider.installedProviders()</code> 找 <code>scheme="jar"</code> 的 provider；找不到就抛 <code>IOException("cant find zipfs support")</code>。</li>
+</ul>
+<p>Android 运行时只提供 <code>file</code> / <code>jrt</code> provider，<b>没有 JDK 的 <code>jdk.zipfs</code> 模块</b>，因此遍历必然落空。这是 dex2jar 面向桌面 JDK 的假设，在 Android 上不成立。</p>
+</div>
+
+<h2>三、突破口：让 <code>to(Path)</code> 走目录分支</h2>
+<div class="card">
+<p>继续反编译内部类 <code>Dex2jar$1$1.visitEnd()</code>，确认目录分支只用这些 API 把 <code>.class</code> 写进目录：</p>
+<pre>Path target = dist.resolve(className + ".class");
+if (!Files.exists(target.getParent())) Files.createDirectories(target.getParent());
+Files.write(target, classBytes);          // Android API 26+ 全部支持</pre>
+<p>即：<b>只要传入一个已存在的目录</b>，<code>to(Path)</code> 就完全不调用 <code>createZip()</code>，也就不依赖 zipfs。转换结果是一棵按包名组织的 <code>.class</code> 目录树，再由我们自己按相对路径写进 <code>ZipOutputStream</code> 即可 —— 无需改动第三方库、无需往 APK 里塞 zipfs 实现。</p>
+</div>
+
+<h2>四、改动清单</h2>
+<div class="card">
+<table>
+<tr><th>文件</th><th>改动</th></tr>
+<tr><td><code>DexEngine.java</code></td><td><code>toJar()</code> 改为先 <code>mkdirs()</code> 创建 <code>part</code> 目录，把<b>目录 Path</b> 传给 <code>Dex2jar.to()</code>；新增 <code>addJarTree()</code> 递归目录，按相对路径把 <code>.class</code> 写入 <code>ZipOutputStream</code>。保持原有 <code>names</code> 去重、跳过 <code>META-INF/MANIFEST.MF</code>、统一写一个 MANIFEST、多 DEX 合并与 <code>classes</code> 计数；补充根因注释防止改回。</td></tr>
+<tr><td><code>tests/dex-to-jar-no-zipfs-check.py</code></td><td>新增 11 项防回归硬断言：禁止再把 <code>.jar</code> 文件路径交给 <code>Dex2jar.to()</code>、目录必须 <code>mkdirs()</code>、必须经 <code>addJarTree</code> 打包、去重与 MANIFEST 保留、根因注释保留；已加入 CI 前端测试步骤。</td></tr>
+<tr><td><code>.github/workflows/build-apk.yml</code></td><td>CI 增加 <code>python3 tests/dex-to-jar-no-zipfs-check.py</code>。</td></tr>
+<tr><td><code>app.js</code></td><td>关于页追加 r7 版本说明。</td></tr>
+<tr><td><code>docs/optimization/README.md</code></td><td>追加 r7 章节，记录根因、字节码证据与验证结果。</td></tr>
+</table>
+<pre>// 修复后（节选）
+File part = new File(work, input.getName() + "-classes");
+if (!part.isDirectory() &amp;&amp; !part.mkdirs()) throw new IOException(...);
+Dex2jar.from(input).skipDebug(false).to(part.toPath());  // 目录分支，不碰 zipfs
+classes += addJarTree(part, "", zout, names);             // 目录树 -> JAR</pre>
+</div>
+
+<h2>五、对照实验（在无 zipfs 的 JVM 上复现并验证）</h2>
+<div class="card">
+<p>用 <code>java --limit-modules java.base</code> 启动，排除 <code>jdk.zipfs</code>，使 <code>installedProviders()</code> 只剩 <code>file</code> / <code>jrt</code> —— 这与 Android 的环境一致。对同一个真实 DEX 分别调用旧、新两条路径：</p>
+<pre>providers: file jrt
+OLD_PATH(文件.jar) = FAIL -> cant find zipfs support
+NEW_PATH(已存在目录) = OK</pre>
+<p class="good">旧路径精确复现了真机报错，新路径正常完成 —— 直接证明根因判断与修复方案都成立。</p>
+</div>
+
+<h2>六、验证</h2>
+<div class="card">
+<table>
+<tr><th>项目</th><th>结果</th></tr>
+<tr><td>全量 <code>javac</code> 编译</td><td class="good"><code>android-api.jar</code> + 59 个 libs + 生成的 R stub → <b>134 个 class 零错误</b></td></tr>
+<tr><td>真实 DEX 端到端（单 DEX）</td><td class="good">用 build-57 的 <code>classes.dex</code>（7,651,032 字节）调用 <code>DexEngine.open()</code> + <code>toJar()</code> → <b>5,388 个 <code>.class</code></b>；<code>javap</code> 能正常读取生成的类，ZIP 完整</td></tr>
+<tr><td>真实 DEX 端到端（多 DEX 合并）</td><td class="good">APK 内 <code>classes.dex</code> / <code>classes2.dex</code> / <code>classes3.dex</code> → <b>19,370 个 <code>.class</code></b>、<code>inputs=3</code>，并正确生成 <code>_dex</code> 目录</td></tr>
+<tr><td>防回归自检</td><td class="good"><code>dex-to-jar-no-zipfs-check.py</code> PASS 11 项；r6 <code>startup-direct-check.py</code> 仍 PASS 12 项；<code>node --check app.js</code> 通过</td></tr>
+<tr><td>前端冒烟</td><td class="good">file-icons 8 · open-with 12 · media-player 11 · dex-tools 11 全 PASS</td></tr>
+<tr><td>全套 <code>.cjs</code> 基线对照</td><td>PASS 10 / FAIL 10，与 r6 基线逐项一致（失败项均为沙箱环境限制，如英文文案 mock、Playwright、happy-dom 路径差异），<b>无回归</b></td></tr>
+<tr><td>Actions 全步骤</td><td class="good">run 42494733423 · 全部 ✓（含两个 Python 自检、ECJ + D8 打包、apksigner 签名、核心 JVM 冒烟、创建 Release）</td></tr>
+</table>
+</div>
+
+<h2>七、签名 APK 校验</h2>
+<div class="card">
+<table>
+<tr><th>校验项</th><th>结果</th></tr>
+<tr><td>SHA256 与 Release 摘要</td><td class="good"><code>e5f227e4bc5c0defa2ec6348d6cf1240308749ddaed1c7e11568315539b65328</code> 一致</td></tr>
+<tr><td>大小</td><td>21,366,028 字节，与 Release 资产一致</td></tr>
+<tr><td>APK 内 <code>classes*.dex</code></td><td class="good">反编译确认 <code>DexEngine</code> 使用目录输出 + <code>addJarTree</code>，不再含 <code>input.getName()+".jar"</code> 旧路径</td></tr>
+<tr><td>与 r6 版 ZIP 条目对比</td><td class="good">仅 DEX、前端 <code>app.js</code> 与 <code>META-INF/*</code> 签名清单变化；<code>AndroidManifest.xml</code> 及其它 assets 字节级一致</td></tr>
+<tr><td>v2 / v3 签名证书</td><td class="good">与 r6 相同，可直接覆盖安装</td></tr>
+</table>
+</div>
+
+<h2>八、保持未改的边界</h2>
+<div class="card">
+<ul>
+<li><b>versionCode 55 / versionName 0.1.59</b>、签名密钥、默认中文文案均未变。</li>
+<li>r4（WebView 静态资源放行）、r5（Shizuku <code>API_V23</code> / <code>V3_SUPPORT</code>）、r6（启动直达）修复全部保留。</li>
+<li>DEX 转 Smali、DEX 编辑 / 保存、JADX 反编译、DEX 合并等其它 DEX 功能未改动。</li>
+<li>未改第三方 <code>dex-translator-v2.4.jar</code>，也未向 APK 注入任何 zipfs 实现 —— 修复完全在本项目 Java 层。</li>
+<li>Web 管理器只读安全模型仍未改动（需另行设计确认）。</li>
+</ul>
+</div>
+
+<h2>九、交付物</h2>
+<div class="card">
+<ul>
+<li>签名 APK：<code>/workspace/Cyber-Hub-Manager-0.1.59-r7.apk</code>（Release <code>build-58</code>）</li>
+<li>源码提交：<code>4c6cb54</code> 已推送 <code>wumingzhinu/Cyber-Hub-Manager</code> 的 <code>main</code></li>
+<li>本报告归档：<code>docs/optimization/reports/r7-dex-to-jar-fix-report.html</code>（文档提交使用 <code>[skip ci]</code>）</li>
+</ul>
+</div>
+
+<p class="foot">本报告为只读交付说明，不参与构建。正式签名 APK 以仓库 Release <code>build-58</code> 为准；归档目录内不含 .apk 与密钥文件。</p>
+</div>
+</body>
+</html>
