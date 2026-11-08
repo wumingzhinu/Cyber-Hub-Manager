@@ -63,6 +63,8 @@ public class MainActivity extends Activity {
         pendingOpenPath=resolveIncomingPath(getIntent());
         try{engine=new DataEngine(this);web=new WebView(this);web.setBackgroundColor(0xff303030);
         WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setAllowFileAccess(false);s.setAllowContentAccess(false);s.setAllowFileAccessFromFileURLs(false);s.setAllowUniversalAccessFromFileURLs(false);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);s.setMediaPlaybackRequiresUserGesture(false);s.setTextZoom(100);s.setSupportZoom(false);s.setBuiltInZoomControls(false);s.setDisplayZoomControls(false);
+        s.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        if(getPreferences(0).getInt("assetEpoch",0)<4){web.clearCache(true);getPreferences(0).edit().putInt("assetEpoch",4).apply();}
         web.setWebChromeClient(new WebChromeClient(){@Override public boolean onConsoleMessage(ConsoleMessage m){
             if(m.messageLevel()==ConsoleMessage.MessageLevel.ERROR)android.util.Log.e("CyberHubUI",m.message()+" @ "+m.sourceId()+":"+m.lineNumber());return true;
         }});
@@ -188,16 +190,40 @@ public class MainActivity extends Activity {
             if(path.startsWith("/media/"))return mediaResponse(path.substring(7),"HEAD".equals(method),requestHeaders==null?null:requestHeaders.get("Range"));
             if(path.startsWith("/assets/")){
             String name=path.substring(8);
-            if(Arrays.asList("app.html","app.js","boot.js","style.css","vendor/codemirror.js","vendor/codemirror.css","vendor/clike.js","vendor/xml.js","vendor/searchcursor.js").contains(name)){
+            if(isStaticAsset(name)){
                 try{
-                    String mime=name.endsWith(".html")?"text/html":name.endsWith(".css")?"text/css":"application/javascript";
-                    return new WebResourceResponse(mime,"UTF-8",200,"OK",Collections.singletonMap("Cache-Control","no-store"),getAssets().open(name));
+                    return new WebResourceResponse(assetMime(name),"UTF-8",200,"OK",Collections.singletonMap("Cache-Control","no-store"),getAssets().open(name));
                 }catch(IOException ignored){}
             }
             }
         }
         // No network fallback, arbitrary local files, or signing-key exposure through WebView.
         return new WebResourceResponse("text/plain","UTF-8",404,"Not Found",Collections.emptyMap(),new ByteArrayInputStream("未找到".getBytes(StandardCharsets.UTF_8)));
+    }
+    private static boolean isStaticAsset(String name){
+        if(name==null||name.isEmpty()||name.startsWith("/")||name.contains("..")||name.contains("\\")||name.contains("%")||name.contains(":"))return false;
+        String lower=name.toLowerCase(java.util.Locale.ROOT);
+        if(lower.startsWith("development-signing")||lower.endsWith(".p12")||lower.endsWith(".jks")||lower.endsWith(".keystore")||lower.endsWith(".jar")||lower.endsWith(".dex")||lower.endsWith(".apk"))return false;
+        int dot=lower.lastIndexOf('.');if(dot<0||dot==lower.length()-1)return false;
+        return Arrays.asList("html","js","css","json","txt","woff2","woff","ttf","otf","png","jpg","jpeg","svg","webp","map","xml","mtsx","mtl","gif","ico").contains(lower.substring(dot+1));
+    }
+    private static String assetMime(String name){
+        String n=name.toLowerCase(java.util.Locale.ROOT);
+        if(n.endsWith(".html"))return "text/html";
+        if(n.endsWith(".css"))return "text/css";
+        if(n.endsWith(".js"))return "application/javascript";
+        if(n.endsWith(".json"))return "application/json";
+        if(n.endsWith(".woff2"))return "font/woff2";
+        if(n.endsWith(".woff"))return "font/woff";
+        if(n.endsWith(".ttf"))return "font/ttf";
+        if(n.endsWith(".otf"))return "font/otf";
+        if(n.endsWith(".svg"))return "image/svg+xml";
+        if(n.endsWith(".png"))return "image/png";
+        if(n.endsWith(".jpg")||n.endsWith(".jpeg"))return "image/jpeg";
+        if(n.endsWith(".webp"))return "image/webp";
+        if(n.endsWith(".gif"))return "image/gif";
+        if(n.endsWith(".ico"))return "image/x-icon";
+        return "text/plain";
     }
     private WebResourceResponse mediaResponse(String id,boolean headOnly,String range){
         if(mediaServer==null)return notFoundResponse();
