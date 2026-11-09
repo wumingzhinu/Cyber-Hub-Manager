@@ -1138,3 +1138,18 @@ body.light .bootPlaceholder{color:var(--muted);opacity:.8}
 .cvBody .listrow small{font-family:var(--mono);font-size:11px;overflow-wrap:anywhere}
 .cvActions{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
 .cvActions .primary{flex:1 1 130px}
+
+/* r10：与 MT 管理器同款的 .class 字节码反汇编代码区——深色底、红色关键字、
+ * 蓝色跳转标签、绿色常量池引用、白色指令助记符；沿用 cyber 主题的行号与光标。 */
+#content.classEditor .CodeMirror{background:#262626;color:#d8d8d8}
+#content.classEditor .CodeMirror-gutters{background:#222;border-right:1px solid #3a3a3a}
+#content.classEditor .CodeMirror-linenumber{color:#6e7681}
+#content.classEditor .cm-keyword{color:#cf6a62;font-weight:600}
+#content.classEditor .cm-builtin{color:#e4e4e4}
+#content.classEditor .cm-type{color:#7fb069}
+#content.classEditor .cm-string{color:#8ec07c}
+#content.classEditor .cm-number{color:#d7a86e}
+#content.classEditor .cm-meta{color:#5a9fd4;font-weight:600}
+#content.classEditor .cm-comment{color:#7f8790;font-style:italic}
+#content.classEditor .cm-activeLine{background:#303030}
+body.light #content.classEditor .CodeMirror{background:#262626;color:#d8d8d8}
