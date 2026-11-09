@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""r10 .class「MT 同款字节码反汇编编辑器」自检：静态约束 + Node 真实反汇编。
+"""r10/r11 .class「MT 同款字节码反汇编编辑器」自检：静态约束 + Node 真实反汇编。
 
-背景（r9）：点 .class 进的是「类信息查看器」四标签表格（图二）。用户要求改成
-MT 管理器那样的代码视图（图一）：深色代码区、行号、语法高亮、顶部工具栏、
+背景（r9）：点 .class 进的是「类信息查看器」四标签表格。用户要求改成
+MT 管理器那样的代码视图：深色代码区、行号、语法高亮、顶部工具栏、
 底部符号栏，正文是逐条 JVM 指令而不是字段表格。
+
+r11 追加修复：用户反馈「JAR / 归档内的 .class 仍是四标签表格」。根因是
+classScreen() 在 disassembleBase64 缺失时 `return classInfoScreen(f)` 静默回退；
+覆盖安装（versionCode 恒 55）后 WebView 缓存了 r9 版 classview.js（只有
+parseBase64），归档内 .class 便命中该分支。r11 三层修复：删除表格回退、
+组件自愈重载、app.js 内置反汇编器 + 结构/字节兜底，并给脚本加版本号 +
+提升 assetEpoch 强制清缓存。任何情况下 .class 都进入代码编辑器。
 
 修复（r10，Java 层零改动）：
   * vendor/classview.js 增加 disassemble()/disassembleBase64()：复用常量池解析，
@@ -51,7 +58,9 @@ cv_js = read(CLASSVIEW)
 # --- 1. 资源加载顺序 / 文件存在 ---
 require(os.path.isfile(FIXTURE), '缺少 tests/fixtures/Sample.class 真实字节码样本')
 i_cv = app_html.find('vendor/classview.js')
-i_app = app_html.find('<script src="app.js">')
+# r11: 脚本带 ?v=r11 版本号做 cache-busting，允许 query。
+m_app = re.search(r'<script src="app\.js(?:\?[^"]*)?">', app_html)
+i_app = m_app.start() if m_app else -1
 require(0 <= i_cv < i_app, 'classview.js 必须在 app.js 之前加载')
 
 # --- 2. classview.js 暴露新 API，且 r9 的解析 API 未回归 ---
@@ -84,11 +93,26 @@ require(m_cs is not None, 'app.js 缺少 classScreen()')
 if m_cs:
     s = m_cs.group(1)
     require("rpc('fileData',fileArgs(f))" in s, 'classScreen() 未用 fileData 读取字节')
-    require('cv.disassembleBase64(d.data)' in s, 'classScreen() 未调用反汇编器')
+    require('classDisasmOf(cv,b64)' in s and 'ensureClassView()' in s,
+            'classScreen() 未走反汇编器 + 组件自愈（覆盖缓存旧 classview.js）')
+    require('builtinClassDisasm(b64)' in s,
+            'classScreen() 缺少 app.js 自包含反汇编器兜底（不依赖外部脚本）')
     require("kind:'class'" in s and 'renderEditor()' in s,
             'classScreen() 未进入文本编辑器（应复用 renderEditor / kind=class）')
-    require('classInfoScreen(f)' in s, '无效 .class 未回退到类信息 / 十六进制出口')
+    # r11 核心：绝不回退到四标签「类信息查看器」表格
+    require('return classInfoScreen(f)' not in s,
+            'classScreen() 仍会回退到类信息表格（归档内 .class 会显示旧视图）')
+    require('classStructText(info,nm)' in s and 'classBytesText(b64,nm)' in s,
+            'classScreen() 缺少结构 / 字节代码视图兜底')
 require('async function classInfoScreen(f){' in app_js, 'r9 类信息查看器未保留为 classInfoScreen()')
+# r11：缓存根治——脚本带版本号 + assetEpoch 提升强制清 WebView 缓存
+require(re.search(r'<script src="app\.js\?v=r11">', app_html) is not None,
+        'app.html 未给 app.js 加 r11 版本号（cache-busting）')
+require(re.search(r'<script src="vendor/classview\.js\?v=r11">', app_html) is not None,
+        'app.html 未给 classview.js 加 r11 版本号（cache-busting）')
+main_act = read(os.path.join(ROOT, 'app', 'src', 'main', 'java', 'com', 'cyberhub', 'manager', 'MainActivity.java'))
+require('getInt("assetEpoch",0)<5' in main_act and 'putInt("assetEpoch",5)' in main_act,
+        'MainActivity 未提升 assetEpoch 到 5（覆盖安装后不会 clearCache）')
 for tab in ["'概览'", "'字段'", "'方法'", "'字符串'"]:
     require(tab in app_js, 'classInfoScreen() 缺少标签 ' + tab)
 require('id="cvHex"' in app_js and 'id="cvOw"' in app_js,
@@ -122,7 +146,7 @@ for label in ['导出反汇编文本', '类信息查看器', '十六进制查看
 require("else if(e.kind==='class'&&e.file)await classScreen(e.file);" in app_js,
         'reloadEditor() 未支持重新反汇编')
 
-# --- 7. 版本标记 / 关于页 / Java 层零改动 ---
+# --- 7. 版本标记 / 关于页 / DataEngine.fileData 通道未回归 ---
 m_build = re.search(r"const UI_BUILD='r(\d+)';", app_js)
 require(m_build is not None and int(m_build.group(1)) >= 10, 'UI_BUILD 未更新为 r10')
 require('r10 .class 打开方式对标 MT 管理器' in app_js, '关于页缺少 r10 版本说明')
@@ -211,4 +235,4 @@ if errors:
     for e in errors:
         print('  -', e)
     sys.exit(1)
-print('PASS: r10 .class 反汇编编辑器自检全部通过（分发 / 反汇编 / 语法高亮 / 配色 / 只导出不覆写 / r9 回归 / Java 零改动）')
+print('PASS: r10/r11 .class 反汇编编辑器自检全部通过（分发 / 反汇编 / 语法高亮 / 配色 / 只导出不覆写 / r9 回归 / fileData 通道 / 缓存根治）')

@@ -64,7 +64,10 @@ public class MainActivity extends Activity {
         try{engine=new DataEngine(this);web=new WebView(this);web.setBackgroundColor(0xff303030);
         WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setAllowFileAccess(false);s.setAllowContentAccess(false);s.setAllowFileAccessFromFileURLs(false);s.setAllowUniversalAccessFromFileURLs(false);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);s.setMediaPlaybackRequiresUserGesture(false);s.setTextZoom(100);s.setSupportZoom(false);s.setBuiltInZoomControls(false);s.setDisplayZoomControls(false);
         s.setCacheMode(WebSettings.LOAD_NO_CACHE);
-        if(getPreferences(0).getInt("assetEpoch",0)<4){web.clearCache(true);getPreferences(0).edit().putInt("assetEpoch",4).apply();}
+        /* r11: 覆盖安装（versionCode 保持 55）时 WebView 会复用上一次的
+         * classview.js / app.js 缓存，导致归档内 .class 仍走旧的「类信息查看器」。
+         * 提升 assetEpoch 强制 clearCache(true)；localAsset 亦返回 no-store。 */
+        if(getPreferences(0).getInt("assetEpoch",0)<5){web.clearCache(true);getPreferences(0).edit().putInt("assetEpoch",5).apply();}
         web.setWebChromeClient(new WebChromeClient(){@Override public boolean onConsoleMessage(ConsoleMessage m){
             if(m.messageLevel()==ConsoleMessage.MessageLevel.ERROR)android.util.Log.e("CyberHubUI",m.message()+" @ "+m.sourceId()+":"+m.lineNumber());return true;
         }});

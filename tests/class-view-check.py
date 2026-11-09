@@ -49,7 +49,9 @@ cv_js = read(CLASSVIEW) if os.path.isfile(CLASSVIEW) else ''
 
 # --- 1. app.html 必须在 app.js 之前加载 classview.js ---
 i_cv = app_html.find('vendor/classview.js')
-i_app = app_html.find('<script src="app.js">')
+# r11: 脚本带 ?v=r11 版本号做 cache-busting，允许 query。
+m_app = re.search(r'<script src="app\.js(?:\?[^"]*)?">', app_html)
+i_app = m_app.start() if m_app else -1
 require(i_cv >= 0, 'app.html 未加载 vendor/classview.js')
 require(i_app >= 0, 'app.html 未加载 app.js')
 require(0 <= i_cv < i_app, 'classview.js 必须在 app.js 之前加载')
