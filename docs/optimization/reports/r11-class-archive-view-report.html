@@ -1,0 +1,133 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>r11 · JAR 内 .class 视图对标 MT 管理器（缓存根治）</title>
+<style>
+:root{--bg:#0f1115;--card:#181b22;--line:#2a2f3a;--fg:#e6e9ef;--mut:#9aa3b2;--acc:#5aa9ff;--ok:#7bd88f;--warn:#f0b36b;--bad:#f0736b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.7 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:26px;margin:0 0 6px}h2{font-size:19px;margin:30px 0 12px;border-left:3px solid var(--acc);padding-left:10px}
+h3{font-size:16px;margin:20px 0 8px;color:var(--acc)}
+.sub{color:var(--mut);margin-bottom:22px;font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{color:var(--mut);font-weight:600}code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;color:#c9d6ea}
+pre{background:#0b0d11;border:1px solid var(--line);border-radius:8px;padding:14px;overflow:auto;font:12.5px/1.55 ui-monospace,Menlo,Consolas,monospace;color:#d8dde6}
+.kw{color:#cf6a62;font-weight:600}.mt{color:#5a9fd4;font-weight:600}.tp{color:#7fb069}.nm{color:#d7a86e}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.mut{color:var(--mut)}
+ul{margin:8px 0 8px 20px;padding:0}li{margin:5px 0}
+.badge{display:inline-block;background:#1d2a3a;color:var(--acc);border:1px solid #2d4a66;border-radius:20px;padding:2px 10px;font-size:12px;margin-right:6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.kv{background:#12151b;border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.kv b{display:block;font-size:18px;color:var(--fg);margin-top:4px;word-break:break-all}
+.kv span{color:var(--mut);font-size:12px}
+.note{border-left:3px solid var(--warn);padding-left:12px;color:var(--mut);font-size:14px}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0;font-size:13px}
+.flow i{font-style:normal;background:#12151b;border:1px solid var(--line);border-radius:6px;padding:6px 10px}
+.flow em{font-style:normal;color:var(--mut)}
+</style></head><body><div class="wrap">
+<h1>r11 · JAR 内 .class 视图对标 MT 管理器</h1>
+<div class="sub">提交 <code>7457c85</code> · GitHub Actions 构建 #62 · Release <code>build-62</code> · 版本号 0.1.59（versionCode 55 不变，可覆盖安装）</div>
+
+<div class="grid">
+<div class="kv"><span>交付 APK</span><b>Cyber-Hub-Manager-0.1.59-r11.apk</b></div>
+<div class="kv"><span>文件大小</span><b>21,382,484 字节</b></div>
+<div class="kv"><span>SHA-256</span><b style="font-size:12px">147b614712c6c46ab6e36da23f1bebcd4f1a48002805836d4f5ccde4b9b32a6b</b></div>
+<div class="kv"><span>构建结论</span><b class="ok">12 / 12 步骤成功</b></div>
+</div>
+
+<h2>需求与现象</h2>
+<div class="card"><p>用户对比两张截图后指出：<strong>「jar 里面的 .class 文件还是如一图所示，效果要改成二图对标 MT 管理器」</strong>。图一是 r9 的四标签<strong>「类信息查看器」表格</strong>（概览 / 字段 / 方法 / 字符串），图二是 MT 管理器同款的<strong>深色字节码反汇编代码视图</strong>。</p>
+<p>关键在于：r10 已经把 <code>.class</code> 默认打开改成了反汇编编辑器，本地散装 <code>.class</code> 看起来正常，但<strong>从 JAR / ZIP / APK 归档里点开的 <code>.class</code> 仍稳定回到图一表格</strong>。这不是「没改」或「改错了」，而是覆盖安装后 WebView 缓存了旧组件。</p></div>
+
+<h2>根因：缓存里的旧 classview.js 触发了表格回退</h2>
+<div class="card">
+<div class="flow">
+<i>r10 已改用 <code>disassembleBase64()</code></i><em>→</em>
+<i>覆盖安装（versionCode 恒为 55）</i><em>→</em>
+<i>WebView 复用 r9 版 <code>vendor/classview.js</code></i><em>→</em>
+<i class="bad">旧组件只有 <code>parseBase64()</code></i><em>→</em>
+<i class="bad"><code>dis = null</code></i><em>→</em>
+<i class="bad"><code>return classInfoScreen(f)</code></i>
+</div>
+<p>r10 的 <code>classScreen()</code> 里留了一条防御性回退：</p>
+<pre><span class="kw">let</span> cv = window.CyberClassView, dis = classDisasmOf(cv, b64);
+<span class="kw">if</span> (!dis || !dis.valid) { <span class="bad">return classInfoScreen(f);</span> }   <span class="mut">// r10：反汇编失败就退回四标签表格</span></pre>
+<p>由于 <code>versionCode</code> 一直是 55、签名证书也相同，用户是<strong>覆盖安装</strong>而非全新安装，WebView 的 HTTP 缓存里仍是 r9 时代的 <code>vendor/classview.js</code>：该版本有 <code>parseBase64()</code> 但<strong>没有</strong> <code>disassembleBase64()</code>。于是 <code>classDisasmOf()</code> 返回 <code>null</code>，代码走回退分支；而旧组件的 <code>parseBase64()</code> 又能正常把 class 结构渲染成四标签表格，所以现象<strong>稳定、无报错、看起来完全像没改过</strong>。归档内条目走 <code>fileData</code> 通道且总是重新加载视图，因此比本地文件更容易复现。</p>
+<p class="note">结论：只要 <code>classScreen()</code> 还存在「反汇编失败 → 表格」这条路径，缓存、组件加载失败、损坏 class 中任一情况都可能把用户送回图一。必须让归档内 <code>.class</code> <strong>无论组件新旧都恒进代码编辑器</strong>。</p>
+</div>
+
+<h2>修复：删回退 + 三层兜底 + 缓存根治</h2>
+<div class="card"><table>
+<thead><tr><th>层次</th><th>措施</th><th>作用</th></tr></thead><tbody>
+<tr><td>① 主路径</td><td><code>classScreen()</code> 删除 <code>return classInfoScreen(f)</code>；<code>fileArgs(f)</code> 对归档条目返回 <code>{archive, entry, path}</code>，经 <code>DataEngine.fileData → resolve() → ArchiveTools.readEntry()</code> 读出字节</td><td>归档内 <code>.class</code> 一律进 <code>renderEditor()</code> 深色代码区，<strong>绝不回退表格</strong></td></tr>
+<tr><td>② 组件自愈</td><td>新增 <code>ensureClassView()</code>：检测到 <code>disassembleBase64</code> 缺失时，以 <code>?v=UI_BUILD</code> 重新注入 <code>vendor/classview.js</code> 并重试 <code>classDisasmOf()</code></td><td>覆盖安装后即便命中旧缓存，也能就地拉起 r11 版反汇编器</td></tr>
+<tr><td>③ 内置反汇编</td><td>新增 <code>builtinClassDisasm(b64)</code>：<code>app.js</code> 自包含 JVM 字节码反汇编器（常量池、字段、方法、<code>Code</code> 属性、205 个 opcode、跳转标签、引用注释），完全不依赖外部组件</td><td>即便组件彻底加载不到，仍输出 MT 同款反汇编文本（真实 <code>Sample.class</code> 实测与主反汇编器一致：4 方法 / 89 指令 / 9 标签）</td></tr>
+<tr><td>④ 最终兜底</td><td><code>classStructText()</code> / <code>classBytesText()</code></td><td>极端情况下（字节损坏等）也留在<strong>代码编辑器</strong>里显示结构或十六进制文本，不再跳出到表格页面</td></tr>
+<tr><td>⑤ 缓存根治</td><td><code>app.html</code> 给 <code>classview.js</code> / <code>app.js</code> 加 <code>?v=r11</code>；<code>MainActivity.assetEpoch</code> 4 → 5 触发 <code>web.clearCache(true)</code>；<code>localAsset()</code> 保持 <code>LOAD_NO_CACHE</code> + <code>Cache-Control: no-store</code></td><td>从源头清掉旧缓存，避免下一轮修复再次被旧资源吃掉</td></tr>
+</tbody></table>
+<p class="note"><code>classInfoScreen()</code> 仍保留，但降级为右上菜单的<strong>主动二级入口</strong>，不再是任何失败路径的自动落点。</p></div>
+
+<h2>改动文件（8 个）</h2>
+<div class="card"><table>
+<thead><tr><th>文件</th><th>改动</th></tr></thead><tbody>
+<tr><td><code>assets/app.js</code></td><td><code>UI_BUILD='r11'</code>；重写 <code>classScreen()</code> 移除表格回退；新增 <code>ensureClassView()</code> / <code>classDisasmOf()</code> / <code>builtinClassDisasm()</code> / <code>classStructText()</code> / <code>classBytesText()</code>；关于页追加 r11 说明（+15,473 B）</td></tr>
+<tr><td><code>assets/app.html</code></td><td>关键脚本加版本号 <code>?v=r11</code>（+12 B）</td></tr>
+<tr><td><code>MainActivity.java</code></td><td><code>assetEpoch</code> 由 <code>&lt;4 / putInt(4)</code> 提升为 <code>&lt;5 / putInt(5)</code>，覆盖安装后强制 <code>clearCache(true)</code>（唯一 Java 改动，<code>classes.dex</code> +20 B）</td></tr>
+<tr><td><code>tests/class-archive-dispatch-check.py</code>（新）</td><td>24 项静态自检：<code>fileArgs</code> 归档分支、<code>.class</code> 分发优先级、无表格回退、内置反汇编、脚本 query、<code>assetEpoch=5</code>、Java 归档读取链路</td></tr>
+<tr><td><code>tests/class-archive-view-smoke.cjs</code>（新）</td><td>5 项 happy-dom UI 冒烟：模拟 JAR 内 <code>demo/Sample.class</code>，分别用正常 r11 组件、<strong>剔除 <code>disassembleBase64</code> 模拟 r9 缓存</strong>、组件完全缺失三条路径，均断言渲染 <code>.classEditor</code> 且无 <code>.cvTabs</code></td></tr>
+<tr><td><code>tests/class-disasm-check.py</code> / <code>class-view-check.py</code></td><td>脚本 URL 正则兼容带 query；断言更新为 r11 新契约（不再回退表格、存在自愈/内置反汇编/兜底）</td></tr>
+<tr><td><code>.github/workflows/build-apk.yml</code></td><td>CI 自检段接入两个新测试，步骤名补充「归档内 .class 分发」</td></tr>
+</tbody></table>
+<p class="note"><code>vendor/classview.js</code> 与 <code>style.css</code> 本轮<strong>未改动</strong>（r10 的反汇编器与配色保持原样）；Java 层仅 <code>MainActivity</code> 一行缓存纪元，<code>AndroidManifest.xml</code> 字节级未变，versionCode 仍为 55。</p></div>
+
+<h2>自检与构建</h2>
+<div class="card"><ul>
+<li>本地：<code>node --check</code> 三个前端文件通过；<strong>6 个 Python 自检 + 6 个 happy-dom 冒烟全部 PASS</strong>（<code>FAIL_FLAG=0</code>），其中启动直达 12 / DEX→JAR 11 / JAR 归档 60 / 类信息 12 / 反汇编 / <strong>归档内 .class 分发 24</strong> 项，冒烟侧 JAR 4 / class 8 / <strong>归档视图 5</strong> / 图标 8 / 打开方式 12 / 播放器 11 项。</li>
+<li>归档视图冒烟专门覆盖「缓存了 r9 旧组件」这一真实故障场景，是本轮防回归的核心。</li>
+<li>GitHub Actions 构建 #62：检出 → JDK 17 → Android SDK 34 / build-tools 35.0.0 → Node 20 + happy-dom → 前端自检（含 2 个新测试）→ ECJ + D8 + zipalign + apksigner → 核心 JVM 冒烟 → 上传产物 → 创建 Release，<strong class="ok">全部 12 步 success</strong>。</li>
+</ul></div>
+
+<h2>APK 内置资源实测（防止「包是新的、资源没进去」）</h2>
+<div class="card"><p>下载后用 16 段并行 Range 取回，SHA-256 与 GitHub Release 官方 digest 完全一致；再从 APK 内<strong>直接读出</strong>资源逐项验证：</p>
+<table><thead><tr><th>验证项</th><th>结果</th></tr></thead><tbody>
+<tr><td><code>assets/app.js</code> 含 <code>UI_BUILD='r11'</code> / <code>builtinClassDisasm</code> / <code>ensureClassView</code> / <code>classDisasmOf</code> / 两种文本兜底</td><td class="ok">全部 PASS</td></tr>
+<tr><td><code>classScreen()</code> 内无 <code>return classInfoScreen(f)</code> 实际代码</td><td class="ok">PASS</td></tr>
+<tr><td><code>assets/app.html</code> 含 <code>classview.js?v=r11</code> 与 <code>app.js?v=r11</code></td><td class="ok">PASS</td></tr>
+<tr><td><code>classes*.dex</code> 含 <code>assetEpoch</code> / <code>clearCache</code></td><td class="ok">PASS（3 个 dex 合计 23,983,452 B）</td></tr>
+<tr><td><code>fileArgs()</code> 支持 <code>archive / entry</code>；<code>classview.js</code> 仍导出 <code>disassembleBase64</code></td><td class="ok">PASS</td></tr>
+</tbody></table></div>
+
+<h2>APK 逐条目核对（r10 → r11）</h2>
+<div class="card"><table>
+<thead><tr><th>项目</th><th>结果</th></tr></thead><tbody>
+<tr><td>条目总数</td><td>461 → 461（新增 0 / 删除 0）</td></tr>
+<tr><td>内容有变化的条目</td><td>6 个</td></tr>
+<tr><td>文件体积</td><td>21,382,484 → 21,382,484 字节（两版相同；内容不同，SHA-256 已变）</td></tr>
+<tr><td>versionCode / versionName / package</td><td>55 / 0.1.59 / <code>com.cyberhub.manager</code>，两版均一致（二进制 Manifest 直接解析确认）</td></tr>
+</tbody></table>
+<h3>变化条目（解压后字节）</h3><table><thead><tr><th>条目</th><th>r10</th><th>r11</th><th>差值</th><th>r11 SHA-256 前 16 位</th></tr></thead><tbody>
+<tr><td><code>assets/app.js</code></td><td>468,888 B</td><td>484,361 B</td><td>+15,473</td><td><code>e314ffd924130e88</code></td></tr>
+<tr><td><code>assets/app.html</code></td><td>2,835 B</td><td>2,847 B</td><td>+12</td><td><code>7f37ca0db2552f61</code></td></tr>
+<tr><td><code>classes.dex</code></td><td>7,651,312 B</td><td>7,651,332 B</td><td>+20</td><td><code>9021e6c8a8eaa89d</code></td></tr>
+<tr><td><code>META-INF/CYBERHUB.RSA</code></td><td>1,275 B</td><td>1,275 B</td><td>+0</td><td><code>2c04254d12325573</code></td></tr>
+<tr><td><code>META-INF/CYBERHUB.SF</code></td><td>54,178 B</td><td>54,178 B</td><td>+0</td><td><code>6b34cb860f577c3a</code></td></tr>
+<tr><td><code>META-INF/MANIFEST.MF</code></td><td>54,051 B</td><td>54,051 B</td><td>+0</td><td><code>1404c6668f8c2b81</code></td></tr>
+</tbody></table>
+<h3>关键二进制 / 资源（字节级一致）</h3><table><thead><tr><th>条目</th><th>对比</th><th>SHA-256 前 16 位</th></tr></thead><tbody>
+<tr><td><code>AndroidManifest.xml</code></td><td class="ok">一致 ✓（8,964 B）</td><td><code>a747a06d747e49d6</code></td></tr>
+<tr><td><code>classes2.dex</code> / <code>classes3.dex</code></td><td class="ok">一致 ✓</td><td><code>f41693d9c3843bad</code> / <code>bccbe01a1bcb71e7</code></td></tr>
+<tr><td><code>assets/vendor/classview.js</code></td><td class="ok">一致 ✓（24,279 B）</td><td><code>aa4732af9d90a0ee</code></td></tr>
+<tr><td><code>assets/style.css</code> / <code>boot.js</code></td><td class="ok">一致 ✓</td><td><code>cbad276eac167bc4</code> / <code>c873f936dd29f352</code></td></tr>
+</tbody></table>
+<p class="note">v1 内嵌 X.509 证书指纹与 r10 <strong class="ok">完全一致</strong>（SHA-256 <code>BF:E0:C2:7B:F3:EB:DF:5D:19:9F:56:6E:6E:A4:40:54:16:F6:1E:30:A7:BF:70:22:89:33:6A:E3:C4:10:95:04</code>，<code>CN = Cyber Hub Manager Development</code>）；v2 / v3 签名块均存在（<code>0x7109871a, 0xf05368c0, 0x42726577</code>），可直接<strong>覆盖安装</strong>。<code>.SF</code> / <code>MANIFEST.MF</code> 摘要与 <code>.RSA</code> 签名值随内容重签，属预期。</p></div>
+
+<h2>交互与安全边界</h2>
+<div class="card"><ul>
+<li>本地 <code>.class</code> 与 JAR / ZIP / APK 归档内 <code>.class</code> 现在<strong>统一</strong>进入深色反汇编代码编辑器（行号、语法高亮、7 键工具栏、底部符号栏、查找替换、跳转、缩放）。</li>
+<li>覆盖安装后首次进入会清缓存并按版本号重新拉起组件；若仍命中旧缓存，由内置反汇编器无缝接管，用户不会看到表格页。</li>
+<li>右上菜单仍可主动进入「类信息查看器」「十六进制查看」「打开方式…」「导出反汇编文本」。</li>
+<li>保存键只导出 <code>.bytecode.txt</code>，<strong>绝不覆写 .class 原始字节</strong>；归档条目始终只读解出到缓存文件，不修改原归档。</li>
+</ul></div>
+
+<div class="card mut" style="font-size:13px">本报告由 r11 修复流程自动生成；交付 APK 位于 <code>/workspace/Cyber-Hub-Manager-0.1.59-r11.apk</code>，Release 地址 <code>https://github.com/wumingzhinu/Cyber-Hub-Manager/releases/tag/build-62</code>。安装建议：直接覆盖安装即可（versionCode 55、签名证书未变）；若仍看到旧界面，请强制停止应用并清除 WebView 缓存后重开。</div>
+</div></body></html>

@@ -133,6 +133,20 @@ versionCode 仍为 55、签名密钥未变、默认中文文案未改，可直�
 
 验证：本地全套 16 项自检全 PASS（5 个 Python + 5 个 happy-dom 冒烟 + 3 个 `node --check`）；Actions 构建 #61 的 12 步全 success；交付 APK 21,382,484 字节、SHA-256 `f6eb750c1cb46abf2657bb28cf54885c710111fb6346cb3bc17c54253ed50ef9`，461 → 461 条目，仅 3 个 assets + 3 个 META-INF 签名清单变化，v1 内嵌证书与 r9 完全一致、v2 / v3 签名块齐全，可直接覆盖安装。
 
+## r11 修复（JAR 内 .class 视图对标 MT 管理器：缓存根治）
+
+**现象**：r10 已把 `.class` 默认打开改为 MT 同款字节码反汇编编辑器，但用户反馈从 JAR / 归档内点开的 `.class` 仍显示 r9 的四标签「类信息查看器」表格（图一），要求改成图二深色代码视图。本地散装 `.class` 看着正常、归档内条目稳定复现。
+
+**根因**：`versionCode` 恒为 55 且签名证书相同，用户是覆盖安装，WebView HTTP 缓存里仍是 r9 版 `vendor/classview.js`——该版本只有 `parseBase64()`、没有 `disassembleBase64()`。r10 `classScreen()` 留有 `if(!dis||!dis.valid) return classInfoScreen(f);` 回退，于是 `dis=null` 时自动退回表格；旧 `parseBase64()` 又能正常渲染四标签，现象稳定、无报错、看起来像「没改」。归档内条目走 `fileData` 且总是重建视图，因此最易复现。
+
+- `assets/app.js`：`UI_BUILD='r11'`；`classScreen()` 删除表格回退，归档内 `.class` 恒进深色代码编辑器；新增 `ensureClassView()`（带 `?v=r11` 重载组件自愈）、`classDisasmOf()`、`builtinClassDisasm()`（app.js 自包含 JVM 字节码反汇编器，205 opcode、跳转标签、引用注释，不依赖外部组件）、`classStructText()` / `classBytesText()`（留在代码编辑器内的最终兜底）；`classInfoScreen()` 降级为菜单二级入口；关于页追加 r11 说明。
+- `assets/app.html`：`classview.js` / `app.js` 加 `?v=r11`；`MainActivity.java`：`assetEpoch` 4 → 5，覆盖安装后强制 `web.clearCache(true)`，配合既有 `LOAD_NO_CACHE` + `no-store`（本轮唯一 Java 改动）。
+- 测试：`tests/class-archive-dispatch-check.py`（24 项静态自检：`fileArgs` 归档分支、分发优先级、无表格回退、内置反汇编、脚本 query、`assetEpoch=5`、Java 归档读取链路）、`tests/class-archive-view-smoke.cjs`（5 项 happy-dom：模拟 JAR 内 `demo/Sample.class`，特意剔除 `disassembleBase64` 模拟 r9 旧缓存，三条路径均断言渲染 `.classEditor` 且无 `.cvTabs`）；`class-disasm-check.py` / `class-view-check.py` 更新到 r11 契约；两项新测试接入 CI。
+
+**未改动**：`vendor/classview.js` 与 `style.css` 未改；`AndroidManifest.xml` 字节级一致，versionCode 55 / 签名密钥未变；`DataEngine.fileData` / `ArchiveTools.readEntry()` 归档读取链路复用未改；保存键仍只导出 `.bytecode.txt`，绝不覆写 `.class` 原始字节。
+
+验证：本地 6 个 Python 自检 + 6 个 happy-dom 冒烟 + 3 个 `node --check` 全 PASS（`FAIL_FLAG=0`）；Actions 构建 #62 的 12 步全 success；交付 APK 21,382,484 字节、SHA-256 `147b614712c6c46ab6e36da23f1bebcd4f1a48002805836d4f5ccde4b9b32a6b`，461 → 461 条目、仅 6 项变化（app.js / app.html / classes.dex + 3 个 META-INF 签名清单），并从 APK 内直接读出 `UI_BUILD='r11'` / `builtinClassDisasm` / `?v=r11` / DEX 内 `assetEpoch` 全部 PASS；v1 内嵌证书与 r10 完全一致、v2 / v3 签名块齐全，可直接覆盖安装。
+
 ## 交付与修复报告（`reports/`）
 
 本目录归档面向用户的 HTML 交付说明，均为只读记录，不参与构建：
@@ -149,5 +163,6 @@ versionCode 仍为 55、签名密钥未变、默认中文文案未改，可直�
 | `r8-jar-open-fix-report.html` | 无法打开 JAR 文件修复（r8）：JAR 误走 8 MB 文本上限的根因、归档归类修复、真实 23.6 MB JAR 端到端验证（提交 `bd55744`、Release `build-59`） |
 | `r9-class-view-fix-report.html` | .class 文件无法打开修复（r9）：新增内置类信息查看器（纯 JS 解析 class 字节码）的根因、javap 权威对照、真实 194KB 大 class 端到端与 APK 二进制校验（提交 `d6041c2`、Release `build-60`） |
 | `r10-class-disasm-report.html` | .class 打开方式对标 MT 管理器（r10）：字节码反汇编文本编辑器、语法高亮、保存只导出不覆写、真实 class 端到端与 APK 逐条目 / 签名证书核对（提交 `f34bcba`、Release `build-61`） |
+| `r11-class-archive-view-report.html` | JAR 内 .class 视图对标 MT 管理器（r11）：覆盖安装后 WebView 旧缓存触发表格回退的根因、删回退 + 组件自愈 + 内置反汇编 + 缓存根治、归档场景防回归自检与 APK 内置资源实测（提交 `7457c85`、Release `build-62`） |
 
-正式签名 APK 请以仓库 Release `build-61` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。
+正式签名 APK 请以仓库 Release `build-62` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。
