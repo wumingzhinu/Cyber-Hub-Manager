@@ -118,6 +118,21 @@ versionCode 仍为 55、签名密钥未变、默认中文文案未改，可直�
 - `class-view-check.py` 12 项 / `class-open-dispatch-smoke.cjs` 6 项全 PASS；`startup-direct-check.py` 12 / `dex-to-jar-no-zipfs-check.py` 11 / `jar-open-archive-check.py` 60 项仍 PASS；`node --check` 三个脚本通过。
 - 全套 `.cjs` 改动前后逐项对照，无回归。
 
+## r10 修复（.class 打开方式对标 MT 管理器：字节码反汇编编辑器）
+
+**现象**：用户对比两张截图——图一 MT 管理器打开 `Hex.class` 是深色代码区 / 行号 / 语法高亮 / 7 键工具栏（菜单 / 图钉 / 撤销 / 重做 / 保存 / 编辑 / 更多）/ 底部符号栏，正文为 `package`、类版本头、`Method ...`、`stack N locals N`、逐条指令与 `L2f:` 跳转标签；图二 r9 版本是「类信息查看器」四标签表格（概览 / 字段 / 方法 / 字符串）。要求把 `.class` 默认打开改成图一同款。
+
+**根因**：r9 只做了 class 结构解析并按字段表格渲染，没有反汇编 `Code` 属性里的字节码指令，也没有复用现成的文本编辑器框架。
+
+- `assets/vendor/classview.js`：`parse()` 额外保留常量池与 `Code` 属性字节（max_stack / max_locals / code[]），新增 `disassemble()` / `disassembleBase64()`——205 个 JVM opcode 表，含 `tableswitch` / `lookupswitch` / `wide` / `iinc` / `multianewarray`，生成 MT 风格文本（类头、字段、方法头、十六进制跳转标签、Method / Field / Class / String 引用注释）；r9 的 `parseBase64()` 等 API 全部保留。
+- `assets/app.js`：`classScreen()` 改为把反汇编文本送进 `renderEditor()`（`kind:'class'`，`UI_BUILD='r10'`），复用行号 / 搜索 / 查找替换 / 跳转 / 缩放 / 符号栏；新增 `CodeMirror.defineMode('jvmasm')`；`saveEditor()` 对 class 改走 `exportClassDisasm()` 导出 `.bytecode.txt`，`canLeave()` 不拦截派生视图；`editorMenu()` 增加导出 / 类信息 / 十六进制 / 打开方式四项；原查看器改名 `classInfoScreen()` 保留为菜单二级入口；`reloadEditor()` / `goBack()` 同步适配并清理 `classEditor` 配色类。
+- `assets/style.css`：新增 `.classEditor` MT 同款深色配色（红关键字 / 蓝跳转标签 / 绿常量池引用 / 白指令 / 棕黄数字）。
+- 测试：`tests/class-disasm-check.py`（静态约束 + Node 真实反汇编）、`tests/class-open-dispatch-smoke.cjs`（happy-dom 8 项：7 键工具栏 / 状态栏 / 符号栏 / 五类语法高亮 / 菜单四入口 / r9 查看器回归）、`tests/fixtures/Sample.class`（真实 javac 产物，含 lookupswitch / 循环跳转 / 异常），均接入 CI。
+
+**未改动**：Java 层零改动，`AndroidManifest.xml` 与 `classes*.dex` 字节级一致，`versionCode` 55 与签名密钥未变；保存键只导出文本，绝不覆写 `.class` 原始字节；无效 class 仍回退到类信息 / 十六进制 / 打开方式出口。
+
+验证：本地全套 16 项自检全 PASS（5 个 Python + 5 个 happy-dom 冒烟 + 3 个 `node --check`）；Actions 构建 #61 的 12 步全 success；交付 APK 21,382,484 字节、SHA-256 `f6eb750c1cb46abf2657bb28cf54885c710111fb6346cb3bc17c54253ed50ef9`，461 → 461 条目，仅 3 个 assets + 3 个 META-INF 签名清单变化，v1 内嵌证书与 r9 完全一致、v2 / v3 签名块齐全，可直接覆盖安装。
+
 ## 交付与修复报告（`reports/`）
 
 本目录归档面向用户的 HTML 交付说明，均为只读记录，不参与构建：
@@ -133,5 +148,6 @@ versionCode 仍为 55、签名密钥未变、默认中文文案未改，可直�
 | `r7-dex-to-jar-fix-report.html` | DEX 转 JAR 修复（r7）：`cant find zipfs support` 根因、目录分支绕过 JDK zipfs、对照实验与实测（提交 `4c6cb54`、Release `build-58`） |
 | `r8-jar-open-fix-report.html` | 无法打开 JAR 文件修复（r8）：JAR 误走 8 MB 文本上限的根因、归档归类修复、真实 23.6 MB JAR 端到端验证（提交 `bd55744`、Release `build-59`） |
 | `r9-class-view-fix-report.html` | .class 文件无法打开修复（r9）：新增内置类信息查看器（纯 JS 解析 class 字节码）的根因、javap 权威对照、真实 194KB 大 class 端到端与 APK 二进制校验（提交 `d6041c2`、Release `build-60`） |
+| `r10-class-disasm-report.html` | .class 打开方式对标 MT 管理器（r10）：字节码反汇编文本编辑器、语法高亮、保存只导出不覆写、真实 class 端到端与 APK 逐条目 / 签名证书核对（提交 `f34bcba`、Release `build-61`） |
 
-正式签名 APK 请以仓库 Release `build-60` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。
+正式签名 APK 请以仓库 Release `build-61` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。
