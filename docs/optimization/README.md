@@ -132,5 +132,6 @@ versionCode 仍为 55、签名密钥未变、默认中文文案未改，可直�
 | `r6-startup-direct-report.html` | 启动直达管理器（r6）：去掉整页启动提示、首屏即双窗格管理器的根因与修复（提交 `d2b581d`、Release `build-57`） |
 | `r7-dex-to-jar-fix-report.html` | DEX 转 JAR 修复（r7）：`cant find zipfs support` 根因、目录分支绕过 JDK zipfs、对照实验与实测（提交 `4c6cb54`、Release `build-58`） |
 | `r8-jar-open-fix-report.html` | 无法打开 JAR 文件修复（r8）：JAR 误走 8 MB 文本上限的根因、归档归类修复、真实 23.6 MB JAR 端到端验证（提交 `bd55744`、Release `build-59`） |
+| `r9-class-view-fix-report.html` | .class 文件无法打开修复（r9）：新增内置类信息查看器（纯 JS 解析 class 字节码）的根因、javap 权威对照、真实 194KB 大 class 端到端与 APK 二进制校验（提交 `d6041c2`、Release `build-60`） |
 
-正式签名 APK 请以仓库 Release `build-59` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。
+正式签名 APK 请以仓库 Release `build-60` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>.class 文件无法打开修复报告 · r9</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1f2328;--muted:#5b6570;--line:#e3e7ec;--accent:#0969da;--ok:#1a7f37;--warn:#9a6700;--code:#f2f4f7}
+@media(prefers-color-scheme:dark){:root{--bg:#0d1117;--card:#161b22;--fg:#e6edf3;--muted:#9198a1;--line:#30363d;--accent:#58a6ff;--ok:#3fb950;--warn:#d29922;--code:#1c2128}}
+*{box-sizing:border-box}
+body{margin:0;padding:28px 18px 60px;background:var(--bg);color:var(--fg);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:960px;margin:0 auto}
+h1{font-size:26px;margin:0 0 6px;letter-spacing:.2px}
+.sub{color:var(--muted);margin:0 0 24px;font-size:14px}
+h2{font-size:19px;margin:30px 0 12px;padding-left:11px;border-left:4px solid var(--accent)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:14px 0}
+table{width:100%;border-collapse:collapse;font-size:14px;margin:10px 0}
+th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+th{background:var(--code);font-weight:600;white-space:nowrap}
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+code{background:var(--code);padding:2px 5px;border-radius:4px;word-break:break-all}
+pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:14px;overflow:auto;line-height:1.55;margin:10px 0}
+.bad{color:#cf222e;font-weight:600}
+.good{color:var(--ok);font-weight:600}
+.pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;background:rgba(9,105,218,.12);color:var(--accent)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.kv{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.kv b{display:block;font-size:12px;color:var(--muted);font-weight:500;margin-bottom:4px}
+.kv span{font-size:14px;word-break:break-all}
+ul{padding-left:22px;margin:8px 0}li{margin:5px 0}
+blockquote{margin:12px 0;padding:10px 14px;border-left:3px solid var(--accent);background:var(--code);border-radius:0 8px 8px 0;color:var(--muted)}
+.foot{margin-top:34px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>.class 文件无法打开修复报告 <span class="pill">r9</span></h1>
+<p class="sub">真机报错「二进制文件：无法作为文本打开，请在「打开方式」中选择十六进制查看器或其他应用」 · 提交 <code>d6041c2</code> · Release <code>build-60</code> · 2026-11-09</p>
+
+<div class="grid">
+  <div class="kv"><b>根因</b><span><code>.class</code> 在 <code>fileType()</code> 里无分类，被当普通文本读取，后端扫到魔数后的 <code>0x00</code> 抛「二进制文件」</span></div>
+  <div class="kv"><b>新 APK</b><span>Cyber-Hub-Manager-0.1.59-r9.apk（21,366,100 字节）</span></div>
+  <div class="kv"><b>SHA256</b><span>0f1e2b741ce044251b1e337864dc1a229e6f62da6d4b1d44f2027c0830a19b8b</span></div>
+  <div class="kv"><b>构建结果</b><span class="good">Actions run 42544563284 · success（3m14s）</span></div>
+</div>
+
+<h2>一、症状</h2>
+<div class="card">
+<p>在文件管理器里进入 JAR / 压缩包（例如上一轮 r7「DEX 转 JAR」或 r8「JAR 归档浏览」的产物）后，点击其中的 <code>.class</code> 文件无法打开，界面报错：</p>
+<pre>二进制文件：无法作为文本打开，请在「打开方式」中选择十六进制查看器或其他应用</pre>
+<p>在「打开方式」对话框里选「编辑文本」时，异常被包成「无法完成」对话框弹出。<b>归档内 / 本地的 .class 完全看不到任何内容</b>——这正是 r8 报告明确标注「本轮未加入独立 .class 反编译」所留下的能力缺口。</p>
+</div>
+
+<h2>二、根因：分类缺失 → 文本读取 → 二进制拦截</h2>
+<div class="card">
+<p>报错文案精确来自 <code>DataEngine.read()</code> 的二进制字节码扫描：<code>FileOps.read(f, MAX_TEXT)</code> 读回字节后，若前 2048 字节出现 <code>0x00</code> 就抛错。Java class 文件以魔数 <code>CA FE BA BE</code> 开头，其后全是版本号、常量池索引等二进制数据，必然命中。</p>
+<pre>openFile(f) → fileType(f)        // archiveExtensions / textExtensions / 专属列表都不含 class → 'file'
+  → openText(fileArgs(f), f)      // 未知类型一律兜底当文本打开
+  → rpc('read') → DataEngine.read() → FileOps.read(f, MAX_TEXT)
+  → 前 2048 字节扫到 0x00 → IOException("二进制文件：无法作为文本打开…")</pre>
+<p>更糟的是 <code>openWithBuiltinItems()</code> 的「编辑文本」调用 <code>openText(fileArgs(f))</code> <b>没有传 <code>f</code></b>，使 <code>openText()</code> 里 <code>f &amp;&amp; !f.dir &amp;&amp; msg.includes('二进制文件')</code> 的兜底失效，异常被 <code>act()</code> 捕获后弹成「无法完成」对话框，用户连「打开方式」都回不去。</p>
+<blockquote>关键：后端其实早就能拿到 .class 的字节。<code>DataEngine</code> 的 <code>fileData</code> action = <code>ExtraTools.fileData(resolve(a))</code>，返回 base64；<code>resolve()</code> 对归档内条目会先 <code>readEntry()</code> 解出临时副本。缺的只是「前端把 .class 当成一种可查看的类型」，而不是任何原生能力。</blockquote>
+</div>
+
+<h2>三、修复：内置 .class 类信息查看器</h2>
+<div class="card">
+<p>参考 MT 管理器查看 class 的能力，新增一个<b>离线结构化查看器</b>，点击即能看到内容，而非落到错误页或只有十六进制。全部在 WebView 前端完成，<b>Java 层零改动</b>。</p>
+<table>
+<tr><th>文件</th><th>改动</th></tr>
+<tr><td><code>vendor/classview.js</code><br>（新增）</td><td>UMD 纯 JS 解析器，按 JVMS 规范读取 class 字节码：魔数 / minor+major 版本→编译目标 JDK / 常量池（含 Modified UTF-8 与代理对、Long/Double 双槽、InvokeDynamic 等全标签）/ 访问标志 / <code>this_class</code> / <code>super_class</code> / 接口 / 字段 / 方法（含 <code>Code</code> 属性字节长度）/ <code>SourceFile</code> 与类属性 / 全部 UTF-8 字符串；提供描述符可读化（<code>[[Lfoo/Bar;</code>→<code>foo.Bar[][]</code>，<code>(I[Ljava/lang/String;)Z</code>→<code>(int, java.lang.String[]) → boolean</code>）。<b>只解析结构，不执行、不反编译。</b></td></tr>
+<tr><td><code>app.js</code></td><td><code>fileType()</code> 新增 <code>ext==='class' → 'class'</code>；<code>openFile()</code> 新增 <code>type==='class' → classScreen(f)</code> 直达分支（排在文本兜底之前）；新增 <code>classScreen(f)</code>：用现成的 <code>rpc('fileData', fileArgs(f))</code> 拿 base64，按 <b>概览 / 字段 / 方法 / 常量池字符串</b> 四标签渲染，支持搜索，可一键切到十六进制查看或打开方式；无效 class 也给可操作出口，不再死在错误页。</td></tr>
+<tr><td><code>app.js</code>（兜底）</td><td>「打开方式 → 编辑文本」对 .class 改道 <code>classScreen(f)</code>；<b>13 项内置网格的标签数组一字未动</b>，<code>blob.bin</code> 等其它二进制显式编辑仍保留解释性报错。</td></tr>
+<tr><td><code>app.html</code> / <code>style.css</code></td><td>在 <code>app.js</code> 前加载 <code>classview.js</code>；追加查看器样式（复用 <code>tabs</code>/<code>listrow</code>/<code>kvRow</code>/<code>searchline</code>/<code>primary</code>）。</td></tr>
+<tr><td><code>app.js</code>（版本）</td><td><code>UI_BUILD='r9'</code>、关于页追加 r9 说明。</td></tr>
+</table>
+<p><b>未改动</b>：<code>FileOps.MAX_TEXT</code> 仍为 8 MB；<code>DataEngine</code> / <code>ArchiveTools</code> / <code>DexEngine</code> / <code>ExtraTools</code> 全部未改，没有新增 action；versionCode 55、签名密钥、默认中文文案，以及 r4–r8 全部修复保持不变。</p>
+</div>
+
+<h2>四、验证</h2>
+<div class="card">
+<h3>4.1 解析器权威性（javap 对照）</h3>
+<p>用 <code>javap -verbose</code> 对照 r7 产出的真实 <code>.class</code>，解析器输出逐项吻合：</p>
+<pre>major version: 52          → major=52 / Java 8
+flags: ACC_PUBLIC,ACC_SUPER → ['public','super']
+this_class: org/jf/smali/smaliParser  → org.jf.smali.smaliParser
+super_class: org/antlr/runtime/Parser → org.antlr.runtime.Parser
+field: public static final int ACCESS_SPEC → name=ACCESS_SPEC, type=int
+Smali$1 implements java.util.concurrent.Callable → interfaces 正确</pre>
+<p>尤其末尾 <code>InnerClasses</code> 类属性被正确读到，证明常量池 / 字段 / 方法 / 属性区的<b>偏移解析全部正确</b>。194,145 字节的 <code>smaliParser.class</code>（<b>4,927 个常量池条目 / 840 字段 / 131 方法 / 1,762 个 UTF-8 常量</b>）经 <code>parseBase64()</code>（Web 侧实际调用路径）解析亦完全正确。</p>
+
+<h3>4.2 自动化自检与分发</h3>
+<ul>
+<li>新增 <code>tests/class-view-check.py</code>：<b>12 项</b>静态约束（分类 / 直达分支顺序 / 四标签 / 编辑文本改道 / 13 项网格 / Java 层零改动 / 8 MB 上限不动）+ Node 真实执行解析器（最小合法 class、描述符可读化、损坏文件优雅失败、真实 .class），全 PASS。</li>
+<li>新增 <code>tests/class-open-dispatch-smoke.cjs</code>：happy-dom 加载真实 <code>app.js</code> + <code>classview.js</code>，<b>6 项</b>全 PASS —— .class 走 <code>fileData</code> 不再走 <code>read</code>、渲染出含 <code>CAFEBABE</code>/类名/父类/JDK 版本的查看器与四标签、标签切换、十六进制与打开方式出口、<code>notes.txt</code> 仍走文本编辑器、<code>blob.bin</code> 显式编辑仍报「二进制文件」。</li>
+<li>既有 <code>startup-direct-check.py</code> 12 / <code>dex-to-jar-no-zipfs-check.py</code> 11 / <code>jar-open-archive-check.py</code> 60 项仍全 PASS；<code>node --check</code> 三个脚本通过；CI 三套冒烟 <code>file-icons</code> 8 / <code>open-with-ui</code> 12 / <code>media-player-ui</code> 11 全 PASS。</li>
+<li>全套 <code>.cjs</code> 与改动前基线（<code>git archive HEAD</code> 快照）逐项对照：原有 21 项结果不变，<b>唯一差异是新增的 <code>class-open-dispatch-smoke</code> 一项 PASS</b>；10 项 FAIL 名单与基线完全相同（沙箱环境限制），无回归。</li>
+</ul>
+
+<h3>4.3 APK 二进制校验</h3>
+<p>与 r8 版逐条目 SHA256 对比，仅 <code>app.js</code> / <code>app.html</code> / <code>style.css</code> / 新增 <code>classview.js</code> 及 3 个 <code>META-INF/*</code> 签名清单变化，<code>AndroidManifest.xml</code> 与全部 <code>classes*.dex</code> 字节级一致（印证 Java 层零改动）；v2 / v3 签名证书相同，可直接覆盖安装。APK 内实测 <code>classview.js</code> 存在且解析逻辑完整、<code>UI_BUILD='r9'</code>、<code>fileType</code> 含 <code>ext==='class'</code>、<code>classScreen</code> 四标签齐全。</p>
+</div>
+
+<h2>五、交付</h2>
+<div class="card">
+<table>
+<tr><th>项</th><th>值</th></tr>
+<tr><td>源码提交</td><td><code>d6041c2</code> → <code>main</code>（9 文件，+622 / −9）</td></tr>
+<tr><td>Actions</td><td><code>42544563284</code> · <span class="good">success（3m14s）</span>，全步骤 ✓，含新加入的类信息自检与分发冒烟</td></tr>
+<tr><td>Release</td><td><code>build-60</code></td></tr>
+<tr><td>APK</td><td><code>/workspace/Cyber-Hub-Manager-0.1.59-r9.apk</code>，21,366,100 字节</td></tr>
+<tr><td>SHA256</td><td><code>0f1e2b741ce044251b1e337864dc1a229e6f62da6d4b1d44f2027c0830a19b8b</code>（与 Release 摘要一致）</td></tr>
+<tr><td>报告</td><td><code>r9-class-view-fix-report.html</code>，归档进仓库 <code>docs/optimization/reports/</code></td></tr>
+</table>
+<p>versionCode 55、versionName 0.1.59、签名密钥、默认中文文案与 r4–r8 全部修复保留；旧版 APK 已从 <code>/workspace</code> 移除，避免装错。</p>
+</div>
+
+<h2>六、能力边界</h2>
+<div class="card">
+<p>本轮实现的是<b>类结构浏览</b>（版本、类层次、成员签名、常量池字符串、十六进制），与 MT 管理器的 class 查看对齐；<b>不含 Java 源码反编译</b>（需引入桌面级反编译器，Android 端不适用）。如需查看方法体逻辑，可在查看器里点「十六进制查看」按字节浏览，或用「打开方式」交给外部反编译应用。</p>
+</div>
+
+<p class="foot">赛博中枢管家 · 优化档案 r9 · 参考 MT 管理器 2.26.11 能力对齐，未复制其任何代码 / 资源 / 图标 / 文案 · 2026-11-09</p>
+</div>
+</body>
+</html>
