@@ -212,7 +212,7 @@ require(d.get('major') == 52, 'major 版本错误：%s' % d.get('major'))
 require(d.get('lines', 0) >= 100, '反汇编文本行数异常：%s' % d.get('lines'))
 for token in ['package demo;', 'public super class Sample version 52:0',
               'private Field value:"I"', 'Method "<init>":"(I)V"',
-              'stack 2 locals 2', 'aLoad_0', 'invokespecial',
+              'stack 2 locals 2', 'aload_0', 'invokespecial',
               'Method java/lang/Object."<init>":"()V";',
               'Field demo/Sample.value:"I";', 'putfield', 'return',
               'lookupswitch', 'default L2d', 'L24:', 'L2a:',

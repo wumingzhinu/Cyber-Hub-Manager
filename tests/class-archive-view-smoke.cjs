@@ -69,7 +69,7 @@ const fs = require('fs'), path = require('path'), assert = require('assert');
     const ed = JSON.parse(w.eval("JSON.stringify({kind:window.__test.state.editor&&window.__test.state.editor.kind,text:window.__test.state.editor&&window.__test.state.editor.text,screen:window.__test.state.screen})"));
     assert(ed.kind === 'class', label + '：state.editor.kind 应为 class，实为 ' + ed.kind);
     assert(ed.screen === 'editor', label + '：应进入编辑器 screen');
-    assert(String(ed.text).includes('Method ') && String(ed.text).includes('aLoad_0'),
+    assert(String(ed.text).includes('Method ') && String(ed.text).includes('aload_0'),
       label + '：正文应是逐条反汇编指令，实为 ' + String(ed.text).slice(0, 80));
     assert(w.document.querySelector('#content').classList.contains('classEditor'),
       label + '：代码区应带 classEditor 深色配色类');

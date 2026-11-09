@@ -106,13 +106,15 @@ const fs = require('fs'), path = require('path'), assert = require('assert');
       next(){return line[pos++];},string:line};
       while(pos<line.length){const p=pos;const t=mode.token(st,{});if(pos===p)st.next();if(t)out.push(t);}return out;}
     return JSON.stringify({head:toks('package demo;'),cls:toks('public super class Sample version 52:0'),
-      label:toks('L24:     iLoad 4'),instr:toks('aLoad_0'),
+      label:toks('L24:     iload 4'),instr:toks('aload_0'),
       ref:toks('Method java/lang/Object."<init>":"()V";')});
   })()`));
-  assert(modeTokens.head.includes('keyword'), 'package / 类声明应着关键字色');
+  /* r13: 词表对齐 MT 的 jasm.mtsx —— package/class 属 declaration(type)，
+   * opcode 属 keyword（标准小写 aload_0），不再是 builtin 兜底色。 */
+  assert(modeTokens.head.includes('type'), 'package 声明应着 declaration(type) 色');
   assert(modeTokens.cls.includes('keyword') && modeTokens.cls.includes('number'), '类版本头应有着色');
   assert(modeTokens.label.includes('meta'), '跳转标签 L24: 应着 meta 蓝色');
-  assert(modeTokens.instr.includes('builtin'), '指令助记符应着 builtin 色');
+  assert(modeTokens.instr.includes('keyword'), 'MT 标准小写 opcode aload_0 应着 keyword 色');
   assert(modeTokens.ref.includes('type') && modeTokens.ref.includes('string'), '常量池引用与方法签名应着 type/string 色');
   pass('编辑器外观：深色代码区 / 7 键工具栏 / 状态栏 / 符号栏 / 五类语法高亮');
 

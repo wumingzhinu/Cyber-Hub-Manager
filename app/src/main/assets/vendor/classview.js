@@ -48,15 +48,28 @@
     return out;
   }
 
+  /* r13: 修饰符词表对齐 MT2.26.11 的 assets/syntax/jasm.mtsx「keyword」词表：
+   *   public private protected static final super interface abstract synthetic
+   *   annotation enum native synchronized bridge varargs strict volatile transient
+   *   open transitive mandated deprecated identity value
+   * 关键差异：MT 用 strict（非 strictfp）；bridge/volatile 与 varargs/transient 在
+   * 字段/方法上分别取义，不写 'bridge/volatile' 这类合并词。 */
   var CLASS_ACC = [
     [0x0001, 'public'], [0x0010, 'final'], [0x0020, 'super'], [0x0200, 'interface'],
     [0x0400, 'abstract'], [0x1000, 'synthetic'], [0x2000, 'annotation'], [0x4000, 'enum'], [0x8000, 'module']
   ];
-  var MEMBER_ACC = [
+  /* 字段专用：0x0040=volatile, 0x0080=transient（JVMS 4.5）。 */
+  var FIELD_ACC = [
     [0x0001, 'public'], [0x0002, 'private'], [0x0004, 'protected'], [0x0008, 'static'],
-    [0x0010, 'final'], [0x0020, 'synchronized'], [0x0040, 'bridge/volatile'], [0x0080, 'varargs/transient'],
-    [0x0100, 'native'], [0x0400, 'abstract'], [0x0800, 'strictfp'], [0x1000, 'synthetic']
+    [0x0010, 'final'], [0x0040, 'volatile'], [0x0080, 'transient'], [0x1000, 'synthetic']
   ];
+  /* 方法专用：0x0040=bridge, 0x0080=varargs, 0x0800=strict（JVMS 4.6）。 */
+  var METHOD_ACC = [
+    [0x0001, 'public'], [0x0002, 'private'], [0x0004, 'protected'], [0x0008, 'static'],
+    [0x0010, 'final'], [0x0020, 'synchronized'], [0x0040, 'bridge'], [0x0080, 'varargs'],
+    [0x0100, 'native'], [0x0400, 'abstract'], [0x0800, 'strict'], [0x1000, 'synthetic']
+  ];
+  var MEMBER_ACC = METHOD_ACC;   /* 兼容旧引用（方法上下文） */
   function flags(v, table) { var r = []; for (var i = 0; i < table.length; i++) if (v & table[i][0]) r.push(table[i][1]); return r; }
 
   /* major version -> JDK (45=1.1 .. 49=5, then major-44). */
@@ -197,7 +210,9 @@
         for (var m = 0; m < count; m++) {
           var acc = u2(b, pos), name = utf8(u2(b, pos + 2)), desc = utf8(u2(b, pos + 4));
           var ac = u2(b, pos + 6); pos += 8;
-          var codeLen = 0, item = { access: acc, accessFlags: flags(acc, MEMBER_ACC), name: name, descriptor: desc };
+          /* r13: 字段与方法分别取义（volatile/transient vs bridge/varargs）。 */
+          var accTable = isMethod ? METHOD_ACC : FIELD_ACC;
+          var codeLen = 0, item = { access: acc, accessFlags: flags(acc, accTable), name: name, descriptor: desc };
           for (var a = 0; a < ac; a++) {
             var an = utf8(u2(b, pos)), al = u4(b, pos + 2), data = pos + 6; pos = data + al;
             /* Code attribute: max_stack(2) + max_locals(2) + code_length(4) + code[]. */
@@ -240,26 +255,28 @@
   }
 
   /* ---- JVM opcode table (JVMS 4.10) ----
-   * Mnemonics follow the Jasmin / MT Manager bytecode listing style: load/store
-   * families use the camelCase aLoad_0 / iStore_1 spellings, everything else is
-   * the standard lowercase opcode name. kind describes the operand bytes. */
+   * r13: 助记符严格对齐 MT2.26.11 反编译出的 Jasmin opcode 表（classes*.dex 内
+   * "00 - nop;01 - aconst_null;…;2a 0 aload_0;…"）与官方语法定义
+   * assets/syntax/jasm.mtsx 的 opcode 词表 —— 全部是标准小写 aconst_null /
+   * aload_0 / istore_1。r10–r12 使用的 camelCase aLoad_0 / aConst_null 是
+   * 自创拼写，MT 全库零命中，本轮据反编译证据纠正。kind 描述操作数字节。 */
   var ATYPE = { 4: 'boolean', 5: 'char', 6: 'float', 7: 'double', 8: 'byte', 9: 'short', 10: 'int', 11: 'long' };
   var OPS = (function () {
     var t = new Array(256);
     function set(op, name, kind) { t[op] = [name, kind || '']; }
-    set(0x00, 'nop'); set(0x01, 'aConst_null'); set(0x02, 'iconst_m1');
+    set(0x00, 'nop'); set(0x01, 'aconst_null'); set(0x02, 'iconst_m1');
     for (var i = 0; i <= 5; i++) set(0x03 + i, 'iconst_' + i);
     set(0x09, 'lconst_0'); set(0x0a, 'lconst_1');
     set(0x0b, 'fconst_0'); set(0x0c, 'fconst_1'); set(0x0d, 'fconst_2');
     set(0x0e, 'dconst_0'); set(0x0f, 'dconst_1');
     set(0x10, 'bipush', 's1'); set(0x11, 'sipush', 's2');
     set(0x12, 'ldc', 'cp1'); set(0x13, 'ldc_w', 'cp2'); set(0x14, 'ldc2_w', 'cp2');
-    [['i', 'iLoad'], ['l', 'lLoad'], ['f', 'fLoad'], ['d', 'dLoad'], ['a', 'aLoad']].forEach(function (p, k) {
+    [['i', 'iload'], ['l', 'lload'], ['f', 'fload'], ['d', 'dload'], ['a', 'aload']].forEach(function (p, k) {
       set(0x15 + k, p[1], 'u1');
       for (var n = 0; n <= 3; n++) set(0x1a + k * 4 + n, p[1] + '_' + n);
     });
     ['iaload', 'laload', 'faload', 'daload', 'aaload', 'baload', 'caload', 'saload'].forEach(function (n, k) { set(0x2e + k, n); });
-    [['i', 'iStore'], ['l', 'lStore'], ['f', 'fStore'], ['d', 'dStore'], ['a', 'aStore']].forEach(function (p, k) {
+    [['i', 'istore'], ['l', 'lstore'], ['f', 'fstore'], ['d', 'dstore'], ['a', 'astore']].forEach(function (p, k) {
       set(0x36 + k, p[1], 'u1');
       for (var n = 0; n <= 3; n++) set(0x3b + k * 4 + n, p[1] + '_' + n);
     });
@@ -364,6 +381,54 @@
     return m.name + '_' + returnCode(close >= 0 ? d.slice(close + 1) : 'V');
   }
 
+  /* r13: 依据 MT2.26.11 反编译出的 ATT_* 属性全集，解出「能确定表示为文本」的
+   * 类属性值。返回 null 表示该属性不渲染（结构型属性不臆造内容）。
+   * 证据：classes4.dex 的 ATT_SourceFile / ATT_Signature / ATT_Deprecated /
+   * ATT_Synthetic / ATT_EnclosingMethod / ATT_NestHost / ATT_NestMembers /
+   * ATT_PermittedSubclasses / ATT_Record / ATT_InnerClasses / ATT_BootstrapMethods
+   * 等常量；属性名与 jasm.mtsx declaration 词表一致。 */
+  function classAttrValue(a, b, r, cp) {
+    var o = a.offset, L = a.length;
+    if (o === undefined || o + L > b.length) return null;
+    var cl = function (idx) { return r.rawClass(idx) || ('#' + idx); };
+    var utf = function (idx) { return r.utf8(idx); };
+    switch (a.name) {
+      case 'SourceFile':
+      case 'Signature':
+        return L >= 2 ? '"' + utf(u2(b, o)) + '"' : null;
+      case 'Deprecated':
+      case 'Synthetic':
+        return 'true';
+      case 'NestHost':                       /* u2: host class index */
+        return L >= 2 ? '"' + cl(u2(b, o)) + '"' : null;
+      case 'EnclosingMethod': {             /* u2 class + u2 NameAndType */
+        if (L < 4) return null;
+        var owner = cl(u2(b, o)), nt = cp[u2(b, o + 2)] || {};
+        var nm = nt.a !== undefined ? utf(nt.a) : '', ds = nt.c !== undefined ? utf(nt.c) : '';
+        return '"' + owner + (nm ? '.' + nm + ':"' + ds + '"' : '') + '"';
+      }
+      case 'NestMembers':
+      case 'PermittedSubclasses': {         /* u2 count + u2[] class indexes */
+        if (L < 2) return null;
+        var n = u2(b, o), names = [];
+        for (var i = 0; i < n && 2 + i * 2 + 1 < L; i++) names.push(cl(u2(b, o + 2 + i * 2)));
+        return names.length ? '"' + names.join('", "') + '"' : null;
+      }
+      case 'SourceDebugExtension': {       /* raw UTF-8 bytes (JVMS 4.7.11) */
+        var s = '', lim = Math.min(L, 4096);
+        for (var j = 0; j < lim; j++) s += String.fromCharCode(b[o + j]);
+        try { s = decodeURIComponent(escape(s)); } catch (e) { /* keep raw */ }
+        return '"' + s.replace(/"/g, '\\"').replace(/[\r\n]+/g, ' ') + '"';
+      }
+      /* InnerClasses / BootstrapMethods / Record / Module* / *Annotations /
+       * StackMapTable / LineNumberTable / LocalVariable*Table / ConstantValue /
+       * MethodParameters / AnnotationDefault 等为结构型属性；MT 会展开成多行
+       * 子结构，此处不臆造，返回 null（保持 r12 的克制，避免输出无意义偏差）。 */
+      default:
+        return null;
+    }
+  }
+
   /* Turn a class file into the MT-style bytecode listing. */
   function disassemble(bytes) {
     var info = parse(bytes);
@@ -400,15 +465,14 @@
     if (info.interfaces.length) out.push('implements ' + info.interfaces.join(', ').replace(/\./g, '/'));
     out.push('{');
 
-    /* 类级属性块：只渲染能解出确定文本值的属性，其余（InnerClasses /
-     * BootstrapMethods 等）不臆造内容，避免与 MT 输出产生无意义的偏差。 */
+    /* r13: 类属性块对齐 MT2.26.11 反编译出的 ATT_* 属性全集（classes4.dex 内
+     * 36 个 ATT_* 常量 + assets/syntax/jasm.mtsx 的 declaration 词表）。
+     * MT JASM printer 为类属性逐条输出一行：<属性名左对齐 24> <值>;
+     * 只渲染能从原始字节确定解出的属性值；结构型属性（InnerClasses /
+     * BootstrapMethods / Record / 注解表等）不臆造展开文本，保持 r12 的克制。 */
     var attrLines = [];
     (info.attributes || []).forEach(function (a) {
-      var o = a.offset, L = a.length, val = null;
-      if (o === undefined) return;
-      if ((a.name === 'SourceFile' || a.name === 'Signature') && L >= 2)
-        val = '"' + r.utf8(u2(b, o)) + '"';
-      else if (a.name === 'Deprecated' || a.name === 'Synthetic') val = 'true';
+      var val = classAttrValue(a, b, r, info._cp);
       if (val !== null) attrLines.push('  ' + pad(a.name, 24) + ' ' + val + ';');
     });
     attrLines.forEach(function (l) { out.push(l); });
@@ -457,7 +521,11 @@
       out.push('');
     }
     while (out.length && out[out.length - 1] === '') out.pop();
-    out.push('} // end Class ' + clsRaw);
+    /* r13: MT dumper 明文区分两种收尾（classes5.dex）：
+     * "} // end Class " 普通类 / "} // end of module " module-info。
+     * 证据：混淆类 l/᩶ܿۜ.smali 的 const-string 常量 :344 / :2658。 */
+    var isModule = (info.access & 0x8000) !== 0;
+    out.push((isModule ? '} // end of module ' : '} // end Class ') + clsRaw);
     result.methodCount = info.methods.length;
     result.instructionCount = totalInstr;
     result.labelCount = totalLabels;

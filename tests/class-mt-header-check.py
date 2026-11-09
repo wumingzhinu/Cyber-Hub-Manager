@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""r12: .class 反汇编文本与 MT 管理器语法逐行对齐自检。
+"""r13: .class 反汇编文本与 MT / JASM 语法逐行对齐自检。
 
 对照样本：commons-net-3.10.0.jar 内
 org/apache/commons/net/bsd/package-info.class（javap 确认为
@@ -152,7 +152,7 @@ require(s.get('instr', 0) >= 80 and s.get('labels', 0) >= 8,
 st = str(s.get('text', ''))
 for t in ['package demo;', 'public super class Sample version 52:0', '{',
           '  SourceFile               "Sample.java";', 'private Field value:"I"',
-          'stack 2 locals 2', 'aLoad_0', 'lookupswitch', 'L24:',
+          'stack 2 locals 2', 'aload_0', 'lookupswitch', 'L24:',
           '} // end Class demo/Sample']:
     require(t in st, 'Sample.class 缺少 MT 同款元素：' + t)
 require('version 52.0' not in st and 'interface abstract class' not in st,
@@ -161,17 +161,19 @@ require('version 52.0' not in st and 'interface abstract class' not in st,
 # --- 3) 静态约束：三处反汇编器共用同一套语法 ---
 app_js = read(APP)
 cv_js = read(CLASSVIEW)
-require("const UI_BUILD='r12';" in app_js, 'UI_BUILD 应递增到 r12')
+import re as _re
+_ui = _re.search(r"const UI_BUILD='(r\d+)';", app_js)
+require(_ui is not None and _ui.group(1) >= 'r13', 'UI_BUILD 应递增到 r13 或更高')
 require("' version '+u2(6)+':'+u2(4)" in app_js,
         'builtinClassDisasm 应使用 major:minor 版本格式')
 require("' version '+info.major+':'+info.minor" in app_js,
         'classStructText 应使用 major:minor 版本格式')
-require(app_js.count("out.push('} // end Class '+clsRaw);") == 2,
-        'builtinClassDisasm / classStructText 都应有 MT 收尾注释')
+require(app_js.count("?'} // end of module ':'} // end Class '") >= 2,
+        'builtinClassDisasm / classStructText 都应有 MT 收尾（含 module 分支）')
 require(app_js.count("out.push('{');") == 2, '两处兜底都应有 { } 类体')
 require('const clsAttrs=[];' in app_js, 'builtinClassDisasm 应解析类级属性')
-require("out.push('} // end Class ' + clsRaw);" in cv_js,
-        'classview.js 应有 MT 收尾注释')
+require("'} // end of module ' : '} // end Class '" in cv_js,
+        'classview.js 应有 MT 收尾注释（含 module 分支）')
 require("' version ' + info.major + ':' + info.minor" in cv_js,
         'classview.js 应使用 major:minor 版本格式')
 require('offset: pos' in cv_js, 'classview.js parse() 应记录属性数据偏移')
@@ -181,15 +183,17 @@ require("if(isIface)skip.abstract=1" in app_js,
         'app.js 两处兜底不应重复输出 abstract')
 
 # --- 4) 缓存标记必须递增（本轮改了 vendor/classview.js） ---
-require('?v=r12' in read(APP_HTML), 'app.html 关键脚本应加 ?v=r12 版本号')
+require(_ui is not None and ('?v='+_ui.group(1)) in read(APP_HTML),
+        'app.html 关键脚本版本号应与 UI_BUILD 一致')
 main_java = read(MAIN)
-require('assetEpoch",0)<6' in main_java and 'putInt("assetEpoch",6)' in main_java,
-        'MainActivity assetEpoch 应提升到 6，强制覆盖安装清缓存')
+_ep = _re.search(r'assetEpoch",0\)<(\d+)', main_java)
+require(_ep is not None and int(_ep.group(1)) >= 7,
+        'MainActivity assetEpoch 应 >= 7（本轮改了 vendor/classview.js，覆盖安装需清缓存）')
 
 if errors:
-    print('FAIL: r12 MT 类头对齐自检未通过（%d 项中 %d 项失败）' % (COUNT, len(errors)))
+    print('FAIL: r13 MT/JASM 对齐自检未通过（%d 项中 %d 项失败）' % (COUNT, len(errors)))
     for e in errors:
         print('  -', e)
     sys.exit(1)
-print('PASS: r12 .class 反汇编与 MT 管理器语法逐行对齐自检 %d 项全部通过'
+print('PASS: r13 .class 反汇编与 MT/JASM 语法逐行对齐自检 %d 项全部通过'
       '（真实 JAR 样本 / 合成样本 / 主体不回归 / 三级语法一致 / 缓存标记）' % COUNT)
