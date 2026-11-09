@@ -66,8 +66,9 @@ public class MainActivity extends Activity {
         s.setCacheMode(WebSettings.LOAD_NO_CACHE);
         /* r11: 覆盖安装（versionCode 保持 55）时 WebView 会复用上一次的
          * classview.js / app.js 缓存，导致归档内 .class 仍走旧的「类信息查看器」。
-         * 提升 assetEpoch 强制 clearCache(true)；localAsset 亦返回 no-store。 */
-        if(getPreferences(0).getInt("assetEpoch",0)<5){web.clearCache(true);getPreferences(0).edit().putInt("assetEpoch",5).apply();}
+        * 提升 assetEpoch 强制 clearCache(true)；localAsset 亦返回 no-store。
+        * r12 再提升到 6：本轮改动了 vendor/classview.js 的类头渲染，必须清掉旧缓存。 */
+       if(getPreferences(0).getInt("assetEpoch",0)<6){web.clearCache(true);getPreferences(0).edit().putInt("assetEpoch",6).apply();}
         web.setWebChromeClient(new WebChromeClient(){@Override public boolean onConsoleMessage(ConsoleMessage m){
             if(m.messageLevel()==ConsoleMessage.MessageLevel.ERROR)android.util.Log.e("CyberHubUI",m.message()+" @ "+m.sourceId()+":"+m.lineNumber());return true;
         }});

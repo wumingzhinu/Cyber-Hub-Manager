@@ -93,13 +93,18 @@ for token in ['atob(', '0xCAFEBABE', 'tableswitch', 'lookupswitch', 'invokespeci
               'Method ', 'Field ', 'package ', 'stack ', 'locals ']:
     require(token in _builtin, '内置反汇编器缺少关键片段：' + token)
 
-# --- 5. 缓存根治 ---
-require(re.search(r'<script src="app\.js\?v=r11">', app_html) is not None,
-        'app.html 未给 app.js 加 ?v=r11 版本号')
-require(re.search(r'<script src="vendor/classview\.js\?v=r11">', app_html) is not None,
-        'app.html 未给 classview.js 加 ?v=r11 版本号')
-require('getInt("assetEpoch",0)<5' in main_act and 'putInt("assetEpoch",5)' in main_act,
-        'MainActivity 未把 assetEpoch 提升到 5（覆盖安装不会 clearCache）')
+# --- 5. 缓存根治（r12 起改为通用校验：版本号与 UI_BUILD 一致，epoch 只增不减） ---
+m_ui = re.search(r"const UI_BUILD='r(\d+)';", app_js)
+ui = int(m_ui.group(1)) if m_ui else 0
+require(ui >= 12, 'UI_BUILD 应不低于 r12，实为 r%d' % ui)
+require(('app.js?v=r%d' % ui) in app_html,
+        'app.html 的 app.js 版本号应与 UI_BUILD 一致')
+require(('vendor/classview.js?v=r%d' % ui) in app_html,
+        'app.html 的 classview.js 版本号应与 UI_BUILD 一致')
+m_ep = re.search(r'getInt\("assetEpoch",0\)<(\d+)', main_act)
+require(m_ep is not None and int(m_ep.group(1)) >= 6 and
+        ('putInt("assetEpoch",%s)' % m_ep.group(1)) in main_act,
+        'MainActivity assetEpoch 应提升到 >=6 且两处取值一致（覆盖安装会 clearCache）')
 require('setCacheMode(WebSettings.LOAD_NO_CACHE)' in main_act,
         'MainActivity 未设置 LOAD_NO_CACHE')
 require('"Cache-Control","no-store"' in main_act,

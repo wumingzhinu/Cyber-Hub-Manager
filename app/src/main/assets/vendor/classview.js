@@ -226,7 +226,8 @@
       for (var x = 0; x < attrCount; x++) {
         var name2 = utf8(u2(b, pos)), len2 = u4(b, pos + 2); pos += 6;
         if (name2 === 'SourceFile' && len2 >= 2) out.sourceFile = utf8(u2(b, pos));
-        out.attributes.push({ name: name2, length: len2 });
+        /* r12: 记录属性数据起始偏移，供 disassemble() 渲染 MT 风格类属性块。 */
+        out.attributes.push({ name: name2, length: len2, offset: pos });
         pos += len2;
       }
       /* Non-enumerable internals for disassemble(); kept off JSON.stringify. */
@@ -373,20 +374,45 @@
     };
     if (!info.valid || !info._bytes || !info._resolve) return result;
     var b = info._bytes, r = info._resolve, out = [];
-    var cls = info.thisClass || 'Unknown', dot = cls.lastIndexOf('.');
-    if (dot > 0) out.push('package ' + cls.slice(0, dot) + ';');
-    var before = [], after = [];
-    info.accessFlags.forEach(function (f) {
-      if (f === 'final' || f === 'synthetic' || f === 'annotation' || f === 'enum' || f === 'module') after.push(f);
-      else before.push(f);
-    });
-    var head = (before.length ? before.join(' ') + ' ' : '') + 'class' +
-      (after.length ? ' ' + after.join(' ') : '') + ' version ' + info.major + '.' + info.minor;
-    out.push(head);
+    /* r12: 类头对齐 MT 管理器语法。用户实测样本（package-info.class）：
+     *   package org/apache/commons/net/bsd;
+     *
+     *   synthetic interface package-info version 52:0
+     *   {
+     *     SourceFile               "package-info.java";
+     *   } // end Class org/apache/commons/net/bsd/package-info
+     * 差异点：包名保留 JVM 内部名的 '/'；修饰符前置 + 类型关键字 + 简单类名；
+     * 版本写 major:minor；interface 隐含 abstract 不重复输出；{ } 包裹类体并列属性。 */
+    var clsRaw = (info.thisClass || 'Unknown').replace(/\./g, '/');
+    var sl = clsRaw.lastIndexOf('/'), pkg = sl > 0 ? clsRaw.slice(0, sl) : '';
+    var simple = sl >= 0 ? clsRaw.slice(sl + 1) : clsRaw;
+    if (pkg) { out.push('package ' + pkg + ';'); out.push(''); }
+    var acc = info.access || 0, isIface = (acc & 0x0200) !== 0;
+    var kind = (acc & 0x8000) ? 'module' : (acc & 0x4000) ? 'enum'
+      : (isIface || (acc & 0x2000)) ? 'interface' : 'class';
+    var skip = { 'interface': 1, 'annotation': 1, 'enum': 1, 'module': 1 };
+    if (isIface) skip['abstract'] = 1;   /* interface 隐含 abstract，MT 不重复输出 */
+    var mods = info.accessFlags.filter(function (f) { return !skip[f]; });
+    out.push((mods.length ? mods.join(' ') + ' ' : '') + kind + ' ' + simple +
+      ' version ' + info.major + ':' + info.minor);
     if (info.superClass && info.superClass !== 'java.lang.Object' && info.superClass.indexOf('（') < 0)
-      out.push('extends ' + info.superClass.replace(/\./g, '/'));
+      out.push('extends ' + String(info.superClass).replace(/\./g, '/'));
     if (info.interfaces.length) out.push('implements ' + info.interfaces.join(', ').replace(/\./g, '/'));
-    out.push('');
+    out.push('{');
+
+    /* 类级属性块：只渲染能解出确定文本值的属性，其余（InnerClasses /
+     * BootstrapMethods 等）不臆造内容，避免与 MT 输出产生无意义的偏差。 */
+    var attrLines = [];
+    (info.attributes || []).forEach(function (a) {
+      var o = a.offset, L = a.length, val = null;
+      if (o === undefined) return;
+      if ((a.name === 'SourceFile' || a.name === 'Signature') && L >= 2)
+        val = '"' + r.utf8(u2(b, o)) + '"';
+      else if (a.name === 'Deprecated' || a.name === 'Synthetic') val = 'true';
+      if (val !== null) attrLines.push('  ' + pad(a.name, 24) + ' ' + val + ';');
+    });
+    attrLines.forEach(function (l) { out.push(l); });
+    if (attrLines.length) out.push('');
 
     for (var fi = 0; fi < info.fields.length; fi++) {
       var f = info.fields[fi];
@@ -430,6 +456,8 @@
       out.push('');
       out.push('');
     }
+    while (out.length && out[out.length - 1] === '') out.pop();
+    out.push('} // end Class ' + clsRaw);
     result.methodCount = info.methods.length;
     result.instructionCount = totalInstr;
     result.labelCount = totalLabels;

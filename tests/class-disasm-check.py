@@ -105,14 +105,20 @@ if m_cs:
     require('classStructText(info,nm)' in s and 'classBytesText(b64,nm)' in s,
             'classScreen() 缺少结构 / 字节代码视图兜底')
 require('async function classInfoScreen(f){' in app_js, 'r9 类信息查看器未保留为 classInfoScreen()')
-# r11：缓存根治——脚本带版本号 + assetEpoch 提升强制清 WebView 缓存
-require(re.search(r'<script src="app\.js\?v=r11">', app_html) is not None,
-        'app.html 未给 app.js 加 r11 版本号（cache-busting）')
-require(re.search(r'<script src="vendor/classview\.js\?v=r11">', app_html) is not None,
-        'app.html 未给 classview.js 加 r11 版本号（cache-busting）')
+# r12：缓存根治——脚本版本号需与 UI_BUILD 一致；assetEpoch 只增不减。
+# 改为通用校验，避免每个版本递增都要同步改死断言。
+m_ui = re.search(r"const UI_BUILD='r(\d+)';", app_js)
+ui = int(m_ui.group(1)) if m_ui else 0
+require(ui >= 12, 'UI_BUILD 应不低于 r12，实为 r%d' % ui)
+require(('app.js?v=r%d' % ui) in app_html,
+        'app.html 的 app.js 版本号应与 UI_BUILD 一致（cache-busting）')
+require(('vendor/classview.js?v=r%d' % ui) in app_html,
+        'app.html 的 classview.js 版本号应与 UI_BUILD 一致（cache-busting）')
 main_act = read(os.path.join(ROOT, 'app', 'src', 'main', 'java', 'com', 'cyberhub', 'manager', 'MainActivity.java'))
-require('getInt("assetEpoch",0)<5' in main_act and 'putInt("assetEpoch",5)' in main_act,
-        'MainActivity 未提升 assetEpoch 到 5（覆盖安装后不会 clearCache）')
+m_ep = re.search(r'getInt\("assetEpoch",0\)<(\d+)', main_act)
+require(m_ep is not None and int(m_ep.group(1)) >= 6 and
+        ('putInt("assetEpoch",%s)' % m_ep.group(1)) in main_act,
+        'MainActivity assetEpoch 应提升到 >=6 且两处取值一致（覆盖安装后 clearCache）')
 for tab in ["'概览'", "'字段'", "'方法'", "'字符串'"]:
     require(tab in app_js, 'classInfoScreen() 缺少标签 ' + tab)
 require('id="cvHex"' in app_js and 'id="cvOw"' in app_js,
@@ -204,7 +210,7 @@ require(d.get('labels', 0) >= 8, '跳转标签数异常：%s' % d.get('labels'))
 require(d.get('className') == 'demo.Sample', '类名错误：%s' % d.get('className'))
 require(d.get('major') == 52, 'major 版本错误：%s' % d.get('major'))
 require(d.get('lines', 0) >= 100, '反汇编文本行数异常：%s' % d.get('lines'))
-for token in ['package demo;', 'public super class version 52.0',
+for token in ['package demo;', 'public super class Sample version 52:0',
               'private Field value:"I"', 'Method "<init>":"(I)V"',
               'stack 2 locals 2', 'aLoad_0', 'invokespecial',
               'Method java/lang/Object."<init>":"()V";',
@@ -214,7 +220,10 @@ for token in ['package demo;', 'public super class version 52.0',
               'throws java.lang.Exception', 'Class java/lang/Exception',
               'Method decode_B:"([Ljava/lang/String;)[B"']:
     require(token in text, '反汇编文本缺少 MT 同款元素：' + token)
-require('// SourceFile' not in text, '反汇编正文不应混入多余的元信息注释')
+require('} // end Class demo/Sample' in text and '// SourceFile' not in text,
+        'r12: 反汇编正文应有 MT 类体收尾，且不混入 // 元信息注释')
+require('  SourceFile' in text and 'version 52:0' in text,
+        'r12: 类属性块与 major:minor 版本格式应对齐 MT')
 require('classInfoScreen' not in text and '概览' not in text,
         '反汇编正文不应再是 r9 的四标签表格内容')
 
@@ -227,12 +236,12 @@ require(got.get('bad', {}).get('valid') is False and 'CAFEBABE' in str(got.get('
         '损坏文件应优雅失败并提示魔数')
 md = got.get('minimal', {})
 require(md.get('valid') is True, '无方法的最小 class 反汇编失败：' + str(md.get('error')))
-require(md.get('instr') == 0 and 'public super class version 52.0' in str(md.get('text', '')),
-        '最小 class 应只输出类头、指令数为 0')
+require(md.get('instr') == 0 and 'public super class Hello version 52:0' in str(md.get('text', '')),
+        '最小 class 应输出 MT 类头（含简单类名与 major:minor）、指令数为 0')
 
 if errors:
     print('FAIL: r10 .class 反汇编编辑器自检未通过')
     for e in errors:
         print('  -', e)
     sys.exit(1)
-print('PASS: r10/r11 .class 反汇编编辑器自检全部通过（分发 / 反汇编 / 语法高亮 / 配色 / 只导出不覆写 / r9 回归 / fileData 通道 / 缓存根治）')
+print('PASS: r12 .class 反汇编编辑器自检全部通过（MT 类头对齐 / 分发 / 反汇编 / 语法高亮 / 配色 / 只导出不覆写 / r9 回归 / fileData 通道 / 缓存根治）')

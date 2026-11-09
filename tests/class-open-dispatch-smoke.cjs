@@ -77,7 +77,7 @@ const fs = require('fs'), path = require('path'), assert = require('assert');
   assert(ed.kind === 'class', 'state.editor.kind 应为 class，实为 ' + ed.kind);
   assert(ed.screen === 'editor', '应进入编辑器 screen');
   assert(String(ed.text).includes('package demo;'), '反汇编正文应含 package 行');
-  assert(String(ed.text).includes('public super class version 52.0'), '反汇编正文应含类版本头');
+  assert(String(ed.text).includes('public super class Sample version 52:0'), '反汇编正文应含类版本头');
   assert(String(ed.text).includes('stack 2 locals 2'), '反汇编正文应含方法栈深');
   assert(String(ed.text).includes('Method java/lang/Object."<init>":"()V";'), '反汇编正文应含常量池引用注释');
   assert(String(ed.text).includes('L24:') && String(ed.text).includes('if_icmpge'), '反汇编正文应含跳转标签与条件跳转');
@@ -105,7 +105,7 @@ const fs = require('fs'), path = require('path'), assert = require('assert');
       match(re){const m=re.exec(line.slice(pos));if(m){pos+=m[0].length;return m;}return null;},
       next(){return line[pos++];},string:line};
       while(pos<line.length){const p=pos;const t=mode.token(st,{});if(pos===p)st.next();if(t)out.push(t);}return out;}
-    return JSON.stringify({head:toks('package demo;'),cls:toks('public super class version 52.0'),
+    return JSON.stringify({head:toks('package demo;'),cls:toks('public super class Sample version 52:0'),
       label:toks('L24:     iLoad 4'),instr:toks('aLoad_0'),
       ref:toks('Method java/lang/Object."<init>":"()V";')});
   })()`));
