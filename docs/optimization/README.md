@@ -178,6 +178,28 @@ interface abstract class synthetic version 52.0
 
 验证：本地 14 项自检全 PASS（`FAIL_FLAG=0`）；198 个真实 class 批量解析 198/198 成功、34,360 条指令 / 1,812 个跳转标签与改前一致；真实 `package-info.class` 输出与 MT 管理器逐字符相同；Actions 构建 #63 全 success。
 
+## r13 修复（基于 MT2.26.11.apk 反编译证据对齐 .class/JASM 语法）
+
+**工作方式切换**：r12 只对照用户贴出的一段 MT 输出文本、`commons-net-3.10.0.jar` 样本与 `javap -v`，属于「照文本仿写」；用户明确要求「再次修改，要基于 MT 管理器反编译修改优化 r12」。r13 不再猜测，而是**直接反编译 `MT2.26.11.apk` 安装包本体**取证，再系统性改造代码。
+
+**证据链**（均为 APK 内原始文件 / 字节码，非用户贴文）：
+- `assets/syntax/jasm.mtsx`（11,812 B）—— MT 官方 JASM 语法高亮定义，首行注释 `name: ["Jasm", ".jasm", ".class"] // MT将class反编译为jasm进行编辑`，含 opcode / keyword / declaration / cpTag / cpRefKind 五组词表；证明 `.class` 被反编译为**可编辑回编译的 JASM 汇编**，不是自定义显示模板。
+- `classes5.dex` 经项目自带 `baksmali-2.5.2.jar` 反编译（4,677 个 smali），定位 JASM printer 混淆类 `l/᩶ܿۜ.smali`（3,987 行），内含明文格式串 `package %s;%n` / `%sversion %s` / `class ` / `interface ` / ` extends ` / ` implements ` / `%-26s: "%s"` / `} // end Class ` / `} // end of module `。
+- `classes4.dex` 字符串池：36 个 `ATT_*` 属性全集；dex 字符串池：完整 Jasmin opcode 表（`00 - nop;01 - aconst_null;…;2a 0 aload_0;…`），**全部标准小写**。
+- 全库检索：camelCase `aLoad_0` / `aConst_null` / `iStore_1` 命中 **0**；小写 `aload_0` / `aconst_null` / `istore_1` 命中 7。据以纠正 r10–r12 的自创拼写。
+
+**关键纠错**：r10–r12 的 opcode 助记符是自创 camelCase（`aLoad_0`），MT 从不用；此前几轮用户截图都是 `package-info.class` 空类、无方法体，该错误完全不可见。r13 把 `classview.js` 与 `app.js` 内置反汇编器两处 opcode 表全改为 MT 标准小写。
+
+**改动**：
+- `vendor/classview.js`：`CLASS_ACC` 注释对齐 `jasm.mtsx`；新增 `FIELD_ACC` / `METHOD_ACC`，`readMembers()` 按字段·方法取表（`bridge`/`varargs` 归方法、`volatile`/`transient` 归字段）；opcode 表改标准小写；新增 `classAttrValue()` 覆盖 `NestHost` / `EnclosingMethod` / `NestMembers` / `PermittedSubclasses` / `SourceDebugExtension` 等 `ATT_*` 属性；module 采用 `} // end of module` 收尾。
+- `app.js`：`UI_BUILD='r13'`；拆 `MEM` / `MEM_M`；内置 opcode 表与高亮 `jvmasm` 重写为 MT 五组词表（declaration / keyword / cpTag / cpRefKind / opcode）；类属性块扩展、`module-info` 用 `end of module` 收尾；`classStructText()` 同步；关于页补 r13 版本说明。
+- 缓存：`app.html ?v=r13`、`MainActivity assetEpoch 6 -> 7`（改动了 `vendor/classview.js`，覆盖安装强制清 WebView 缓存）。
+- 测试：新增 `tests/fixtures/mt-jasm-vocab.json`（MT 反编译词表快照：opcode 233 / keyword 25 / declaration 57 / cpTag 36 / cpRefKind 10 / ATT 36）与 `tests/class-mt-decompile-align-check.py`（80 项对齐自检），接入 `.github/workflows/build-apk.yml`；既有 4 个测试断言更新到标准小写与通用版本校验。
+
+**验证**：本地全套 `FAIL_FLAG=0`（8 个 Python + 7 个 cjs 冒烟 + 3 个 `node --check`）；新增 80 项 + 既有 37 项全 PASS；198 个真实 class 批量解析 198/198 成功、34,360 条指令 / 1,812 个跳转标签与改前完全一致；用户实测 `package-info.class` 输出逐字符不变；`Sample.class` 输出 `aload_0`、`module-info.class` 用 `end of module` 收尾；Actions 构建 #64 全 success。签名 APK 内置资源实测 43 项全通过；逐条目 461→461 无增删、`AndroidManifest.xml` 字节级一致、签名证书本体 SHA-256 `bfe0c27b…9504` 与 r12 完全一致（可覆盖安装）。
+
+**未改动**：Java 层仅 `MainActivity` 的 `assetEpoch` 一行；`AndroidManifest.xml` 字节级一致，versionCode 55 / 签名密钥未变；`DataEngine` / `ArchiveTools` / `DexEngine` / `ExtraTools` 全部未改；保存键仍只导出 `.bytecode.txt`，绝不覆写 `.class` 原始字节。本轮是纯前端反汇编文本 / 语法高亮改动，不影响 DEX 转 JAR 或 JADX 反编译链路。
+
 ## 交付与修复报告（`reports/`）
 
 本目录归档面向用户的 HTML 交付说明，均为只读记录，不参与构建：
@@ -196,5 +218,6 @@ interface abstract class synthetic version 52.0
 | `r10-class-disasm-report.html` | .class 打开方式对标 MT 管理器（r10）：字节码反汇编文本编辑器、语法高亮、保存只导出不覆写、真实 class 端到端与 APK 逐条目 / 签名证书核对（提交 `f34bcba`、Release `build-61`） |
 | `r11-class-archive-view-report.html` | JAR 内 .class 视图对标 MT 管理器（r11）：覆盖安装后 WebView 旧缓存触发表格回退的根因、删回退 + 组件自愈 + 内置反汇编 + 缓存根治、归档场景防回归自检与 APK 内置资源实测（提交 `7457c85`、Release `build-62`） |
 | `r12-mt-class-header-report.html` | .class 反汇编文本对齐 MT 管理器（r12）：类头 / 属性块 / 收尾注释的根因与修复、真实 package-info.class 逐行对照、三级反汇编器一致性、APK 内置资源实测与逐条目 / 签名证书核对（提交 `068e2d8`、Release `build-63`） |
+| `r13-mt-decompile-report.html` | 基于 MT2.26.11.apk 反编译证据对齐 .class/JASM 语法（r13）：jasm.mtsx 官方语法定义 + classes5.dex JASM printer 格式串 + 36 个 ATT_* + Jasmin opcode 表，纠正 r10–r12 自创 camelCase 助记符、修饰符分表、类属性块、module 收尾、五组高亮词表，APK 内置资源实测与逐条目 / 签名证书核对（提交 `d7c456a`、Release `build-64`） |
 
-正式签名 APK 请以仓库 Release `build-63` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。
+正式签名 APK 请以仓库 Release `build-64` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。

@@ -1,0 +1,179 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>r13 · 基于 MT2.26.11.apk 反编译证据对齐 .class/JASM 语法</title>
+<style>
+:root{--bg:#0f1115;--card:#181b22;--line:#2a2f3a;--fg:#e6e9ef;--mut:#9aa3b2;--acc:#5aa9ff;--ok:#7bd88f;--warn:#f0b36b;--bad:#f0736b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.7 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:26px;margin:0 0 6px}h2{font-size:19px;margin:30px 0 12px;border-left:3px solid var(--acc);padding-left:10px}
+h3{font-size:16px;margin:20px 0 8px;color:var(--acc)}
+.sub{color:var(--mut);margin-bottom:22px;font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{color:var(--mut);font-weight:600}code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;color:#c9d6ea}
+pre{background:#0b0d11;border:1px solid var(--line);border-radius:8px;padding:14px;overflow:auto;font:12.5px/1.55 ui-monospace,Menlo,Consolas,monospace;color:#d8dde6}
+.kw{color:#cf6a62;font-weight:600}.tp{color:#7fb069}.nm{color:#d7a86e}.cm{color:#6f7b8c}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.mut{color:var(--mut)}
+ul{margin:8px 0 8px 20px;padding:0}li{margin:5px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.kv{background:#12151b;border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.kv b{display:block;font-size:18px;color:var(--fg);margin-top:4px;word-break:break-all}
+.kv span{color:var(--mut);font-size:12px}
+.note{border-left:3px solid var(--warn);padding-left:12px;color:var(--mut);font-size:14px}
+.good{border-left:3px solid var(--ok);padding-left:12px;color:var(--mut);font-size:14px}
+.step{display:flex;gap:12px;align-items:flex-start;margin:10px 0}
+.step i{display:inline-flex;flex:0 0 26px;height:26px;border-radius:50%;background:var(--acc);color:#08101c;font-style:normal;font-weight:700;align-items:center;justify-content:center;font-size:13px}
+</style></head><body><div class="wrap">
+<h1>r13 · 基于 MT2.26.11.apk 反编译证据对齐 .class/JASM 语法</h1>
+<div class="sub">远程提交 <code>d7c456a</code>（本地 <code>3fc3148</code>） · GitHub Actions 构建 <code>#64</code> · Release <code>build-64</code> · 版本号 0.1.59（versionCode 55 不变，可覆盖安装）</div>
+
+<div class="grid">
+<div class="kv"><span>交付 APK</span><b>Cyber-Hub-Manager-0.1.59-r13.apk</b></div>
+<div class="kv"><span>文件大小</span><b>21,398,868 字节</b></div>
+<div class="kv"><span>SHA-256</span><b style="font-size:12px">9d08d9de9526e151395e0cacc04b9bb23fdd919456e5be819ecc1b939e7abb09</b></div>
+<div class="kv"><span>构建结论</span><b class="ok">Actions #64 success</b></div>
+</div>
+
+<h2>本轮与 r12 的本质区别</h2>
+<div class="card">
+<p class="good"><strong>r12 只对照了用户贴出的一段 MT 输出文本</strong> + <code>commons-net</code> 样本 + <code>javap -v</code>，属于「照文本仿写」；用户随后明确要求「再次修改，要基于 MT 管理器反编译修改优化 r12」。<strong>r13 不再猜测，而是直接反编译 <code>MT2.26.11.apk</code> 安装包本体</strong>，从 APK 内的真实语法定义、dumper 明文格式串、属性常量与 opcode 表中提取权威规则，再系统性改造代码。</p>
+<p>由此发现并纠正了一个 r12 及之前完全没暴露的问题：<strong>r10–r12 的指令助记符 <code>aLoad_0</code> / <code>aConst_null</code> / <code>iStore_1</code> 是自创 camelCase 拼写，在 MT 全库检索命中数为 0</strong>；MT 用的是 Jasmin 标准小写 <code>aload_0</code> / <code>aconst_null</code> / <code>istore_1</code>。这不是外观差异，而是「是否忠实于 MT 真实实现」的差异——只有反编译安装包本体才能查出来。</p>
+</div>
+
+<h2>一、MT 安装包反编译证据链</h2>
+<div class="card">
+<p>证据源：<code>/workspace/mt-analysis/MT2.26.11.apk</code>（37 MB，含 5 个明文 <code>classes*.dex</code>）。系统无 <code>jadx</code> / <code>apktool</code> CLI，复用项目自带 <code>app/libs/baksmali-2.5.2.jar</code> + <code>dexlib2</code>，在 JDK 20 下直接执行 <code>org.jf.baksmali.Main</code>，把 <code>classes5.dex</code> 反编译为 4,677 个 smali 文件。</p>
+<div class="step"><i>1</i><div><strong>解包与 dex 提取</strong>：<code>unzip</code> 取出 5 个 <code>classes*.dex</code> 与 <code>assets/syntax/</code>；dex 字符串池导出为 <code>all_strings.txt</code>（4.8 MB）供全库词表检索。</div></div>
+<div class="step"><i>2</i><div><strong>官方语法定义</strong>：<code>assets/syntax/jasm.mtsx</code>（11,812 B），首行注释 <code>name: ["Jasm", ".jasm", ".class"] // MT将class反编译为jasm进行编辑</code>。含 opcode / keyword / declaration / cpTag / cpRefKind <strong>五组词表</strong>——证明 MT 把 <code>.class</code> 反编译为<strong>可编辑回编译的 JASM 汇编</strong>，而非自定义显示模板。</div></div>
+<div class="step"><i>3</i><div><strong>JASM printer</strong>：<code>classes5.dex</code> 反编译出的混淆类 <code>l/᩶ܿۜ.smali</code>（3,987 行）内含明文格式串——<code>package %s;%n</code>、<code>%sversion %s</code>、<code>class </code> / <code>interface </code>、<code> extends </code> / <code> implements </code>、属性 <code>%-26s: "%s"</code>、<code>} // end Class </code>、<code>} // end of module </code>。这是 MT 输出文本的真正来源。</div></div>
+<div class="step"><i>4</i><div><strong>属性全集与 opcode 表</strong>：<code>classes4.dex</code> 内 36 个 <code>ATT_*</code> 常量；dex 字符串池内完整 Jasmin opcode 表（<code>00 - nop;01 - aconst_null;…;2a 0 aload_0;…</code>），全部标准小写。</div></div>
+</div>
+
+<div class="card">
+<h3>固化为可追溯快照</h3>
+<p>CI 内没有 MT APK，因此把证据固化为 <code>tests/fixtures/mt-jasm-vocab.json</code>（<code>_source</code> 字段标明来源），供防回归自检持续校验：</p>
+<table><thead><tr><th>词表</th><th>条数</th><th>内容示例</th></tr></thead><tbody>
+<tr><td><code>opcodes_std</code></td><td>233</td><td><code>aconst_null, aload, aload_0, invokespecial, tableswitch, wide …</code></td></tr>
+<tr><td><code>keywords</code></td><td>25</td><td><code>public private protected static final abstract strict bridge varargs …</code></td></tr>
+<tr><td><code>declarations</code></td><td>57</td><td><code>Field Method NestHost NestMembers PermittedSubclasses SourceFile …</code></td></tr>
+<tr><td><code>cpTags</code></td><td>36</td><td><code>Utf8 Asciz Integer Class Methodref InvokeDynamic Module …</code></td></tr>
+<tr><td><code>cpRefKinds</code></td><td>10</td><td><code>REF_getField … REF_invokeInterface</code></td></tr>
+<tr><td><code>ATT</code></td><td>36</td><td><code>ATT_SourceFile ATT_NestHost ATT_Record ATT_Unrecognized …</code></td></tr>
+</tbody></table>
+</div>
+
+<h2>二、关键纠错：camelCase 助记符在 MT 全库零命中</h2>
+<div class="card">
+<pre><span class="cm">// 全库检索（jasm.mtsx + 5 个 dex 字符串池 + 4,677 个 smali）</span>
+aLoad_0 / aConst_null / iStore_1  …  <span class="bad">命中 0</span>
+aload_0 / aconst_null / istore_1 …  <span class="ok">命中 7 + 完整 opcode 表长字符串</span></pre>
+<p>r10–r12 仿写 opcode 表时按「驼峰」命名生成助记符（<code>aLoad_0</code>），MT 实际输出的是 Jasmin 标准小写（<code>aload_0</code>）。<code>package-info.class</code> 是空类、没有方法体，因此这个错误在之前几轮的用户截图中完全不可见；一旦打开带方法体的 <code>.class</code>，整页指令就与 MT 不同。</p>
+<table><thead><tr><th>项</th><th>r10–r12</th><th>MT 2.26.11（反编译实证）</th><th>r13</th></tr></thead><tbody>
+<tr><td>0x01 空引用</td><td class="bad"><code>aConst_null</code></td><td><code>aconst_null</code></td><td class="ok"><code>aconst_null</code></td></tr>
+<tr><td>0x2a 载入引用槽 0</td><td class="bad"><code>aLoad_0</code></td><td><code>aload_0</code></td><td class="ok"><code>aload_0</code></td></tr>
+<tr><td>0x3b 存入整型槽 0</td><td class="bad"><code>iStore_0</code></td><td><code>istore_0</code></td><td class="ok"><code>istore_0</code></td></tr>
+<tr><td>载/存助记符族</td><td class="bad"><code>aLoad / aStore</code></td><td><code>aload / astore</code></td><td class="ok"><code>aload / astore</code></td></tr>
+</tbody></table>
+<p class="good">两处独立实现的 opcode 表（<code>classview.js</code> 与 <code>app.js</code> 内置反汇编器）同时改为标准小写，并在自检中对「剥离注释后的代码」做 camelCase 零残留断言，防止回归。</p>
+</div>
+
+<h2>三、MT JASM 顶层语法规则（dumper 格式串还原）</h2>
+<div class="card"><table>
+<thead><tr><th>部位</th><th>MT 格式串 / 输出</th><th>证据</th></tr></thead><tbody>
+<tr><td>package</td><td><code>package %s;%n</code>（斜杠内部名 + 分号）</td><td>dumper:1281</td></tr>
+<tr><td>类头</td><td><code>%sversion %s</code> = <code>&lt;修饰符…&gt; &lt;kind&gt; &lt;简单类名&gt; version &lt;major&gt;:&lt;minor&gt;</code></td><td>dumper:2047</td></tr>
+<tr><td>kind</td><td>仅 <code>class</code> / <code>interface</code> / <code>module</code>；<code>enum</code> / <code>annotation</code> 是<strong>修饰符</strong></td><td>jasm.mtsx</td></tr>
+<tr><td>类体</td><td><code>{</code> … <code>}</code> 包裹</td><td>dumper:247 / 2644</td></tr>
+<tr><td>类属性</td><td><code>&lt;属性名左对齐 24 列&gt; "&lt;值&gt;";</code></td><td><code>%-26s: "%s"</code></td></tr>
+<tr><td>收尾（普通类）</td><td><code>} // end Class &lt;斜杠全名&gt;</code></td><td>dumper:2658</td></tr>
+<tr><td>收尾（module）</td><td><code>} // end of module &lt;模块名&gt;</code></td><td>dumper:344</td></tr>
+<tr><td>版本格式</td><td><code>version 52:0</code>（major:minor，非 <code>52.0</code>）</td><td>用户实测样本</td></tr>
+</tbody></table>
+<p class="mut">修饰符词表关键点：是 <code>strict</code> 而非 <code>strictfp</code>；<code>bridge / varargs</code> 属方法、<code>volatile / transient</code> 属字段，须分表取义；<code>open / transitive / mandated</code> 为 module 语句修饰符；interface 隐含 <code>abstract</code>，不重复输出。</p></div>
+
+<h2>四、r13 改造清单（8 项，逐项对应证据）</h2>
+<div class="card"><table>
+<thead><tr><th>#</th><th>项</th><th>r12 现状</th><th>MT 真实规则 / r13 改动</th></tr></thead><tbody>
+<tr><td>1</td><td>opcode 拼写</td><td class="bad">camelCase</td><td class="ok">两处 opcode 表全改标准小写 <code>aload_0 / aconst_null / istore_1</code></td></tr>
+<tr><td>2</td><td>成员修饰符</td><td>单表混用、<code>bridge/volatile</code> 合并</td><td class="ok">新增 <code>FIELD_ACC</code> / <code>METHOD_ACC</code>；<code>readMembers()</code> 按字段·方法取表；app.js 拆 <code>MEM</code> / <code>MEM_M</code></td></tr>
+<tr><td>3</td><td>strict</td><td><code>strictfp</code></td><td class="ok">对齐 jasm.mtsx 的 <code>strict</code></td></tr>
+<tr><td>4</td><td>类属性块</td><td>仅 4 个属性</td><td class="ok">新增 <code>classAttrValue()</code>，覆盖 <code>NestHost</code> / <code>EnclosingMethod</code> / <code>NestMembers</code> / <code>PermittedSubclasses</code> / <code>SourceDebugExtension</code> 等 36 个 <code>ATT_*</code> 中可取文本者</td></tr>
+<tr><td>5</td><td>module 收尾</td><td>一律 <code>end Class</code></td><td class="ok"><code>ACC_MODULE (0x8000)</code> 时用 <code>} // end of module</code></td></tr>
+<tr><td>6</td><td>语法高亮</td><td>少量关键字</td><td class="ok"><code>jvmasm</code> mode 重写为 MT 五组词表 <code>D</code>(declaration) / <code>K</code>(keyword) / <code>T</code>(cpTag) / <code>R</code>(cpRefKind) / <code>O</code>(opcode)</td></tr>
+<tr><td>7</td><td>CLASS_ACC 注释</td><td>自定</td><td class="ok">对齐 <code>jasm.mtsx</code> 词表语义（<code>enum</code>/<code>annotation</code> 为修饰符）</td></tr>
+<tr><td>8</td><td>缓存</td><td><code>UI_BUILD=r12</code> / epoch 6</td><td class="ok"><code>UI_BUILD=r13</code> · <code>app.html ?v=r13</code> · <code>assetEpoch 6→7</code>（改了 <code>vendor/classview.js</code>，覆盖安装强制清 WebView 缓存）</td></tr>
+</tbody></table>
+<p class="good"><strong>主体零回归</strong>：字段 / 方法 / 逐条指令 / <code>Lxx:</code> 跳转标签 / 常量池引用注释格式全部保持；用户实测的 <code>package-info.class</code> 输出<strong>逐字符不变</strong>。</p></div>
+
+<h2>五、三处反汇编实现的一致性</h2>
+<div class="card">
+<p><code>classScreen()</code> 有三级保障，r13 三处同步对齐：</p>
+<ul>
+<li><strong>主组件</strong> <code>app/src/main/assets/vendor/classview.js</code> —— <code>disassemble()</code> / <code>disassembleBase64()</code></li>
+<li><strong>内置兜底</strong> <code>app.js → builtinClassDisasm()</code> —— 不依赖外部脚本</li>
+<li><strong>结构兜底</strong> <code>app.js → classStructText()</code> / <code>classBytesText()</code></li>
+</ul>
+<p>三处均改为标准小写 opcode、扩展类属性块、<code>module-info</code> 用 <code>end of module</code> 收尾，方法输出改用 <code>flags(acc, MEM_M)</code>。本地三级一致性冒烟测试与 APK 内组件实测均通过。</p></div>
+
+<h2>六、验证体系与结果</h2>
+<div class="card"><table>
+<thead><tr><th>层次</th><th>内容</th><th>结果</th></tr></thead><tbody>
+<tr><td>新增 CI 自检</td><td><code>tests/class-mt-decompile-align-check.py</code> —— 基于 MT 词表快照的 80 项对齐断言（标准小写 / 修饰符分表 / ATT_* 属性 / module 收尾 / 五组高亮词表 / 真实样本不回归 / 缓存标记）</td><td class="ok">80 / 80 PASS</td></tr>
+<tr><td>既有 MT 类头自检</td><td><code>class-mt-header-check.py</code> 更新到小写断言与通用版本校验</td><td class="ok">37 / 37 PASS</td></tr>
+<tr><td>全套回归</td><td>8 个 Python 自检 + 7 个 cjs 冒烟 + 3 个 <code>node --check</code></td><td class="ok"><code>FAIL_FLAG=0</code></td></tr>
+<tr><td>真实 class 批量</td><td>198 个真实 <code>.class</code> 批量解析</td><td class="ok"><code>ok=198 invalid=0 threw=0</code>，34,360 条指令 / 1,812 个标签与改前完全一致</td></tr>
+<tr><td>CI 接入</td><td><code>.github/workflows/build-apk.yml</code> 新增对齐自检步骤，步骤名更新为「基于 MT APK 反编译词表的 JASM 对齐」</td><td class="ok">Actions #64 全 success</td></tr>
+</tbody></table></div>
+
+<div class="card">
+<h3>签名 APK 内置资源与运行时实测（43 项全通过）</h3>
+<p>直接从下载到的 r13 APK 内读出 <code>assets/app.js</code> / <code>classview.js</code> / <code>app.html</code> / <code>classes.dex</code>，逐项核对静态标记，并<strong>真实执行 APK 内的 classview.js</strong> 反汇编三个样本：</p>
+<table><thead><tr><th>样本</th><th>断言</th><th>结果</th></tr></thead><tbody>
+<tr><td><code>package-info.class</code>（commons-net）</td><td>输出与 MT 用户样本逐字符相同</td><td class="ok">一致（不回归）</td></tr>
+<tr><td><code>Sample.class</code></td><td>输出 <code>aload_0</code>、无 <code>aLoad_0</code>、<code>} // end Class demo/Sample</code></td><td class="ok">89 条指令 / 9 个标签，全通过</td></tr>
+<tr><td><code>module-info.class</code></td><td><code>// end of module</code> 且不含 <code>// end Class</code></td><td class="ok">通过</td></tr>
+</tbody></table>
+<pre>package org/apache/commons/net/bsd;
+
+synthetic interface package-info version 52:0
+{
+  SourceFile               "package-info.java";
+} // end Class org/apache/commons/net/bsd/package-info</pre>
+</div>
+
+<h2>七、APK 逐条目 / 签名 / 证书核对</h2>
+<div class="card"><table>
+<thead><tr><th>项</th><th>r12</th><th>r13</th><th>结论</th></tr></thead><tbody>
+<tr><td>文件大小</td><td>21,382,484 B</td><td>21,398,868 B</td><td>+16,384 B（前端资源变大）</td></tr>
+<tr><td>SHA-256</td><td><code>68d9d8db…a6cec0</code></td><td><code>9d08d9de…7abb09</code></td><td>与 Release 官方 digest 一致</td></tr>
+<tr><td>ZIP 条目数</td><td>461</td><td>461</td><td class="ok">无增删</td></tr>
+<tr><td><code>AndroidManifest.xml</code></td><td>8,964 B</td><td>8,964 B</td><td class="ok"><strong>字节级一致</strong>（versionCode 55 / 0.1.59）</td></tr>
+<tr><td>变化条目</td><td colspan="2"><code>assets/app.html</code>、<code>assets/app.js</code>、<code>assets/vendor/classview.js</code>、<code>classes.dex</code>、<code>META-INF/MANIFEST.MF</code>、<code>CYBERHUB.SF</code>、<code>CYBERHUB.RSA</code></td><td>共 7 项：4 项为本轮代码改动（含 classview.js 缓存纪元），3 项为重新签名必然变化</td></tr>
+<tr><td>签名块方案</td><td><code>v2 / v3 / 0x42726577</code>，4088 B</td><td>完全相同</td><td class="ok">一致</td></tr>
+<tr><td>签名证书本体 SHA-256</td><td><code>bfe0c27b…9504</code></td><td><code>bfe0c27b…9504</code></td><td class="ok"><strong>证书完全一致，可覆盖安装</strong></td></tr>
+</tbody></table>
+<p class="mut"><code>META-INF/*.SF|RSA|MANIFEST.MF</code> 的文件哈希因资源变化而不同，属重签预期；用 <code>openssl pkcs7 -print_certs</code> 提取出的 X.509 证书 DER 哈希一致，证明签名密钥未变。</p></div>
+
+<h2>八、未改动与链路隔离</h2>
+<div class="card"><ul>
+<li>Java 层仅 <code>MainActivity</code> 的 <code>assetEpoch 6→7</code> 一行；<code>AndroidManifest.xml</code> 字节级不变。</li>
+<li><code>DataEngine</code> / <code>ArchiveTools</code> / <code>DexEngine</code> / <code>ExtraTools</code> 全部未改——归档内 <code>.class</code> 的读取链路、DEX 转 JAR、JADX 反编译链路零影响。</li>
+<li>保存键仍只导出 <code>.bytecode.txt</code> 反汇编文本，<strong>绝不覆写</strong> <code>.class</code> 原始字节。</li>
+<li><code>style.css</code> 未改；深色反汇编编辑器外观沿用 r10。</li>
+</ul>
+<p class="good">本轮是<strong>纯前端反汇编文本 / 语法高亮</strong>改动，不涉及任何原生反编译或文件格式转换能力，不影响反编译 APK 的成功率。</p></div>
+
+<h2>九、交付与安装</h2>
+<div class="card"><ul>
+<li>安装包：<code>/workspace/Cyber-Hub-Manager-0.1.59-r13.apk</code>（21,398,868 B，SHA-256 <code>9d08d9de…7abb09</code>）。</li>
+<li>仓库 Release：<code>build-64</code>；Actions 运行 <code>#64</code>（<a href="https://github.com/wumingzhinu/Cyber-Hub-Manager/actions/runs/42647264354" style="color:var(--acc)">42647264354</a>）。</li>
+<li>远程提交 <code>d7c456a</code>：11 个文件变更、818 行新增 / 62 行删除（含新增词表快照与 80 项自检）。</li>
+<li>可直接<strong>覆盖安装</strong> r12（签名证书一致、versionCode 55 未变）。安装后首次启动 <code>assetEpoch</code> 提升会触发 <code>clearCache(true)</code>，确保 WebView 不再沿用 r12 版 <code>classview.js</code>。</li>
+<li>按用户「只保留最新安装包」要求，旧 r12 安装包已从工作区清理。</li>
+</ul></div>
+
+<h2>结论</h2>
+<div class="card"><p>r13 完成了从「照文本仿写」到「<strong>反编译 MT 安装包本体取证</strong>」的工作方式切换：以 <code>jasm.mtsx</code> 官方语法定义、<code>classes5.dex</code> 的 JASM printer 格式串、36 个 <code>ATT_*</code> 属性与 Jasmin opcode 表为权威真值，纠正了 r10–r12 自创的 camelCase 助记符，补齐修饰符分表、类属性块、module 收尾与五组高亮词表，并把证据固化为 CI 可持续校验的词表快照。全部自检、198 个真实 class 回归、APK 内置资源实测、逐条目与签名证书核对均通过；用户实测的 <code>package-info.class</code> 输出保持逐字符不变。</p></div>
+
+<div class="sub" style="margin-top:26px">报告生成：2026-11-09 · 依据 MT2.26.11.apk 反编译证据与 Actions #64 构建产物核对</div>
+</div></body></html>
