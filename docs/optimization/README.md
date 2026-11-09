@@ -147,6 +147,37 @@ versionCode 仍为 55、签名密钥未变、默认中文文案未改，可直�
 
 验证：本地 6 个 Python 自检 + 6 个 happy-dom 冒烟 + 3 个 `node --check` 全 PASS（`FAIL_FLAG=0`）；Actions 构建 #62 的 12 步全 success；交付 APK 21,382,484 字节、SHA-256 `147b614712c6c46ab6e36da23f1bebcd4f1a48002805836d4f5ccde4b9b32a6b`，461 → 461 条目、仅 6 项变化（app.js / app.html / classes.dex + 3 个 META-INF 签名清单），并从 APK 内直接读出 `UI_BUILD='r11'` / `builtinClassDisasm` / `?v=r11` / DEX 内 `assetEpoch` 全部 PASS；v1 内嵌证书与 r10 完全一致、v2 / v3 签名块齐全，可直接覆盖安装。
 
+## r12 修复（.class 反汇编文本对齐 MT 管理器语法）
+
+**现象**：用户对比同一个 `org/apache/commons/net/bsd/package-info.class`（commons-net 3.10.0）。MT 管理器输出：
+
+```
+package org/apache/commons/net/bsd;
+
+synthetic interface package-info version 52:0
+{
+  SourceFile               "package-info.java";
+} // end Class org/apache/commons/net/bsd/package-info
+```
+
+r11 输出：
+
+```
+package org.apache.commons.net.bsd;
+interface abstract class synthetic version 52.0
+```
+
+**根因**：r10 仿写反汇编器时只对齐了「字段 / 方法 / 逐条指令 / 跳转标签 / 引用注释」主体，类头用自定简化模板 `<flags> class <flags> version major.minor`：`class` 写死、flags 按位拆成前后两组、JVM 内部名 `/` 转成 `.`、版本写 `52.0`；`disassemble()` 又完全不渲染类属性（其实 `parse()` 已解析出 `sourceFile`）。`package-info.class` 是 0 字段 0 方法、仅 SourceFile 的空类，把这层差异全部暴露。该问题纯属前端文本模板，Java 层零引用，不影响 DEX 转 JAR / JADX 反编译链路（实测 198 个真实 class 全部解析成功）。
+
+- `assets/vendor/classview.js`：`disassemble()` 类头改为 MT 语法——斜杠内部包名、修饰符前置 + 类型关键字 + 简单类名、`version major:minor`、interface 隐含 abstract 不重复输出；新增 `{ }` 包裹类体、`SourceFile` / `Signature` 等属性渲染（`  SourceFile               "xxx";`）与 `} // end Class <内部名>` 收尾；`parse()` 给 `attributes` 加 `offset` 供属性取值。
+- `assets/app.js`：`builtinClassDisasm()` 补类级属性解析（`clsAttrs`），类头 / 属性 / 收尾与主组件一致；`classStructText()` 同步对齐；`jvmasm` 高亮补 `SourceFile` / `Signature` / `annotation` / `enum` / `module` / `end` 等关键字。三处独立实现输出统一，**主体（字段 / 方法 / 逐条指令 / `Lxx:` 跳转标签 / 常量池引用注释）保持不变**。
+- 缓存：`UI_BUILD='r12'`、`app.html` 加 `?v=r12`、`MainActivity assetEpoch` 5 → 6（本轮改动了 `vendor/classview.js`，覆盖安装必须清 WebView 缓存）。
+- 测试：`tests/class-mt-header-check.py`（37 项：真实 JAR 样本 + 合成样本逐字符比对 MT、主体不回归、三级语法一致、缓存标记）、`tests/class-mt-header-smoke.cjs`（17 项：主组件 / 内置反汇编器 / 结构兜底真实执行一致性），均接入 CI；既有 `class-disasm-check.py` / `class-open-dispatch-smoke.cjs` / `class-archive-dispatch-check.py` 断言更新到新类头，版本断言改为通用校验（不再写死 r11 / epoch 5）。
+
+**未改动**：Java 层仅 `MainActivity` 的 `assetEpoch` 一行；`AndroidManifest.xml` 字节级一致，versionCode 55 / 签名密钥未变；`DataEngine` / `ArchiveTools` / `DexEngine` 全部未改；保存键仍只导出 `.bytecode.txt`，绝不覆写 `.class` 原始字节。
+
+验证：本地 14 项自检全 PASS（`FAIL_FLAG=0`）；198 个真实 class 批量解析 198/198 成功、34,360 条指令 / 1,812 个跳转标签与改前一致；真实 `package-info.class` 输出与 MT 管理器逐字符相同；Actions 构建 #63 全 success。
+
 ## 交付与修复报告（`reports/`）
 
 本目录归档面向用户的 HTML 交付说明，均为只读记录，不参与构建：
@@ -164,5 +195,6 @@ versionCode 仍为 55、签名密钥未变、默认中文文案未改，可直�
 | `r9-class-view-fix-report.html` | .class 文件无法打开修复（r9）：新增内置类信息查看器（纯 JS 解析 class 字节码）的根因、javap 权威对照、真实 194KB 大 class 端到端与 APK 二进制校验（提交 `d6041c2`、Release `build-60`） |
 | `r10-class-disasm-report.html` | .class 打开方式对标 MT 管理器（r10）：字节码反汇编文本编辑器、语法高亮、保存只导出不覆写、真实 class 端到端与 APK 逐条目 / 签名证书核对（提交 `f34bcba`、Release `build-61`） |
 | `r11-class-archive-view-report.html` | JAR 内 .class 视图对标 MT 管理器（r11）：覆盖安装后 WebView 旧缓存触发表格回退的根因、删回退 + 组件自愈 + 内置反汇编 + 缓存根治、归档场景防回归自检与 APK 内置资源实测（提交 `7457c85`、Release `build-62`） |
+| `r12-mt-class-header-report.html` | .class 反汇编文本对齐 MT 管理器（r12）：类头 / 属性块 / 收尾注释的根因与修复、真实 package-info.class 逐行对照、三级反汇编器一致性、APK 内置资源实测与逐条目 / 签名证书核对（提交 `068e2d8`、Release `build-63`） |
 
-正式签名 APK 请以仓库 Release `build-62` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。
+正式签名 APK 请以仓库 Release `build-63` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。

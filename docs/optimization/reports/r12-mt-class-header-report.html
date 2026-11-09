@@ -1,0 +1,153 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>r12 · .class 反汇编文本对齐 MT 管理器语法</title>
+<style>
+:root{--bg:#0f1115;--card:#181b22;--line:#2a2f3a;--fg:#e6e9ef;--mut:#9aa3b2;--acc:#5aa9ff;--ok:#7bd88f;--warn:#f0b36b;--bad:#f0736b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.7 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:26px;margin:0 0 6px}h2{font-size:19px;margin:30px 0 12px;border-left:3px solid var(--acc);padding-left:10px}
+h3{font-size:16px;margin:20px 0 8px;color:var(--acc)}
+.sub{color:var(--mut);margin-bottom:22px;font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{color:var(--mut);font-weight:600}code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;color:#c9d6ea}
+pre{background:#0b0d11;border:1px solid var(--line);border-radius:8px;padding:14px;overflow:auto;font:12.5px/1.55 ui-monospace,Menlo,Consolas,monospace;color:#d8dde6}
+.kw{color:#cf6a62;font-weight:600}.tp{color:#7fb069}.nm{color:#d7a86e}.cm{color:#6f7b8c}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.mut{color:var(--mut)}
+ul{margin:8px 0 8px 20px;padding:0}li{margin:5px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.kv{background:#12151b;border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.kv b{display:block;font-size:18px;color:var(--fg);margin-top:4px;word-break:break-all}
+.kv span{color:var(--mut);font-size:12px}
+.note{border-left:3px solid var(--warn);padding-left:12px;color:var(--mut);font-size:14px}
+.good{border-left:3px solid var(--ok);padding-left:12px;color:var(--mut);font-size:14px}
+</style></head><body><div class="wrap">
+<h1>r12 · .class 反汇编文本对齐 MT 管理器</h1>
+<div class="sub">提交 <code>068e2d8</code> · GitHub Actions 构建 #63 · Release <code>build-63</code> · 版本号 0.1.59（versionCode 55 不变，可覆盖安装）</div>
+
+<div class="grid">
+<div class="kv"><span>交付 APK</span><b>Cyber-Hub-Manager-0.1.59-r12.apk</b></div>
+<div class="kv"><span>文件大小</span><b>21,382,484 字节</b></div>
+<div class="kv"><span>SHA-256</span><b style="font-size:12px">68d9d8db9c4f34c4cdfb8ab4c3934c98903251f4642bbbab435aef9df9a6cec0</b></div>
+<div class="kv"><span>构建结论</span><b class="ok">12 / 12 步骤成功</b></div>
+</div>
+
+<h2>需求与对照</h2>
+<div class="card"><p>用户对比<strong>同一个</strong> <code>org/apache/commons/net/bsd/package-info.class</code>（取自项目内置的 <code>commons-net-3.10.0.jar</code>），给出 MT 管理器与 r11 的不同输出，要求解释并修改。</p>
+<h3 style="margin-top:14px">MT 管理器（目标）</h3>
+<pre>package org/apache/commons/net/bsd;
+
+synthetic interface package-info version 52:0
+{
+  SourceFile               "package-info.java";
+} // end Class org/apache/commons/net/bsd/package-info</pre>
+<h3>r11 原输出</h3>
+<pre>package org.apache.commons.net.bsd;
+interface abstract class synthetic version 52.0</pre>
+<p class="mut">该文件经 <code>javap -v</code> 确认为 <code>ACC_INTERFACE | ACC_ABSTRACT | ACC_SYNTHETIC</code>（0x1600）、major 52、0 字段 0 方法、仅 1 个 <code>SourceFile</code> 属性。它是 javac 为包声明生成的合成接口，属于典型的「空类」。</p></div>
+
+<h2>根因：只对齐了主体，没对齐类头语法</h2>
+<div class="card"><p>r10 仿写反汇编器时，重点对齐了 <code>Method …</code> / <code>stack N locals N</code> / 逐条指令 / <code>Lxx:</code> 跳转标签 / 常量池引用注释这部分<strong>主体</strong>，类头却用了一个自定简化模板：</p>
+<pre><span class="cm">// classview.js r11，376-389 行</span>
+<span class="kw">var</span> cls = info.thisClass, dot = cls.lastIndexOf('.');
+<span class="cm">// thisClass 已被 cpClassName() 把 '/' 换成 '.'</span>
+out.push('package ' + cls.slice(0, dot) + ';');
+<span class="cm">// flags 按位拆成 before / after 两组，中间写死 'class'</span>
+<span class="kw">var</span> head = before.join(' ') + 'class' + after.join(' ')
+           + ' version ' + info.major + '.' + info.minor;</pre>
+<ul>
+<li>把 <strong><code>class</code> 写死</strong>，于是 <code>ACC_INTERFACE</code> 与 <code>ACC_ABSTRACT</code> 同时命中时输出 <code>interface abstract class synthetic</code>；</li>
+<li>没有<strong>简单类名</strong>占位，版本写成 <code>52.0</code> 而非 <code>52:0</code>；</li>
+<li>JVM 内部名 <code>/</code> 被统一换成 <code>.</code>；</li>
+<li><code>disassemble()</code> 只渲染字段与方法，<strong>完全不渲染类属性</strong>——其实 <code>parse()</code> 早已把 <code>sourceFile</code> 解析出来（实测 <code>parseBase64().sourceFile === "package-info.java"</code>），只是没用；也没有 <code>{ }</code> 与结尾注释。</li>
+</ul>
+<p>普通 class 有几十上百行指令撑着，类头差异被淹没；<code>package-info.class</code> 是 0 字段 0 方法的空类，把这层差异<strong>全部暴露</strong>，因此看起来「完全不像」。这不是解析错误，两者读到的字节完全一致。</p>
+<p class="good">本问题纯属<strong>前端文本模板</strong>：Java 层对 <code>classview.js</code> / <code>disassemble</code> 零引用，DEX 转 JAR（<code>dexToJar</code>）与 JADX 反编译（<code>dexCode</code>）都不经过它，因此不影响反编译 APK 的能力（详见文末链路隔离）。</p></div>
+
+<h2>修复：7 项差异逐项对齐</h2>
+<div class="card"><table>
+<thead><tr><th>#</th><th>项</th><th>MT 管理器</th><th>r11</th><th>r12</th></tr></thead><tbody>
+<tr><td>1</td><td>package 分隔符</td><td><code>org/apache/commons/net/bsd</code></td><td>点号</td><td class="ok">保留斜杠内部名</td></tr>
+<tr><td>2</td><td>类头类型</td><td><code>synthetic interface package-info</code></td><td><code>interface abstract class synthetic</code></td><td class="ok">修饰符前置 + 类型关键字；interface 隐含 abstract 不重复输出</td></tr>
+<tr><td>3</td><td>简单类名</td><td><code>package-info</code></td><td>缺失</td><td class="ok">输出简单类名</td></tr>
+<tr><td>4</td><td>版本格式</td><td><code>version 52:0</code></td><td><code>version 52.0</code></td><td class="ok"><code>major:minor</code></td></tr>
+<tr><td>5</td><td>类体</td><td><code>{ … }</code> 包裹</td><td>无</td><td class="ok"><code>{ }</code> 包裹，主体不变</td></tr>
+<tr><td>6</td><td>类属性</td><td><code>SourceFile "package-info.java";</code></td><td>无</td><td class="ok">渲染 SourceFile / Signature 等，属性值左对齐到 25 列</td></tr>
+<tr><td>7</td><td>结尾</td><td><code>// end Class &lt;内部名&gt;</code></td><td>无</td><td class="ok"><code>} // end Class …</code></td></tr>
+</tbody></table>
+<p class="note">属性块只渲染能解出确定文本值的属性（<code>SourceFile</code> / <code>Signature</code> / <code>Deprecated</code> / <code>Synthetic</code>），其余（<code>InnerClasses</code> / <code>BootstrapMethods</code> 等）不臆造内容，避免输出无意义的偏差行。</p></div>
+
+<h2>改动文件（10 个）</h2>
+<div class="card"><table>
+<thead><tr><th>文件</th><th>改动</th></tr></thead><tbody>
+<tr><td><code>assets/vendor/classview.js</code></td><td><code>disassemble()</code> 类头改 MT 语法 + <code>{ }</code> / 属性块 / 收尾注释；<code>parse()</code> 给 <code>attributes</code> 加 <code>offset</code> 供属性取值（+1,795 B）</td></tr>
+<tr><td><code>assets/app.js</code></td><td><code>builtinClassDisasm()</code> 补类级属性解析 <code>clsAttrs</code> 并对齐类头/收尾；<code>classStructText()</code> 同步；<code>jvmasm</code> 高亮补 <code>SourceFile/Signature/annotation/enum/module/end</code>；<code>UI_BUILD='r12'</code>；关于页加 r12 说明（+2,486 B）</td></tr>
+<tr><td><code>assets/app.html</code></td><td>关键脚本 <code>?v=r11</code> → <code>?v=r12</code></td></tr>
+<tr><td><code>MainActivity.java</code></td><td><code>assetEpoch</code> 5 → 6，覆盖安装强制 <code>clearCache(true)</code>（本轮改了 <code>vendor/classview.js</code>，必须清缓存；<code>classes.dex</code> +36 B，唯一 Java 改动）</td></tr>
+<tr><td><code>tests/class-mt-header-check.py</code>（新）</td><td>37 项：合成 + 真实 JAR 样本逐字符比对 MT、Subject 主体不回归、三级语法一致、缓存标记</td></tr>
+<tr><td><code>tests/class-mt-header-smoke.cjs</code>（新）</td><td>17 项：主组件 / 内置反汇编器 / 结构兜底真实执行，验证类头 / 属性块 / 收尾三段一致</td></tr>
+<tr><td><code>tests/class-disasm-check.py</code> / <code>class-open-dispatch-smoke.cjs</code> / <code>class-archive-dispatch-check.py</code></td><td>旧类头断言更新到新格式；版本断言改为<strong>通用校验</strong>（脚本 <code>?v=</code> 必须与 <code>UI_BUILD</code> 一致、<code>assetEpoch</code> 只增不减），以后版本递增不必再改死值</td></tr>
+<tr><td><code>.github/workflows/build-apk.yml</code></td><td>CI 接入两个新测试，步骤名补充「MT 类头对齐」</td></tr>
+</tbody></table>
+<p class="note">三处独立实现（<code>classview.js disassemble</code> / <code>builtinClassDisasm</code> / <code>classStructText</code>）共用同一套类头语法，覆盖安装缓存旧组件或组件缺失时也不会退回旧格式。<strong>字段 / 方法 / 逐条指令 / 十六进制跳转标签 / 常量池引用注释全部保持不变。</strong></p></div>
+
+<h2>自检与构建</h2>
+<div class="card"><ul>
+<li>本地：<code>node --check</code> 三个前端文件通过；<strong>7 个 Python 自检 + 7 个冒烟全 PASS</strong>（<code>FAIL_FLAG=0</code>）。新增自检在真实 <code>package-info.class</code> 上要求输出<strong>逐字符</strong>等于 MT 文本。</li>
+<li>批量回归：<code>commons-net-3.10.0.jar</code> 内 <strong>198 / 198 个真实 class 全部解析成功</strong>，0 异常，34,360 条指令、1,812 个跳转标签与改前完全一致。</li>
+<li>GitHub Actions 构建 #63：检出 → JDK 17 → Android SDK 34 / build-tools 35.0.0 → Node 20 + happy-dom → 前端自检（含 2 个新测试）→ ECJ + D8 + zipalign + apksigner → 核心 JVM 冒烟 → 上传产物 → 创建 Release，<strong class="ok">12 步全 success</strong>。</li>
+</ul></div>
+
+<h2>APK 内置资源实测（18 项全通过）</h2>
+<div class="card"><p>下载后先从 GitHub Release 官方 digest 校验 SHA-256，再从 <strong>APK 内部</strong>直接读出资源验证，并用<strong>包内</strong>的 <code>classview.js</code> 真实执行反汇编：</p>
+<table><thead><tr><th>验证项</th><th>结果</th></tr></thead><tbody>
+<tr><td><code>UI_BUILD='r12'</code> / <code>?v=r12</code> / DEX 内 <code>assetEpoch</code> + <code>clearCache</code></td><td class="ok">PASS</td></tr>
+<tr><td><code>classview.js</code> 含 <code>major + ':' + minor</code> / <code>offset: pos</code> / <code>} // end Class</code> / 不重复 abstract</td><td class="ok">PASS</td></tr>
+<tr><td><code>app.js</code> 含 <code>u2(6)+':'+u2(4)</code> / <code>clsAttrs</code> / MT 收尾</td><td class="ok">PASS</td></tr>
+<tr><td>包内反汇编器对真实 <code>package-info.class</code> 输出 == MT 文本</td><td class="ok">逐字符一致</td></tr>
+<tr><td>包内反汇编器对 <code>Sample.class</code>：≥80 指令 / ≥8 标签 / 新类头 / MT 收尾</td><td class="ok">PASS</td></tr>
+<tr><td><code>AndroidManifest.xml</code> 与 r11 字节级一致、条目数 461</td><td class="ok">PASS</td></tr>
+</tbody></table></div>
+
+<h2>APK 逐条目核对（r11 → r12）</h2>
+<div class="card"><table>
+<thead><tr><th>项目</th><th>结果</th></tr></thead><tbody>
+<tr><td>条目总数</td><td>461 → 461（新增 0 / 删除 0）</td></tr>
+<tr><td>内容有变化的条目</td><td>7 个</td></tr>
+<tr><td>文件体积</td><td>21,382,484 → 21,382,484 字节（两版相同；内容不同，SHA-256 已变）</td></tr>
+<tr><td>versionCode / versionName / package</td><td>55 / 0.1.59 / <code>com.cyberhub.manager</code>，两版均一致（二进制 Manifest 直接解析确认）</td></tr>
+</tbody></table>
+<h3>变化条目（解压后字节）</h3><table><thead><tr><th>条目</th><th>r11</th><th>r12</th><th>差值</th><th>r12 SHA-256 前 16 位</th></tr></thead><tbody>
+<tr><td><code>assets/app.js</code></td><td>484,361 B</td><td>486,847 B</td><td>+2,486</td><td><code>07682d9db6b88e5d</code></td></tr>
+<tr><td><code>assets/vendor/classview.js</code></td><td>24,279 B</td><td>26,074 B</td><td>+1,795</td><td><code>db67b856c9a8a870</code></td></tr>
+<tr><td><code>assets/app.html</code></td><td>2,847 B</td><td>2,847 B</td><td>+0</td><td><code>b16242e2824656a7</code></td></tr>
+<tr><td><code>classes.dex</code></td><td>7,651,332 B</td><td>7,651,368 B</td><td>+36</td><td><code>090a0ed3263ed748</code></td></tr>
+<tr><td><code>META-INF/CYBERHUB.RSA</code></td><td>1,275 B</td><td>1,275 B</td><td>+0</td><td><code>ae480c7fccdfca1b</code></td></tr>
+<tr><td><code>META-INF/CYBERHUB.SF</code></td><td>54,178 B</td><td>54,178 B</td><td>+0</td><td><code>00cdeeafe7b12a07</code></td></tr>
+<tr><td><code>META-INF/MANIFEST.MF</code></td><td>54,051 B</td><td>54,051 B</td><td>+0</td><td><code>da4d2f4dc4b1d6df</code></td></tr>
+</tbody></table>
+<h3>关键二进制 / 资源（字节级一致）</h3><table><thead><tr><th>条目</th><th>对比</th><th>SHA-256 前 16 位</th></tr></thead><tbody>
+<tr><td><code>AndroidManifest.xml</code></td><td class="ok">一致 ✓（8,964 B）</td><td><code>a747a06d747e49d6</code></td></tr>
+<tr><td><code>classes2.dex</code> / <code>classes3.dex</code></td><td class="ok">一致 ✓</td><td><code>f41693d9c3843bad</code> / <code>bccbe01a1bcb71e7</code></td></tr>
+<tr><td><code>assets/style.css</code> / <code>boot.js</code> / <code>lang/packs.js</code></td><td class="ok">一致 ✓</td><td><code>cbad276eac167bc4</code> / <code>c873f936dd29f352</code> / <code>823c42a48e359a85</code></td></tr>
+</tbody></table>
+<p class="note">v1 内嵌 X.509 证书指纹与 r11 <strong class="ok">完全一致</strong>（SHA-256 <code>BF:E0:C2:7B:F3:EB:DF:5D:19:9F:56:6E:6E:A4:40:54:16:F6:1E:30:A7:BF:70:22:89:33:6A:E3:C4:10:95:04</code>，<code>CN = Cyber Hub Manager Development</code>）；v2 / v3 签名块均存在（<code>0x7109871a, 0xf05368c0, 0x42726577</code>），可直接<strong>覆盖安装</strong>。<code>.SF</code> / <code>MANIFEST.MF</code> 摘要与 <code>.RSA</code> 签名值随内容重签，属预期。</p></div>
+
+<h2>链路隔离：不影响反编译</h2>
+<div class="card"><table><thead><tr><th>功能</th><th>入口</th><th>执行</th><th>是否经过本轮改动</th></tr></thead><tbody>
+<tr><td>JADX 反编译 / DEX→Smali</td><td><code>dexCode</code></td><td><code>DexEngine.code()</code> → jadx-core / baksmali</td><td class="ok">否</td></tr>
+<tr><td>DEX 转 JAR</td><td><code>dexToJar</code></td><td><code>DexEngine.toJar()</code> → dex2jar</td><td class="ok">否</td></tr>
+<tr><td>.class 查看</td><td><code>fileData</code></td><td><code>ArchiveTools.readEntry()</code> 取字节 → WebView 里拼字符串</td><td>是（仅显示文本）</td></tr>
+</tbody></table>
+<p>Java 层对 <code>classview.js</code> / <code>CyberClassView</code> / <code>disassemble</code> <strong>零引用</strong>；反汇编器不生成中间文件、不写回字节、不参与 ZIP/JAR 打包与 DEX 转换。即便某个 class 解析失败，<code>classScreen()</code> 也只会降级为类结构或十六进制文本，不会报错中断。</p></div>
+
+<h2>交互与安全边界</h2>
+<div class="card"><ul>
+<li>本地与 JAR / ZIP / APK 归档内 <code>.class</code> 统一进入深色反汇编代码编辑器；空类现在也能看到 <code>SourceFile</code> 等属性与完整类体。</li>
+<li>右上菜单仍保留「类信息查看器」「十六进制查看」「打开方式…」「导出反汇编文本」。</li>
+<li>保存键只导出 <code>.bytecode.txt</code>，<strong>绝不覆写 .class 原始字节</strong>；归档条目只读解出到缓存文件，不修改原归档。</li>
+<li>覆盖安装后 <code>assetEpoch=6</code> 会清 WebView 缓存并按 <code>?v=r12</code> 重新拉起组件，避免旧 <code>classview.js</code> 让新格式失效。</li>
+</ul></div>
+
+<div class="card mut" style="font-size:13px">本报告由 r12 修复流程自动生成；交付 APK 位于 <code>/workspace/Cyber-Hub-Manager-0.1.59-r12.apk</code>，Release 地址 <code>https://github.com/wumingzhinu/Cyber-Hub-Manager/releases/tag/build-63</code>。安装建议：直接覆盖安装即可（versionCode 55、签名证书未变）；若仍看到旧格式界面，请强制停止应用并清除 WebView 缓存后重开。</div>
+</div></body></html>
