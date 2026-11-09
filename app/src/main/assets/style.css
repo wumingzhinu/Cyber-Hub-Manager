@@ -1129,3 +1129,12 @@ body.light .CodeMirror .cm-activeLine{background:#2f6fb514}
 /* r6：启动首屏的文件管理器骨架占位。只作瞬时提示，数据回填后立即消失。 */
 .bootPlaceholder{color:var(--muted);font-size:13px;padding:18px 16px;opacity:.72}
 body.light .bootPlaceholder{color:var(--muted);opacity:.8}
+
+/* r9：.class 类信息查看器。复用 tabs / listrow / kvRow / searchline / primary。 */
+.cvTabs{margin-bottom:2px}
+.cvBody{padding:4px 0 8px}
+.cvOverview{margin-top:8px}
+.cvOverview .kvRow b{font-family:var(--mono);font-size:12px}
+.cvBody .listrow small{font-family:var(--mono);font-size:11px;overflow-wrap:anywhere}
+.cvActions{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+.cvActions .primary{flex:1 1 130px}

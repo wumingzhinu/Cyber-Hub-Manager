@@ -97,6 +97,27 @@ versionCode 仍为 55、签名密钥未变、默认中文文案未改，可直�
 - 前端分发：`jar-open-dispatch-smoke.cjs` 4 项全 PASS；`jar-open-archive-check.py` 60 项全 PASS；`startup-direct-check.py` 12 项 / `dex-to-jar-no-zipfs-check.py` 11 项仍 PASS；`node --check app.js` / `boot.js` 通过。
 - CI 三套前端冒烟 `file-icons-smoke` 8 / `open-with-ui-smoke` 12 / `media-player-ui-smoke` 11 全 PASS；全套 `.cjs` 改动前后逐项一致（原有 20 项结果不变，仅新增 1 项 PASS；10 项 FAIL 均为沙箱环境限制，与基线相同），无回归。
 
+## r9 修复（.class 文件无法打开：新增内置类信息查看器）
+
+真机反馈：进入 JAR / 归档后点击 `.class` 文件无法打开，界面报错「二进制文件：无法作为文本打开，请在「打开方式」中选择十六进制查看器或其他应用」；在「打开方式」里选「编辑文本」时被包成「无法完成」对话框。这正是 r8 章节末尾标注「本轮未加入独立 `.class` 反编译」所留下的缺口。
+
+**根因**：`app.js` 的 `fileType()` 不给 `.class` 任何分类，返回 `'file'`，`openFile()` 兜底调用 `openText()` → `rpc('read')` → `DataEngine.read()` → `FileOps.read(f, MAX_TEXT)` 在前 2048 字节扫到魔数 `CAFEBABE` 之后的 `0x00` → 抛「二进制文件…」。而 `openWithBuiltinItems()` 的「编辑文本」调用 `openText(fileArgs(f))` 未传 `f`，使 `openText()` 的二进制兜底失效，异常被 `act()` 包成「无法完成」——归档内的 `.class` 完全看不到内容。
+
+- 新增 `app/src/main/assets/vendor/classview.js`（UMD，Node + WebView 双用）：纯 JS 按 JVMS 规范解析 class 字节码 —— 魔数 / minor+major 版本→编译目标 JDK / 常量池（含 Modified UTF-8 与代理对）/ 访问标志 / `this_class` / `super_class` / 接口 / 字段 / 方法（含 `Code` 属性字节长度）/ `SourceFile` 与类属性 / 全部 UTF-8 字符串；提供描述符可读化（`[[Lfoo/Bar;`→`foo.Bar[][]`、`(I[Ljava/lang/String;)Z`→`(int, java.lang.String[]) → boolean`）。只解析结构，不执行、不反编译。
+- `app.js`：`fileType()` 新增 `ext==='class' → 'class'`；`openFile()` 新增 `type==='class' → classScreen(f)` 直达分支（排在文本兜底之前）；新增 `classScreen(f)` 用现成的 `rpc('fileData', fileArgs(f))`（base64、16 MB 上限、经 `resolve()` 天然支持归档内条目）读取字节，按 **概览 / 字段 / 方法 / 常量池字符串** 四标签渲染，支持搜索、一键切到十六进制查看或打开方式；无效 class 也给出可操作出口，不再死在错误页。
+- `app.js`：「打开方式 → 编辑文本」对 `.class` 改道查看器（`fileType(f)==='class'?classScreen(f):openText(fileArgs(f))`），13 项内置网格的标签数组与 `blob.bin` 显式编辑报错行为均不变。
+- `app.js`：`UI_BUILD` 更新为 `r9`，关于页追加 r9 版本说明；`app.html` 在 `app.js` 前加载 `classview.js`；`style.css` 追加查看器样式（复用 `tabs`/`listrow`/`kvRow`/`searchline`/`primary`）。
+- `tests/class-view-check.py`：12 项防回归自检（分类 / 直达分支顺序 / 四标签 / 编辑文本改道 / 13 项网格 / Java 层零改动 / 8 MB 上限不动），并用 node 真实执行 `classview.js` 校验最小合法 class、描述符可读化、损坏文件优雅失败与真实 `.class` 端到端解析。
+- `tests/class-open-dispatch-smoke.cjs`：happy-dom 加载真实 `app.js` + `classview.js`，验证 `.class` 走 `rpc('fileData')` 而非 `rpc('read')`、渲染出含 `CAFEBABE`/类名/父类/JDK 版本的查看器与四标签、标签切换、十六进制与打开方式出口，且 `notes.txt` 仍走文本编辑器、`blob.bin` 显式编辑仍报「二进制文件」。新测试均接入 CI。
+- `tests/jar-open-archive-check.py`：`UI_BUILD='r8'` 死断言改为「不低于 r8」的正则、`Foo.class` 分类期望从 `'file'` 更新为 `'class'`，避免版本递增时每轮都要改断言。
+
+**未改动**：Java 层零改动 —— 未新增 action，复用现有 `fileData` / `hexView` / `resolve()`；`FileOps.MAX_TEXT` 仍为 8 MB、`DataEngine` / `ArchiveTools` / `DexEngine` / `ExtraTools` 全部未改；versionCode 55、签名密钥、默认中文文案、r4–r8 全部修复保持不变。
+
+验证：
+- 解析器权威性：用 `javap -verbose` 对照 r7 产出的真实 `.class`，`major version: 52`、`ACC_PUBLIC/ACC_SUPER`、父类 `org.antlr.runtime.Parser`、`Smali$1 implements Callable`、`ACCESS_SPEC` 字段全部吻合；末尾 `InnerClasses` 类属性被正确读到，证明常量池 / 字段 / 方法 / 属性区偏移解析无误。194,145 字节的 `smaliParser.class`（4,927 个常量池条目 / 840 字段 / 131 方法）亦正常解析。
+- `class-view-check.py` 12 项 / `class-open-dispatch-smoke.cjs` 6 项全 PASS；`startup-direct-check.py` 12 / `dex-to-jar-no-zipfs-check.py` 11 / `jar-open-archive-check.py` 60 项仍 PASS；`node --check` 三个脚本通过。
+- 全套 `.cjs` 改动前后逐项对照，无回归。
+
 ## 交付与修复报告（`reports/`）
 
 本目录归档面向用户的 HTML 交付说明，均为只读记录，不参与构建：

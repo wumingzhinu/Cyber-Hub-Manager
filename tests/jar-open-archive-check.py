@@ -15,6 +15,10 @@ type==='archive' 分支即进入双窗格归档浏览；另在 openText() 中给
 避免用户显式选「编辑文本」时卡在纯错误页。8MB 文本上限本身不变。
 
 此脚本固定上述约束防回归，并用 node 真实执行 fileType() 校验分类结果。
+
+演进（r9）：.class 从「无分类→'file'→openText 报二进制错误」改为独立
+'class' 类型，openFile() 直达内置类信息查看器（不再走文本读取），因此本脚本
+动态求值里 Foo.class 的期望从 'file' 更新为 'class'；JAR 归档分类不受影响。
 """
 import json
 import re
@@ -83,7 +87,10 @@ require("fileType(f)==='archive'" in app_js,
         '「浏览压缩包」不再按 archive 类型启用，13 项网格置灰逻辑可能回归')
 
 # --- 5. 版本标记与关于页 ---
-require("const UI_BUILD='r8';" in app_js, 'UI_BUILD 未更新为 r8')
+# r9 起 UI_BUILD 递增（r8→r9→…），只要不低于 r8 即可；避免每轮都改死断言。
+_m_build = re.search(r"const UI_BUILD='r(\d+)';", app_js)
+require(_m_build is not None and int(_m_build.group(1)) >= 8,
+        'UI_BUILD 缺失或低于 r8')
 require('r8 修复无法打开 JAR 文件' in app_js, '关于页缺少 r8 版本说明')
 
 # --- 6. 后端：JAR 按 ZIP 处理的能力必须保留 ---
@@ -128,7 +135,7 @@ if m_ft and m_txt and m:
         'demo.jar': 'archive', 'lib.war': 'archive', 'app.ear': 'archive',
         'classes.aar': 'archive', 'm.jmod': 'archive', 'plain.zip': 'archive',
         'app.apk': 'apk', 'bundle.xapk': 'apks', 'bundle.apks': 'apks',
-        'notes.txt': 'text', 'Foo.class': 'file', 'classes.dex': 'dex',
+        'notes.txt': 'text', 'Foo.class': 'class', 'classes.dex': 'dex',
         'AndroidManifest.xml': 'xml', 'other.bin': 'bin',
     }
     for name, want in expected.items():
