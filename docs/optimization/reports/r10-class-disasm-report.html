@@ -1,0 +1,134 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>r10 · .class 打开方式对标 MT 管理器</title>
+<style>
+:root{--bg:#0f1115;--card:#181b22;--line:#2a2f3a;--fg:#e6e9ef;--mut:#9aa3b2;--acc:#5aa9ff;--ok:#7bd88f;--warn:#f0b36b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.7 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:26px;margin:0 0 6px}h2{font-size:19px;margin:30px 0 12px;border-left:3px solid var(--acc);padding-left:10px}
+h3{font-size:16px;margin:20px 0 8px;color:var(--acc)}
+.sub{color:var(--mut);margin-bottom:22px;font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{color:var(--mut);font-weight:600}code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;color:#c9d6ea}
+pre{background:#0b0d11;border:1px solid var(--line);border-radius:8px;padding:14px;overflow:auto;font:12.5px/1.55 ui-monospace,Menlo,Consolas,monospace;color:#d8dde6}
+.kw{color:#cf6a62;font-weight:600}.mt{color:#5a9fd4;font-weight:600}.tp{color:#7fb069}.nm{color:#d7a86e}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.mut{color:var(--mut)}
+ul{margin:8px 0 8px 20px;padding:0}li{margin:5px 0}
+.badge{display:inline-block;background:#1d2a3a;color:var(--acc);border:1px solid #2d4a66;border-radius:20px;padding:2px 10px;font-size:12px;margin-right:6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.kv{background:#12151b;border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.kv b{display:block;font-size:18px;color:var(--fg);margin-top:4px;word-break:break-all}
+.kv span{color:var(--mut);font-size:12px}
+.note{border-left:3px solid var(--warn);padding-left:12px;color:var(--mut);font-size:14px}
+</style></head><body><div class="wrap">
+<h1>r10 · .class 打开方式对标 MT 管理器</h1>
+<div class="sub">提交 <code>f34bcba</code> · GitHub Actions 构建 #61 · Release <code>build-61</code> · 版本号 0.1.59（versionCode 55 不变，可覆盖安装）</div>
+
+<div class="card"><h2 style="margin-top:0">需求与对照</h2>
+<p>用户提供两张截图：<strong>图一（MT 管理器）</strong>是 <code>Hex.class</code> 的<strong>字节码反汇编文本编辑器</strong>——深色代码区、行号、语法高亮，顶部 7 键工具栏（菜单 / 图钉 / 撤销 / 重做 / 保存 / 编辑 / 更多），正文为 <code>package</code>、<code>public super class final version 52.0</code>、<code>Method ...</code>、<code>stack N locals N</code>、逐条指令与 <code>L2f:</code> 跳转标签，底部符号快捷栏；<strong>图二（r9 版本）</strong>是四标签「类信息查看器」表格（概览 / 字段 / 方法 / 字符串）。</p>
+<p>要求：把 <code>.class</code> 的默认打开方式改成图一同款，而不是图二的信息表格。</p></div>
+
+<div class="grid">
+<div class="kv"><span>交付 APK</span><b>Cyber-Hub-Manager-0.1.59-r10.apk</b></div>
+<div class="kv"><span>文件大小</span><b>21,382,484 字节</b></div>
+<div class="kv"><span>SHA-256</span><b style="font-size:12px">f6eb750c1cb46abf2657bb28cf54885c710111fb6346cb3bc17c54253ed50ef9</b></div>
+<div class="kv"><span>构建结论</span><b class="ok">12 / 12 步骤成功</b></div>
+</div>
+
+<h2>改动内容</h2>
+<div class="card"><table>
+<thead><tr><th>文件</th><th>改动</th></tr></thead><tbody>
+<tr><td><code>assets/vendor/classview.js</code></td><td>新增 <code>disassemble()</code> / <code>disassembleBase64()</code>：复用常量池解析，逐条反汇编 JVM 字节码（205 个 opcode，含 <code>tableswitch</code> / <code>lookupswitch</code> / <code>wide</code> / <code>iinc</code> / <code>multianewarray</code>），生成类头、字段、方法头（stack + locals）、十六进制跳转标签与 <code>Method / Field / Class / String</code> 引用注释；原 r9 的 <code>parseBase64()</code> 结构解析保留不变。</td></tr>
+<tr><td><code>assets/app.js</code></td><td><code>UI_BUILD</code> → r10；<code>classScreen()</code> 改为把反汇编文本送入既有 <code>renderEditor()</code>（<code>kind:'class'</code>），复用行号 / 查找替换 / 跳转 / 缩放 / 符号栏；新增 <code>CodeMirror.defineMode('jvmasm')</code>；保存键改走 <code>exportClassDisasm()</code> 导出 <code>.bytecode.txt</code>；<code>canLeave / reloadEditor / editorMenu / goBack</code> 同步适配；原查看器改名 <code>classInfoScreen()</code> 保留为菜单二级入口；关于页补 r10 说明。</td></tr>
+<tr><td><code>assets/style.css</code></td><td>新增 <code>.classEditor</code> MT 同款深色配色：红色关键字、蓝色跳转标签、绿色常量池引用、白色指令、棕黄数字。</td></tr>
+<tr><td><code>tests/class-disasm-check.py</code>（新）</td><td>静态约束 + Node 真实反汇编：类头 / 指令 / 标签 / 引用注释 / 只导出不覆写 / r9 回归 / Java 层零改动。</td></tr>
+<tr><td><code>tests/class-open-dispatch-smoke.cjs</code></td><td>更新到 r10：happy-dom 真实点击 .class，校验走 <code>fileData</code>、代码区 / 7 键工具栏 / 状态栏 / 符号栏 / 五类语法高亮、菜单四入口、r9 查看器仍可用、txt 与 blob.bin 不回归。</td></tr>
+<tr><td><code>tests/fixtures/Sample.class</code>（新）</td><td>真实 javac 产物，含 <code>lookupswitch</code>、循环跳转、异常、Method/Field/Class 引用，供两套测试共用。</td></tr>
+<tr><td><code>.github/workflows/build-apk.yml</code></td><td>CI 自检步骤接入 <code>class-disasm-check.py</code>。</td></tr>
+</tbody></table>
+<p class="note">Java 层零改动：<code>DataEngine.fileData</code> 通道、<code>FileOps.MAX_TEXT = 8MB</code> 上限、<code>AndroidManifest.xml</code> 与全部 <code>classes*.dex</code> 均未改。</p></div>
+
+<h2>反汇编输出示例（真实 .class）</h2>
+<pre><span class="kw">package</span> demo;
+<span class="kw">public</span> <span class="kw">super</span> <span class="kw">class</span> <span class="kw">version</span> <span class="nm">52</span>.<span class="nm">0</span>
+
+<span class="kw">private</span> <span class="tp">Field</span> value:"I"
+
+<span class="kw">public</span> <span class="kw">static</span> <span class="tp">Method</span> decode_B:"([Ljava/lang/<span class="tp">String</span>;)[B"
+ <span class="kw">stack</span> <span class="nm">4</span> <span class="kw">locals</span> <span class="nm">8</span>
+
+         aLoad_0
+         iconst_0
+         aaload
+         invokevirtual             <span class="tp">Method</span> java/lang/<span class="tp">String</span>.trim:"()Ljava/lang/<span class="tp">String</span>;";
+         aStore_1
+         aLoad_1
+         invokevirtual             <span class="tp">Method</span> java/lang/<span class="tp">String</span>.length:"()I";
+         iStore_2
+         iLoad_2
+         iconst_2
+         idiv
+         newarray                byte
+         aStore_3
+         iconst_0
+         iStore                  <span class="nm">4</span>
+         iconst_0
+         iStore                  <span class="nm">5</span>
+<span class="mt">L18:</span>     iLoad                   <span class="nm">4</span>
+         iconst_1
+         iadd
+         iLoad_2
+         if_icmpge               <span class="mt">L5e</span>
+         aLoad_1
+         iLoad                   <span class="nm">4</span>
+         invokevirtual             <span class="tp">Method</span> java/lang/<span class="tp">String</span>.charAt:"(I)C";
+         bipush                  <span class="nm">16</span>
+         invokestatic              <span class="tp">Method</span> java/lang/Character.digit:"(CI)I";
+         iStore                  <span class="nm">6</span>
+         ...
+<span class="mt">L49:</span>     aLoad_3
+         iLoad                   <span class="nm">5</span>
+         iLoad                   <span class="nm">6</span>
+         iconst_4
+         ishl
+         iLoad                   <span class="nm">7</span>
+         ior
+         i2b
+         bastore
+<span class="mt">L55:</span>     iinc                    <span class="nm">4</span> <span class="nm">2</span>
+         iinc                    <span class="nm">5</span> <span class="nm">1</span>
+         goto                    <span class="mt">L18</span>
+<span class="mt">L5e:</span>     aLoad_3
+         areturn</pre>
+<p class="mut">与图一结构一致：<code>package</code>、类版本头、方法头与 stack/locals、逐条指令、<code>L18: / L49: / L55: / L5e:</code> 十六进制跳转标签、右侧常量池引用注释。指令助记符采用 MT / Jasmin 风格（<code>aLoad_0</code>、<code>invokespecial</code>、<code>if_icmpge</code>、<code>newarray byte</code>、<code>bastore</code>）。仅反汇编为字节码文本，<strong>不做 Java 反编译</strong>，也不写回 class 原始字节。</p>
+
+<h2>交互与安全边界</h2>
+<div class="card"><ul>
+<li>点击本地或 JAR / 归档内 <code>.class</code> → 直接进反汇编编辑器（不再弹「二进制文件，无法作为文本打开」）。</li>
+<li>顶部沿用 MT 同款 7 键：菜单 / 图钉（复制路径）/ 撤销 / 重做 / 保存 / 编辑（行工具）/ 更多；底部保留符号快捷栏；支持搜索、查找替换、跳转到行、自动换行、文字大小与捏合缩放。</li>
+<li>右上菜单新增「导出反汇编文本」「类信息查看器」「十六进制查看」「打开方式…」。</li>
+<li><strong>保存键只导出 <code>.bytecode.txt</code></strong>，绝不覆写 .class 原始字节；离开视图不弹保存拦截，避免误把反汇编文本写回二进制文件。</li>
+<li>无效 / 损坏 class 自动回退到类信息页，仍提供十六进制与打开方式出口。</li>
+</ul></div>
+
+<h2>自检与构建</h2>
+<div class="card"><ul>
+<li>本地：<code>node --check</code> 三个前端文件通过；5 个 Python 自检 + 5 个 happy-dom 冒烟全通过（<code>class-disasm-check.py</code>、<code>class-open-dispatch-smoke.cjs</code> 8 项等）。</li>
+<li>GitHub Actions 构建 #61：检出 → JDK 17 → Android SDK 34 / build-tools 35.0.0 → Node 20 + happy-dom → 前端自检 → ECJ + D8 + zipalign + apksigner → 核心 JVM 冒烟 → 上传产物 → 创建 Release，<strong class="ok">全部 12 步成功</strong>。</li>
+</ul></div>
+
+<h2>APK 逐条目核对（r9 → r10）</h2>
+<div class="card"><table>
+<thead><tr><th>项目</th><th>结果</th></tr></thead><tbody>
+<tr><td>条目总数</td><td>461 → 461（新增 0 / 删除 0）</td></tr>
+<tr><td>内容有变化的条目</td><td>6 个</td></tr>
+<tr><td>文件体积</td><td>21,366,100 → 21,382,484 字节（+16,384）</td></tr>
+</tbody></table>
+<h3>变化条目</h3><table><thead><tr><th>条目</th><th>r10</th><th>r9</th><th>差值</th></tr></thead><tbody><tr><td><code>META-INF/CYBERHUB.RSA</code></td><td>1275 B</td><td>1275 B</td><td>+0 B</td></tr><tr><td><code>META-INF/CYBERHUB.SF</code></td><td>54178 B</td><td>54178 B</td><td>+0 B</td></tr><tr><td><code>META-INF/MANIFEST.MF</code></td><td>54051 B</td><td>54051 B</td><td>+0 B</td></tr><tr><td><code>assets/app.js</code></td><td>468888 B</td><td>464334 B</td><td>+4554 B</td></tr><tr><td><code>assets/style.css</code></td><td>88315 B</td><td>87365 B</td><td>+950 B</td></tr><tr><td><code>assets/vendor/classview.js</code></td><td>24279 B</td><td>8745 B</td><td>+15534 B</td></tr></tbody></table>
+<h3>关键二进制 / 清单（必须字节级一致）</h3><table><thead><tr><th>条目</th><th>对比</th><th>r10 SHA-256 前 16 位</th></tr></thead><tbody><tr><td><code>AndroidManifest.xml</code></td><td>字节级一致 ✓</td><td><code>a747a06d747e49d6</code></td></tr><tr><td><code>classes.dex</code></td><td>字节级一致 ✓</td><td><code>8c777b142eb85b29</code></td></tr><tr><td><code>classes2.dex</code></td><td>字节级一致 ✓</td><td><code>f41693d9c3843bad</code></td></tr></tbody></table>
+<h3>签名相关条目</h3><table><thead><tr><th>条目</th><th>SHA-256 前 16 位</th><th>与 r9 对比</th></tr></thead><tbody><tr><td><code>META-INF/CYBERHUB.RSA</code></td><td><code>5bdfa7aa81bf16e5</code></td><td>PKCS#7 已重签（内嵌证书与 r9 相同）</td></tr><tr><td><code>META-INF/CYBERHUB.SF</code></td><td><code>d2814c9ce15c90a2</code></td><td>摘要随 assets 内容更新，属预期</td></tr><tr><td><code>META-INF/MANIFEST.MF</code></td><td><code>83e096efd31f2fa1</code></td><td>摘要随 assets 内容更新，属预期</td></tr></tbody></table>
+<p class="note">版本号 0.1.59 / versionCode 55 与包名未变；v1 内嵌 X.509 证书与 r9 <strong>完全一致 ✓</strong>（PKCS#7 证书 PEM SHA-256 <code>d7e23b7ac1ece7a3fd28c15f796c361b475d502f8d436e52c960e9cfda731966</code>），v2 / v3 签名块均存在（<code>0x7109871a, 0xf05368c0, 0x42726577</code>），可直接覆盖安装（无需卸载）。<code>META-INF/*.SF</code>、<code>MANIFEST.MF</code> 的摘要与 <code>.RSA</code> 的签名值因 assets 内容变化而重新生成，属预期。</p></div>
+
+<div class="card mut" style="font-size:13px">本报告由 r10 修复流程自动生成；交付 APK 位于 <code>/workspace/Cyber-Hub-Manager-0.1.59-r10.apk</code>，Release 地址 <code>https://github.com/wumingzhinu/Cyber-Hub-Manager/releases/tag/build-61</code>。</div>
+</div></body></html>
