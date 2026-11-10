@@ -69,7 +69,7 @@ public class MainActivity extends Activity {
         * 提升 assetEpoch 强制 clearCache(true)；localAsset 亦返回 no-store。
         * r13 再提升到 7：本轮改动了 vendor/classview.js 的 opcode 助记符 /
         * 属性块 / 词表，必须清掉 r12 旧组件缓存。 */
-       if(getPreferences(0).getInt("assetEpoch",0)<7){web.clearCache(true);getPreferences(0).edit().putInt("assetEpoch",7).apply();}
+       if(getPreferences(0).getInt("assetEpoch",0)<8){web.clearCache(true);getPreferences(0).edit().putInt("assetEpoch",8).apply();}
         web.setWebChromeClient(new WebChromeClient(){@Override public boolean onConsoleMessage(ConsoleMessage m){
             if(m.messageLevel()==ConsoleMessage.MessageLevel.ERROR)android.util.Log.e("CyberHubUI",m.message()+" @ "+m.sourceId()+":"+m.lineNumber());return true;
         }});
@@ -258,10 +258,15 @@ public class MainActivity extends Activity {
     void bundleProgress(String job,String message){
         runOnUiThread(()->{if(web!=null)web.evaluateJavascript("window.bundleProgress&&window.bundleProgress("+JSONObject.quote(job)+","+JSONObject.quote(message)+")",null);});
     }
+    /** r14：通用处理进度（0-100，-1 表示不确定），注入前端进度对话框。 */
+    void taskProgress(String job,int percent,String message){
+        runOnUiThread(()->{if(web!=null)web.evaluateJavascript("window.__taskProgress&&window.__taskProgress("+JSONObject.quote(job)+","+percent+","+(message==null?"null":JSONObject.quote(message))+")",null);});
+    }
     public final class Bridge {
         @JavascriptInterface public void request(String id,String action,String args){
-            (action.equals("apkIcon")||action.equals("listThumb")?thumbnails:worker).execute(()->{JSONObject response=new JSONObject();try{
-                JSONObject a=new JSONObject(args);Object result;
+            (action.equals("apkIcon")||action.equals("listThumb")?thumbnails:worker).execute(()->{JSONObject response=new JSONObject();String taskJob="";try{
+                JSONObject a=new JSONObject(args);Object result;taskJob=a.optString("__task","");
+                if(!taskJob.isEmpty()){final String job=taskJob;ProgressBus.begin((pct,msg)->taskProgress(job,pct,msg));}
                 switch(action){
                     case "apkIcon":result=engine.iconForPath(a.getString("path"));break;
                     case "listThumb":result=listThumb(a);break;
@@ -294,6 +299,7 @@ public class MainActivity extends Activity {
                 }
                 response.put("id",id);response.put("ok",true);response.put("data",result==null?JSONObject.NULL:result);
             }catch(Throwable e){try{response.put("id",id);response.put("ok",false);response.put("error",e.getMessage()==null?e.getClass().getSimpleName():e.getMessage());}catch(JSONException ignored){}}
+            finally{if(!taskJob.isEmpty())ProgressBus.end();}
             final String json=response.toString();runOnUiThread(()->{if(web!=null)web.evaluateJavascript("window.receive&&window.receive("+json+")",null);});
             });
         }

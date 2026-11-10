@@ -48,7 +48,7 @@ public final class ArchiveTools {
    else if(format.equals("gzip")){try(OutputStream out=compress(new FileOutputStream(output),format,level);InputStream in=new FileInputStream(items.get(0).file)){FileOps.copy(in,out,FileOps.MAX_EXTRACT);}}
    else{try(OutputStream compressed=compress(new FileOutputStream(output),format,level);TarArchiveOutputStream out=new TarArchiveOutputStream(compressed)){
     out.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);out.setBigNumberMode(TarArchiveOutputStream.BIGNUMBER_POSIX);
-    for(Item item:items){TarArchiveEntry entry=new TarArchiveEntry(item.file,item.name);out.putArchiveEntry(entry);if(item.file.isFile())try(InputStream in=new FileInputStream(item.file)){FileOps.copy(in,out,FileOps.MAX_EXTRACT);}out.closeArchiveEntry();}
+    int idx=0,total=Math.max(1,items.size());for(Item item:items){ProgressBus.report(idx*100/total,"正在压缩 "+item.name);idx++;TarArchiveEntry entry=new TarArchiveEntry(item.file,item.name);out.putArchiveEntry(entry);if(item.file.isFile())try(InputStream in=new FileInputStream(item.file)){FileOps.copy(in,out,FileOps.MAX_EXTRACT);}out.closeArchiveEntry();}
    }}
    if(split>0&&!format.equals("zip"))split(output,split);
    File[]produced=stage.listFiles();if(produced==null||produced.length==0)throw new IOException("未生成归档");Arrays.sort(produced);
@@ -59,7 +59,7 @@ public final class ArchiveTools {
  }
  static void writeZip(List<Item>items,File dest,String password,int level,boolean apk,long split)throws Exception{
   try(SplitOutputStream sink=new SplitOutputStream(dest,split>0?split:-1);ZipOutputStream out=new ZipOutputStream(sink,password.isEmpty()?null:password.toCharArray())){
-   for(Item i:items){ZipParameters p=new ZipParameters();p.setFileNameInZip(i.name);p.setLastModifiedFileTime(i.file.lastModified());p.setEntrySize(i.file.isFile()?i.file.length():0);
+   int idx=0,total=Math.max(1,items.size());for(Item i:items){ProgressBus.report(idx*100/total,"正在压缩 "+i.name);idx++;ZipParameters p=new ZipParameters();p.setFileNameInZip(i.name);p.setLastModifiedFileTime(i.file.lastModified());p.setEntrySize(i.file.isFile()?i.file.length():0);
     boolean stored=level==0||i.file.isDirectory()||apk&&(i.name.endsWith(".arsc")||i.name.endsWith(".so"));p.setCompressionMethod(stored?CompressionMethod.STORE:CompressionMethod.DEFLATE);p.setCompressionLevel((level<=1?CompressionLevel.FASTEST:level<=3?CompressionLevel.FAST:level<=5?CompressionLevel.NORMAL:level<=7?CompressionLevel.MAXIMUM:CompressionLevel.ULTRA));
     if(!password.isEmpty()){p.setEncryptFiles(true);p.setEncryptionMethod(EncryptionMethod.AES);p.setAesKeyStrength(AesKeyStrength.KEY_STRENGTH_256);}
     out.putNextEntry(p);if(i.file.isFile())try(InputStream in=new FileInputStream(i.file)){FileOps.copy(in,out,FileOps.MAX_EXTRACT);}out.closeEntry();
@@ -71,7 +71,7 @@ public final class ArchiveTools {
   try(SevenZOutputFile out=new SevenZOutputFile(dest,password.isEmpty()?null:password.toCharArray())){
    LZMA2Options options=new LZMA2Options(level);options.setDictSize(level>=7?16*1024*1024:level>=5?8*1024*1024:2*1024*1024);
    out.setContentMethods(Collections.singletonList(level==0?new SevenZMethodConfiguration(SevenZMethod.COPY):new SevenZMethodConfiguration(SevenZMethod.LZMA2,options)));
-   for(Item i:items){out.putArchiveEntry(out.createArchiveEntry(i.file,i.name));if(i.file.isFile())try(InputStream in=new FileInputStream(i.file)){byte[]b=new byte[32768];int n;while((n=in.read(b))!=-1)out.write(b,0,n);}out.closeArchiveEntry();}
+   int idx=0,total=Math.max(1,items.size());for(Item i:items){ProgressBus.report(idx*100/total,"正在压缩 "+i.name);idx++;out.putArchiveEntry(out.createArchiveEntry(i.file,i.name));if(i.file.isFile())try(InputStream in=new FileInputStream(i.file)){byte[]b=new byte[32768];int n;while((n=in.read(b))!=-1)out.write(b,0,n);}out.closeArchiveEntry();}
   }
  }
  static OutputStream compress(OutputStream out,String format,int level)throws Exception{
@@ -92,13 +92,13 @@ public final class ArchiveTools {
   try{
    if(input.getName().endsWith(".001")){merged=File.createTempFile(".joined-",".tmp",dest.getParentFile());String base=input.getPath().substring(0,input.getPath().length()-4);long total=0;try(OutputStream out=new FileOutputStream(merged)){for(int i=1;i<10000;i++){File part=new File(base+String.format(Locale.ROOT,".%03d",i));if(!part.exists())break;try(InputStream in=new FileInputStream(part)){total+=FileOps.copy(in,out,FileOps.MAX_EXTRACT-total);}}}src=merged;}
    if(format.equals("zip")||format.equals("apk")){
-    try(net.lingala.zip4j.ZipFile z=new net.lingala.zip4j.ZipFile(src,password.toCharArray())){for(FileHeader h:z.getFileHeaders()){File f=output(dest,h.getFileName(),h.isDirectory(),count);if(h.isDirectory())continue;try(InputStream in=z.getInputStream(h);OutputStream out=new FileOutputStream(f)){count[0]+=FileOps.copy(in,out,FileOps.MAX_EXTRACT-count[0]);}}}
+    try(net.lingala.zip4j.ZipFile z=new net.lingala.zip4j.ZipFile(src,password.toCharArray())){java.util.List<FileHeader> hs=z.getFileHeaders();int total=Math.max(1,hs.size()),i=0;for(FileHeader h:hs){ProgressBus.report(i*100/total,"正在解压 "+h.getFileName());File f=output(dest,h.getFileName(),h.isDirectory(),count);i++;if(h.isDirectory())continue;try(InputStream in=z.getInputStream(h);OutputStream out=new FileOutputStream(f)){count[0]+=FileOps.copy(in,out,FileOps.MAX_EXTRACT-count[0]);}}}
    }else if(format.equals("7z")){
     try(SevenZFile z=SevenZFile.builder().setFile(src).setPassword(password.toCharArray()).setMaxMemoryLimitKiB(128*1024).get()){
-     SevenZArchiveEntry e;while((e=z.getNextEntry())!=null){File f=output(dest,e.getName(),e.isDirectory(),count);if(e.isDirectory())continue;try(OutputStream out=new FileOutputStream(f)){byte[]b=new byte[32768];int n;while((n=z.read(b))!=-1){count[0]+=n;if(count[0]>FileOps.MAX_EXTRACT)throw new IOException("解压内容超过 1 GB");out.write(b,0,n);}}}
+     SevenZArchiveEntry e;while((e=z.getNextEntry())!=null){ProgressBus.stage("正在解压 "+e.getName());File f=output(dest,e.getName(),e.isDirectory(),count);if(e.isDirectory())continue;try(OutputStream out=new FileOutputStream(f)){byte[]b=new byte[32768];int n;while((n=z.read(b))!=-1){count[0]+=n;if(count[0]>FileOps.MAX_EXTRACT)throw new IOException("解压内容超过 1 GB");out.write(b,0,n);}}}
     }
-   }else if(format.equals("gzip")){String name=input.getName().replaceFirst("\\.(gz|gzip)(\\.001)?$","");File f=output(dest,name,false,count);try(InputStream in=decompress(src,format);OutputStream out=new FileOutputStream(f)){FileOps.copy(in,out,FileOps.MAX_EXTRACT);}}
-   else{try(TarArchiveInputStream in=new TarArchiveInputStream(decompress(src,format))){TarArchiveEntry e;while((e=in.getNextEntry())!=null){if(!e.isFile()&&!e.isDirectory())throw new IOException("链接和特殊归档条目不会被解压");File f=output(dest,e.getName(),e.isDirectory(),count);if(e.isDirectory())continue;try(OutputStream out=new FileOutputStream(f)){count[0]+=FileOps.copy(in,out,FileOps.MAX_EXTRACT-count[0]);}}}}
+   }else if(format.equals("gzip")){String name=input.getName().replaceFirst("\\.(gz|gzip)(\\.001)?$","");ProgressBus.stage("正在解压 "+name);File f=output(dest,name,false,count);try(InputStream in=decompress(src,format);OutputStream out=new FileOutputStream(f)){FileOps.copy(in,out,FileOps.MAX_EXTRACT);}}
+   else{try(TarArchiveInputStream in=new TarArchiveInputStream(decompress(src,format))){TarArchiveEntry e;while((e=in.getNextEntry())!=null){ProgressBus.stage("正在解压 "+e.getName());if(!e.isFile()&&!e.isDirectory())throw new IOException("链接和特殊归档条目不会被解压");File f=output(dest,e.getName(),e.isDirectory(),count);if(e.isDirectory())continue;try(OutputStream out=new FileOutputStream(f)){count[0]+=FileOps.copy(in,out,FileOps.MAX_EXTRACT-count[0]);}}}}
   }catch(Exception e){FileOps.deleteTree(dest);throw e;}finally{if(merged!=null)merged.delete();}
  }
  static SevenZFile sevenZ(File src,String password)throws Exception{

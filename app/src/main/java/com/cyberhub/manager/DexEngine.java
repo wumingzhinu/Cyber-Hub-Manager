@@ -116,32 +116,37 @@ public final class DexEngine {
   return new JSONObject().put("path",source==null?"":source.getPath()).put("size",size).put("strings",strings).put("types",types).put("classes",classCount).put("methods",methods).put("fields",fields).put("files",arr);
  }
  public JSONObject repair()throws Exception{
-  JSONArray out=new JSONArray();int n=0;
+  JSONArray out=new JSONArray();int n=0;int total=Math.max(1,files.size());
   for(Map.Entry<String,File> e:new LinkedHashMap<>(files).entrySet()){
+   ProgressBus.report(n*100/total,"正在修复 "+e.getKey());
    DexBackedDexFile d=DexFileFactory.loadDexFile(e.getValue(),Opcodes.forApi(apiOf(e.getValue())));File temp=new File(session,"repair-"+UUID.randomUUID()+".dex");
    DexFileFactory.writeDexFile(temp.getPath(),d);DexBackedDexFile check=DexFileFactory.loadDexFile(temp,Opcodes.forApi(apiOf(temp)));
    if(check.getClasses().size()!=d.getClasses().size())throw new IOException("修复校验失败："+e.getKey());
    FileOps.replace(temp,e.getValue());out.put(new JSONObject().put("name",e.getKey()).put("classes",check.getClasses().size()));n++;
   }
+  ProgressBus.report(100,"DEX 已重新生成并校验");
   reloadAll();return new JSONObject().put("files",out).put("count",n).put("message","DEX 已重新生成并校验");
  }
  public JSONObject toSmali(File folder)throws Exception{
   if(folder==null||!folder.isDirectory())throw new IOException("请选择一个已存在的输出文件夹");
   String base=source==null?"classes":baseName(source.getName());File root=unusedDir(folder,base+"_smali");root.mkdirs();
-  JSONArray out=new JSONArray();boolean multi=files.size()>1;
+  JSONArray out=new JSONArray();boolean multi=files.size()>1;int idx=0,total=Math.max(1,files.size());
   for(Map.Entry<String,File> e:files.entrySet()){
+   ProgressBus.report(idx*100/total,"正在反汇编 "+e.getKey());
    File dir=multi?new File(root,baseName(e.getKey())):root;DexBackedDexFile d=dexes.get(e.getKey());BaksmaliOptions o=new BaksmaliOptions();o.apiLevel=apiOf(e.getValue());
-   Baksmali.disassembleDexFile(d,dir,Math.max(1,Runtime.getRuntime().availableProcessors()),o);out.put(new JSONObject().put("name",e.getKey()).put("path",dir.getPath()));
+   Baksmali.disassembleDexFile(d,dir,Math.max(1,Runtime.getRuntime().availableProcessors()),o);out.put(new JSONObject().put("name",e.getKey()).put("path",dir.getPath()));idx++;
   }
+  ProgressBus.report(100,"Smali 导出完成");
   return new JSONObject().put("path",root.getPath()).put("files",out).put("smali",countFiles(root,".smali"));
  }
  public JSONObject toJar(File folder)throws Exception{
   if(folder==null||!folder.isDirectory())throw new IOException("请选择一个已存在的输出文件夹");
   String base=source==null?"classes":baseName(source.getName());File dexDir=null;List<File> inputs=new ArrayList<>();
   boolean archive=source!=null&&!source.getName().toLowerCase(Locale.ROOT).endsWith(".dex");
+  ProgressBus.stage("正在准备 DEX");
   if(archive){
    dexDir=unusedDir(folder,base+"_dex");dexDir.mkdirs();
-   for(Map.Entry<String,File> e:files.entrySet()){File dst=new File(dexDir,new File(e.getKey()).getName());FileOps.writeAtomic(dst,FileOps.read(e.getValue(),256L*1024*1024),false);inputs.add(dst);}
+   int n=0,sz=Math.max(1,files.size());for(Map.Entry<String,File> e:files.entrySet()){ProgressBus.report(n*8/sz,"正在解出 "+e.getKey());File dst=new File(dexDir,new File(e.getKey()).getName());FileOps.writeAtomic(dst,FileOps.read(e.getValue(),256L*1024*1024),false);inputs.add(dst);n++;}
   }else for(File f:files.values())inputs.add(f);
   File jar=unusedFile(folder,base+".jar");File work=new File(session,"jar-"+UUID.randomUUID());work.mkdirs();int classes=0;Set<String>names=new HashSet<>();
   // Android 没有 JDK 的 zipfs（jar: FileSystemProvider）。dex2jar 的 to(Path) 在传入
@@ -151,11 +156,15 @@ public final class DexEngine {
   // Files.createDirectories / Files.write 把 .class 写进目录（Android API 26+ 均支持），
   // 随后由 addJarTree() 按相对路径打包成 JAR，完全不依赖 zipfs。
   try(ZipOutputStream zout=new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(jar)))){
-   for(File input:inputs){File part=new File(work,input.getName()+"-classes");if(!part.isDirectory()&&!part.mkdirs())throw new IOException("无法创建临时目录："+part.getName());
-    Dex2jar.from(input).skipDebug(false).to(part.toPath());classes+=addJarTree(part,"",zout,names);
+   int total=Math.max(1,inputs.size()),idx=0;
+   for(File input:inputs){ProgressBus.report(10+idx*80/total,"正在反编译 "+input.getName());File part=new File(work,input.getName()+"-classes");if(!part.isDirectory()&&!part.mkdirs())throw new IOException("无法创建临时目录："+part.getName());
+    Dex2jar.from(input).skipDebug(false).to(part.toPath());classes+=addJarTree(part,"",zout,names);idx++;
+    ProgressBus.report(10+idx*80/total,"正在打包 "+input.getName());
    }
+   ProgressBus.report(92,"正在写入 MANIFEST.MF");
    ZipEntry mf=new ZipEntry("META-INF/MANIFEST.MF");zout.putNextEntry(mf);zout.write("Manifest-Version: 1.0\r\nCreated-By: Cyber Hub Manager\r\n\r\n".getBytes(StandardCharsets.UTF_8));zout.closeEntry();
   }catch(Exception e){jar.delete();throw e;}finally{FileOps.deleteTree(work);}
+  ProgressBus.report(100,"JAR 已生成");
   return new JSONObject().put("path",jar.getPath()).put("classes",classes).put("dexDir",dexDir==null?"":dexDir.getPath()).put("inputs",inputs.size());
  }
  private static int addJarTree(File dir,String prefix,ZipOutputStream zout,Set<String>names)throws IOException{

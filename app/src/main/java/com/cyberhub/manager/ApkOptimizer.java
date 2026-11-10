@@ -25,10 +25,11 @@ public final class ApkOptimizer {
   try{
    try(ZipFile in=new ZipFile(source);Counted out=new Counted(new FileOutputStream(temp));ZipOutputStream zo=new ZipOutputStream(out)){
     if(level>0)zo.setLevel(level);
-    Enumeration<? extends ZipEntry> en=in.entries();
+    Enumeration<? extends ZipEntry> en=in.entries();int total=Math.max(1,in.size()),i=0;
     while(en.hasMoreElements()){
      ZipEntry e=en.nextElement();String name=e.getName();
      if(e.isDirectory())continue;
+     ProgressBus.report(Math.min(95,i*100/total),"正在优化 "+name);i++;
      if(name.matches("(?i)META-INF/[^/]+\\.(SF|RSA|DSA|EC)")||name.equalsIgnoreCase("META-INF/MANIFEST.MF"))continue;
      if(deleteFiles!=null){
       boolean del=false;for(String fd:deleteFiles){if(name.endsWith(fd)||name.matches(fd)){del=true;break;}}
@@ -65,6 +66,7 @@ public final class ApkOptimizer {
     outCount=out.count;
    }
    r.removedFiles=skipped;
+   ProgressBus.report(100,"APK 优化完成");
    r.savedBytes=Math.max(0,source.length()-outCount);
    FileOps.replace(temp,destination);
    return r;

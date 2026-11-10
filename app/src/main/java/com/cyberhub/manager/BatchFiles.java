@@ -15,7 +15,7 @@ final class BatchFiles {
   if(!folder.isDirectory())throw new IOException("目标不是文件夹");List<File>targets=new ArrayList<>();Set<String>seen=new HashSet<>();
   for(int i=0;i<sources.size();i++){File d=FileOps.child(folder,names.get(i)),s=sources.get(i);if(d.exists()||!seen.add(d.getCanonicalPath()))throw new IOException("目标已存在："+d.getName());if(d.getCanonicalFile().toPath().startsWith(s.getCanonicalFile().toPath()))throw new IOException("目标位于源文件夹内部");targets.add(d);}
   File stage=new File(folder,".transfer-"+UUID.randomUUID());if(!stage.mkdir())throw new IOException("无法暂存传输");List<File>published=new ArrayList<>();
-  try{for(int i=0;i<sources.size();i++)FileOps.copyTree(sources.get(i),new File(stage,names.get(i)));for(int i=0;i<targets.size();i++){Files.move(new File(stage,names.get(i)).toPath(),targets.get(i).toPath());published.add(targets.get(i));}}
+  try{for(int i=0;i<sources.size();i++){ProgressBus.report(i*100/Math.max(1,sources.size()),(move?"正在移动 ":"正在复制 ")+names.get(i));FileOps.copyTree(sources.get(i),new File(stage,names.get(i)),false);}for(int i=0;i<targets.size();i++){ProgressBus.report(90+i*10/Math.max(1,targets.size()),(move?"正在移动 ":"正在复制 ")+names.get(i));Files.move(new File(stage,names.get(i)).toPath(),targets.get(i).toPath());published.add(targets.get(i));}}
   catch(Exception e){for(File f:published)FileOps.deleteTree(f);throw e;}finally{FileOps.deleteTree(stage);}
   // Only remove sources after every destination has been published.
   if(move)for(File f:sources)FileOps.deleteTree(f);JSONArray out=new JSONArray();for(File f:targets)out.put(f.getPath());return out;

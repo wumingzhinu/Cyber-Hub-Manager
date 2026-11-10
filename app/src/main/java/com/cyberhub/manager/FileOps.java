@@ -50,18 +50,35 @@ public final class FileOps {
         catch (AtomicMoveNotSupportedException e) { Files.move(temp.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING); }
     }
     public static void copyTree(File src, File dst) throws IOException {
+        copyTree(src, dst, true);
+    }
+    /** r14：report=false 时由调用方按文件总数自行上报进度（批量传输避免进度反复归零）。 */
+    public static void copyTree(File src, File dst, boolean report) throws IOException {
         if (Files.isSymbolicLink(src.toPath())) throw new IOException("符号链接不会被复制");
         if (dst.getCanonicalFile().toPath().startsWith(src.getCanonicalFile().toPath())) throw new IOException("目标位于源文件夹内部");
         if (dst.exists()) throw new IOException("目标已存在：" + dst.getName());
-        copyTreeInner(src, dst);
+        int[] total = {0}, done = {0};
+        countTree(src, total);
+        copyTreeInner(src, dst, total, done, report);
     }
-    private static void copyTreeInner(File src, File dst) throws IOException {
+    private static void countTree(File f, int[] total) {
+        if (Files.isSymbolicLink(f.toPath())) return;
+        if (f.isDirectory()) {
+            File[] list = f.listFiles();
+            if (list != null) for (File c : list) countTree(c, total);
+        } else total[0]++;
+    }
+    private static void copyTreeInner(File src, File dst, int[] total, int[] done, boolean report) throws IOException {
         if (Files.isSymbolicLink(src.toPath())) throw new IOException("遇到符号链接：" + src.getName());
         if (src.isDirectory()) {
             if (!dst.mkdir()) throw new IOException("无法创建 " + dst);
             File[] files = src.listFiles(); if (files == null) throw new IOException("无法读取 " + src);
-            for (File f : files) copyTreeInner(f, new File(dst, f.getName()));
-        } else Files.copy(src.toPath(), dst.toPath());
+            for (File f : files) copyTreeInner(f, new File(dst, f.getName()), total, done, report);
+        } else {
+            Files.copy(src.toPath(), dst.toPath());
+            done[0]++;
+            if (report && total[0] > 0) ProgressBus.report(Math.min(99, done[0] * 100 / total[0]), "正在复制 " + src.getName());
+        }
     }
     public static void deleteTree(File f) throws IOException {
         if (!Files.isSymbolicLink(f.toPath()) && f.isDirectory()) {
