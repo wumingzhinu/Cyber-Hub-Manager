@@ -48,7 +48,22 @@ public final class ApkToolsSmokeTest {
         System.out.println("ok log injection");
 
         File split = new File(out, "split.apk");
-        JSONObject splitResult = DexTools.repartition(apk, split, new JSONObject().put("count", 2));
+        JSONObject splitOpts = new JSONObject().put("count", 2);
+        JSONObject splitResult;
+        try {
+            splitResult = DexTools.repartition(apk, split, splitOpts);
+        } catch (Exception needMore) {
+            // MT 规格（0x7f120292）：「您所填写的 dex 数量太小，无法存入所有的代码，
+            // 是否自动增加 dex 数量？」——r16 起数量不足时后端不再静默产出，
+            // 而是抛 NEED_MORE_DEX:n 交给前端 confirmBox 询问；用户确认后带
+            // autoIncrease=true 重跑，才是 MT 的完整交互链路。
+            String msg = needMore.getMessage() == null ? "" : needMore.getMessage();
+            if (!msg.startsWith("NEED_MORE_DEX:")) throw needMore;
+            if (split.exists()) split.delete();
+            splitResult = DexTools.repartition(apk, split, splitOpts.put("autoIncrease", true));
+            check(splitResult.optBoolean("autoIncreased"), "autoIncrease 确认后未标记自动增加");
+            System.out.println("ok MT 数量不足确认后自动增加 dex -> " + msg);
+        }
         sign(split, key);
         verify(split);
         check(splitResult.optInt("dexes") >= 2, "expected at least 2 dex files");
