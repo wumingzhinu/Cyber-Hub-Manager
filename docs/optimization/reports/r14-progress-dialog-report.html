@@ -1,0 +1,167 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>r14 · 统一处理进度对话框（对标 MT 管理器）</title>
+<style>
+:root{--bg:#0f1115;--card:#181b22;--line:#2a2f3a;--fg:#e6e9ef;--mut:#9aa3b2;--acc:#5aa9ff;--ok:#7bd88f;--warn:#f0b36b;--bad:#f0736b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.7 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:26px;margin:0 0 6px}h2{font-size:19px;margin:30px 0 12px;border-left:3px solid var(--acc);padding-left:10px}
+h3{font-size:16px;margin:20px 0 8px;color:var(--acc)}
+.sub{color:var(--mut);margin-bottom:22px;font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{color:var(--mut);font-weight:600}code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;color:#c9d6ea}
+pre{background:#0b0d11;border:1px solid var(--line);border-radius:8px;padding:14px;overflow:auto;font:12.5px/1.55 ui-monospace,Menlo,Consolas,monospace;color:#d8dde6}
+.kw{color:#cf6a62;font-weight:600}.tp{color:#7fb069}.nm{color:#d7a86e}.cm{color:#6f7b8c}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.mut{color:var(--mut)}
+ul{margin:8px 0 8px 20px;padding:0}li{margin:5px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.kv{background:#12151b;border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.kv b{display:block;font-size:18px;color:var(--fg);margin-top:4px;word-break:break-all}
+.kv span{color:var(--mut);font-size:12px}
+.note{border-left:3px solid var(--warn);padding-left:12px;color:var(--mut);font-size:14px}
+.good{border-left:3px solid var(--ok);padding-left:12px;color:var(--mut);font-size:14px}
+/* 进度卡片示意 */
+.demo{display:flex;justify-content:center;padding:22px 0;background:#0b0d11;border:1px solid var(--line);border-radius:8px}
+.demoCard{width:300px;background:#424242;border-radius:6px;padding:22px 20px 20px;box-shadow:0 18px 46px #000a}
+.demoTitle{font-size:21px;font-weight:500;color:#eee;margin-bottom:14px}
+.demoMsg{font-size:14px;color:#9aa0a6;margin-bottom:16px}
+.demoTrack{height:6px;border-radius:3px;background:#00000055;overflow:hidden}
+.demoFill{height:100%;width:62%;border-radius:3px;background:#2586d0}
+</style></head><body><div class="wrap">
+<h1>r14 · 统一处理进度对话框</h1>
+<div class="sub">远程提交 <code>9ffd987</code>（本地 <code>ec3a813</code>） · GitHub Actions 构建 <code>#65</code> · Release <code>build-65</code> · 版本号 0.1.59（versionCode 55 不变，可覆盖安装）</div>
+
+<div class="grid">
+<div class="kv"><span>交付 APK</span><b>Cyber-Hub-Manager-0.1.59-r14.apk</b></div>
+<div class="kv"><span>文件大小</span><b>21,398,868 字节</b></div>
+<div class="kv"><span>SHA-256</span><b style="font-size:12px">ed0d86881beb1383ec429f019f858c0e7a40030f965eeaae2c83e5d3aa0600b4</b></div>
+<div class="kv"><span>构建结论</span><b class="ok">Actions #65 success</b></div>
+</div>
+
+<h2>需求与现状差距</h2>
+<div class="card">
+<p>用户要求「所有处理加上处理进度」，并给出 MT 管理器截图：<strong>Dex转Jar</strong> 标题 + <strong>处理中...</strong> + 蓝色进度条。</p>
+<p>r13 及之前只有两种反馈：</p>
+<ul>
+<li>顶部一条 <code>2px</code> 的 <code>#progress</code> 忙条（<code>body.busy</code> 触发），只是「在转」，没有标题、没有阶段、没有百分比；</li>
+<li>APKS 转换的 <code>bundleProgress(job,message)</code> 只更新一段文字，没有进度条。</li>
+</ul>
+<p class="note">DEX 转 JAR 这类操作可能持续数十秒，用户只能盯着界面猜「是不是卡住了」。本轮把进度提升为一等公民。</p>
+</div>
+
+<div class="card">
+<h3>目标形态（MT 管理器）</h3>
+<div class="demo"><div class="demoCard"><div class="demoTitle">Dex转Jar</div><div class="demoMsg">处理中...</div><div class="demoTrack"><div class="demoFill"></div></div></div></div>
+<p class="mut" style="margin-top:10px">半透明遮罩、居中圆角卡片、大号标题、灰色说明、6px 轨道 + 蓝色填充；本实现完全按此还原，深浅主题自适应。</p>
+</div>
+
+<h2>方案：三层结构</h2>
+<div class="card"><table>
+<thead><tr><th>层</th><th>实现</th><th>作用</th></tr></thead><tbody>
+<tr><td>界面层</td><td><code>app.html</code> 新增 <code>#taskProgress</code>（<code>tpTitle</code> / <code>tpMsg</code> / <code>tpTrack</code> / <code>tpFill</code>）；<code>style.css</code> 新增 <code>.taskProgress</code> / <code>.tpCard</code> / <code>.tpFill</code> / <code>@keyframes tpIndet</code></td><td>MT 同款卡片；<code>hidden</code> 默认隐藏，<code>indeterminate</code> 走不确定动画</td></tr>
+<tr><td>调度层</td><td><code>app.js</code> 的 <code>rpc()</code> 按 action 查 <code>TASK_TITLES</code>，命中即 <code>taskProgressOpen(title)</code> 并注入 <code>__task</code>；成功 / 失败回调都 <code>taskProgressClose()</code></td><td>「所有处理」自动获得进度，不需要逐个改调用点</td></tr>
+<tr><td>数据层</td><td>原生 <code>ProgressBus</code>（<code>ThreadLocal</code> + 60ms 节流）；<code>MainActivity.taskProgress()</code> 注入 <code>window.__taskProgress(job,pct,msg)</code>；<code>Bridge.request</code> 生命周期内 <code>begin/end</code></td><td>工具类不改方法签名即可上报真实百分比</td></tr>
+</tbody></table></div>
+
+<h2>覆盖范围：39 个耗时 action</h2>
+<div class="card">
+<p><code>TASK_TITLES</code> 按 MT 习惯命名，分组如下：</p>
+<table><thead><tr><th>分组</th><th>标题 → action</th></tr></thead><tbody>
+<tr><td>DEX</td><td><code>Dex转Jar</code> · <code>Dex转Smali</code> · <code>修复Dex</code> · <code>Dex字符串解密</code> · <code>合并Dex</code> · <code>Dex重新划分</code></td></tr>
+<tr><td>归档 / 文件</td><td><code>解压</code> · <code>压缩</code> · <code>复制文件</code> · <code>移动文件</code> · <code>文件分割</code> · <code>文件合并</code></td></tr>
+<tr><td>APK</td><td><code>签名APK</code> · <code>APK优化</code> · <code>生成共存APK</code> · <code>APK保护</code> · <code>转换APK</code> · <code>提取APK</code> · <code>XML替换</code> · <code>XML翻译</code></td></tr>
+<tr><td>资源 / 其它</td><td><code>资源瘦身</code> · <code>资源混淆</code> · <code>资源反混淆</code> · <code>资源去重</code> · <code>签名校验绕过</code> · <code>注入日志</code> · <code>注入组件</code> · <code>保存并签名</code> · <code>翻译</code> · <code>保存资源表</code> · <code>GPG加密</code> / <code>GPG解密</code></td></tr>
+</tbody></table>
+<p class="good">未命中 <code>TASK_TITLES</code> 的短操作（列目录、读文件、属性查询等）保持原顶部忙条，避免每次点按都弹窗打扰。</p>
+</div>
+
+<h2>真实百分比打点</h2>
+<div class="card"><table>
+<thead><tr><th>操作</th><th>进度来源</th><th>说明</th></tr></thead><tbody>
+<tr><td>DEX 修复</td><td>按 DEX 文件 <code>n*100/total</code></td><td>「正在修复 classes.dex」</td></tr>
+<tr><td>DEX 转 Smali</td><td>按 DEX 文件 <code>idx*100/total</code></td><td>「正在反汇编 classes.dex」</td></tr>
+<tr><td>DEX 转 JAR</td><td>解出 0-8% → 反编译 / 打包 10-90% → MANIFEST 92% → 100%</td><td>每个输入 DEX 两段：反编译、打包</td></tr>
+<tr><td>归档解压</td><td>ZIP / APK 按 <code>FileHeader</code> 条目 <code>i*100/total</code>；7z / tar / gzip 流式按条目更新文案</td><td>「正在解压 res/…」</td></tr>
+<tr><td>归档压缩</td><td>ZIP / 7z / tar 三格式均按 <code>Item</code> 条目 <code>idx*100/total</code></td><td>「正在压缩 …」</td></tr>
+<tr><td>单文件 / 文件夹复制</td><td><code>FileOps.copyTree</code> 先 <code>countTree</code> 统计总文件数，再按 <code>done*100/total</code></td><td>「正在复制 xxx」；新增 <code>report=false</code> 静默重载</td></tr>
+<tr><td>批量复制 / 移动</td><td><code>BatchFiles.transfer</code> 按文件索引 0-90%，发布阶段 90-100%</td><td>避免每个文件内部进度反复归零</td></tr>
+<tr><td>APK 优化</td><td><code>ZipFile.size()</code> 按条目 0-95%，完成 100%</td><td>「正在优化 AndroidManifest.xml」</td></tr>
+<tr><td>签名 / 共存 / 保护</td><td>阶段文案 + 完成 100%</td><td>「正在签名 xxx.apk」</td></tr>
+</tbody></table></div>
+
+<h2>不确定进度的处理</h2>
+<div class="card">
+<p>并非所有任务都能预知总量（例如流式 7z 解压、dex2jar 内部阶段、签名）。这些任务显示 <strong>不确定动画</strong>：填充条保持 34% 宽度、<code>1.05s</code> 循环平移，说明文字仍实时更新。任务结束后进度条直接关闭，不会出现「卡在 90% 不动」的假死观感。</p>
+<p class="mut">原生节流：同线程 60ms 最多推送一次；百分比未变化且无新文案时不重复 <code>evaluateJavascript</code>，避免大目录复制时把主线程刷爆。</p>
+</div>
+
+<h2>验证</h2>
+<div class="card"><table>
+<thead><tr><th>层次</th><th>内容</th><th>结果</th></tr></thead><tbody>
+<tr><td>结构自检</td><td><code>tests/progress-dialog-check.py</code>：DOM / 样式 / TASK_TITLES / rpc 挂载 / ProgressBus / 8 处真实打点 / 版本缓存</td><td class="ok">70 / 70 PASS</td></tr>
+<tr><td>运行时冒烟</td><td><code>tests/progress-dialog-smoke.cjs</code>：伪 DOM 真实执行打开 / 42% / 错误 job 隔离 / 120 钳制 / 关闭</td><td class="ok">17 / 17 PASS</td></tr>
+<tr><td>全套回归</td><td>9 个 Python + 8 个前端冒烟 + 3 个 <code>node --check</code></td><td class="ok"><code>FAIL_FLAG=0</code></td></tr>
+<tr><td>r13 基线</td><td>MT JASM 对齐 80 项、类头对齐 37 项、类信息 / 反汇编 / 归档分发全部</td><td class="ok">不回归</td></tr>
+<tr><td>APK 实测</td><td>从签名 APK 拆出资源，静态 + 伪 DOM 真实执行</td><td class="ok">41 / 41 PASS</td></tr>
+</tbody></table></div>
+
+<div class="card">
+<h3>签名 APK 内的真实执行结果</h3>
+<pre><span class="cm">// 从 APK 内 app.js 抽取进度组件，在伪 DOM 中运行</span>
+taskProgressOpen('Dex转Jar')
+  → hidden=false  title="Dex转Jar"  msg="处理中..."  indeterminate=true  width=0%
+__taskProgress(job, 42, '正在反编译 classes.dex')
+  → width=42%  msg="正在反编译 classes.dex"  indeterminate=false
+__taskProgress('t-other', 90, 'x')
+  → width 仍为 42%（非当前 job 被忽略）
+taskProgressClose()
+  → hidden=true  indeterminate=false</pre>
+<p class="good">同时 APK 内 <code>classview.js</code> 对 <code>package-info.class</code> / <code>Sample.class</code> / <code>module-info.class</code> 的反汇编输出与 r13 完全一致，r13 的 MT 语法对齐没有因本轮改动回归。</p>
+</div>
+
+<h2>APK 逐条目 / 签名 / 证书核对</h2>
+<div class="card"><table>
+<thead><tr><th>项</th><th>r13</th><th>r14</th><th>结论</th></tr></thead><tbody>
+<tr><td>文件大小</td><td>21,398,868 B</td><td>21,398,868 B</td><td>恰好相同（资源增量被压缩抵消）</td></tr>
+<tr><td>SHA-256</td><td><code>9d08d9de…7abb09</code></td><td><code>ed0d8688…0600b4</code></td><td>与 Release 官方 digest 一致</td></tr>
+<tr><td>ZIP 条目数</td><td>461</td><td>461</td><td class="ok">无增删</td></tr>
+<tr><td><code>AndroidManifest.xml</code></td><td>8,964 B</td><td>8,964 B</td><td class="ok"><strong>字节级一致</strong>（versionCode 55 / 0.1.59）</td></tr>
+<tr><td>变化条目</td><td colspan="2"><code>assets/app.html</code>、<code>assets/app.js</code>、<code>assets/style.css</code>、<code>classes.dex</code>、<code>META-INF/MANIFEST.MF</code>、<code>CYBERHUB.SF</code>、<code>CYBERHUB.RSA</code></td><td>共 7 项：4 项本轮改动（含 assetEpoch），3 项重签必然变化</td></tr>
+<tr><td>签名块方案</td><td><code>v2 / v3 / 0x42726577</code>，4088 B</td><td>完全相同</td><td class="ok">一致</td></tr>
+<tr><td>签名证书本体 SHA-256</td><td><code>bfe0c27b…9504</code></td><td><code>bfe0c27b…9504</code></td><td class="ok"><strong>证书一致，可覆盖安装</strong></td></tr>
+</tbody></table></div>
+
+<h2>改动与未改动</h2>
+<div class="card">
+<h3>改动（14 文件，+369 −31）</h3>
+<ul>
+<li><code>app.html</code>：插入 <code>#taskProgress</code> 卡片结构；<code>?v=r14</code>。</li>
+<li><code>style.css</code>：新增进度卡片样式与不确定动画。</li>
+<li><code>app.js</code>：<code>TASK_TITLES</code>、<code>taskProgressOpen/Close</code>、<code>window.__taskProgress</code>、<code>rpc()</code> 自动挂载；<code>UI_BUILD='r14'</code>；关于页新增 r14 说明。</li>
+<li><code>ProgressBus.java</code>（新增 65 行）：ThreadLocal 进度总线 + 节流。</li>
+<li><code>MainActivity.java</code>：<code>taskProgress()</code> 注入、Bridge begin/end、<code>assetEpoch 7→8</code>。</li>
+<li><code>DexEngine.java</code> / <code>ArchiveTools.java</code> / <code>FileOps.java</code> / <code>BatchFiles.java</code> / <code>ApkOptimizer.java</code> / <code>DataEngine.java</code>：真实进度打点。</li>
+<li><code>tests/progress-dialog-check.py</code> + <code>tests/progress-dialog-smoke.cjs</code>（新增）；CI 接入。</li>
+</ul>
+<h3>未改动</h3>
+<ul>
+<li><code>AndroidManifest.xml</code> 字节级一致；versionCode 55 / 签名密钥未变。</li>
+<li>DEX 转 JAR、JADX 反编译、归档读取等业务逻辑未改，只加进度回调。</li>
+<li><code>style.css</code> 既有规则与主题变量未动，新样式只追加。</li>
+</ul>
+</div>
+
+<h2>交付与安装</h2>
+<div class="card"><ul>
+<li>安装包：<code>/workspace/Cyber-Hub-Manager-0.1.59-r14.apk</code>（21,398,868 B，SHA-256 <code>ed0d8688…0600b4</code>）。</li>
+<li>仓库 Release：<code>build-65</code>；Actions 运行 <code>#65</code>（<a href="https://github.com/wumingzhinu/Cyber-Hub-Manager/actions/runs/42741223379" style="color:var(--acc)">42741223379</a>）。</li>
+<li>可直接<strong>覆盖安装</strong> r13（证书一致、versionCode 55 未变）；首次启动 <code>assetEpoch</code> 提升会清 WebView 缓存，确保加载 r14 前端。</li>
+<li>按「只保留最新安装包」要求，旧 r13 安装包已从工作区清理。</li>
+</ul></div>
+
+<h2>结论</h2>
+<div class="card"><p>r14 把「处理进度」从顶部一条忙条升级为与 MT 管理器一致的居中进度卡片：39 个耗时操作自动弹窗，DEX / 归档 / 复制 / 优化等长任务按真实阶段推进百分比，无法预知总量的任务使用不确定动画。前端组件、rpc 挂载与原生 ProgressBus 三层解耦，新增操作只需在 <code>TASK_TITLES</code> 加一行、在工具内部调用 <code>ProgressBus.report()</code> 即可接入。全部自检、APK 实测与签名核对通过，r13 的 MT 语法对齐不回归。</p></div>
+
+<div class="sub" style="margin-top:26px">报告生成：2026-11-10 · 依据 Actions #65 构建产物与签名 APK 实测</div>
+</div></body></html>

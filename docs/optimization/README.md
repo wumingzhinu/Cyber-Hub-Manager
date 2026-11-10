@@ -200,6 +200,21 @@ interface abstract class synthetic version 52.0
 
 **未改动**：Java 层仅 `MainActivity` 的 `assetEpoch` 一行；`AndroidManifest.xml` 字节级一致，versionCode 55 / 签名密钥未变；`DataEngine` / `ArchiveTools` / `DexEngine` / `ExtraTools` 全部未改；保存键仍只导出 `.bytecode.txt`，绝不覆写 `.class` 原始字节。本轮是纯前端反汇编文本 / 语法高亮改动，不影响 DEX 转 JAR 或 JADX 反编译链路。
 
+## r14 修复（统一处理进度对话框）
+
+**需求**：所有耗时处理都要有进度提示，与 MT 管理器一致——居中卡片显示标题（如「Dex转Jar」）、「处理中...」和蓝色进度条，而不是只有顶部 2px 忙条。
+
+**改动**：
+- 前端新增 `taskProgress` 组件（`app.html` + `style.css` + `app.js`）：全屏半透明遮罩 + 圆角卡片，标题 21px、说明 14px、6px 轨道 + 主题蓝填充；`TASK_TITLES` 覆盖 39 个耗时 action（Dex转Jar / Dex转Smali / 修复Dex / Dex字符串解密 / 解压 / 压缩 / 复制文件 / 签名APK / APK优化 / 生成共存APK / GPG加密 …）。
+- `rpc()` 按 action 自动挂载：命中 `TASK_TITLES` 即弹窗并把 `__task` 传给原生；成功 / 失败均自动关闭。未命中标题的短操作保持原顶部忙条，不打扰。
+- 原生新增 `ProgressBus`：`ThreadLocal` 线程内进度总线（worker 为 2 线程池）+ 60ms 节流，工具类无需改方法签名即可 `report(pct,msg)` / `stage(msg)`；`MainActivity` 新增 `taskProgress` 注入 `window.__taskProgress`，`Bridge.request` 在请求生命周期内 begin/end。
+- 真实百分比打点：DEX 修复（按 DEX 文件）、转 Smali（按 DEX）、转 JAR（解出 0-8%、反编译 / 打包 10-90%、MANIFEST 92%、完成 100%）；归档解压（zip 按条目，7z / tar / gzip 按条目文案）、压缩（zip / 7z / tar 按条目）；`FileOps.copyTree` 按文件数（新增 `report=false` 静默重载）；`BatchFiles.transfer` 按文件；`ApkOptimizer` 按 ZIP 条目；签名 / 共存 / APK 保护为阶段文案。
+- 无精确进度的任务显示不确定动画（34% 宽度来回滑动），完成后进度条推进到 100% 再关闭，避免「卡在 90%」的观感。
+
+**验证**：新增 `tests/progress-dialog-check.py`（70 项）与 `tests/progress-dialog-smoke.cjs`（17 项，伪 DOM 真实执行打开 / 42% / job 隔离 / 钳制 / 关闭），均接入 CI；本地全套 `FAIL_FLAG=0`（9 个 Python + 8 个冒烟 + 3 个语法检查），r13 的 80 项 JASM 对齐与 37 项类头自检全部不回归。Actions 构建 #65 全 success。
+
+**未改动**：`AndroidManifest.xml` 字节级一致（versionCode 55）；文件格式转换 / JADX 反编译链路零影响；`assetEpoch 7 -> 8`（改了 app.js / style.css，覆盖安装强制清 WebView 缓存）。
+
 ## 交付与修复报告（`reports/`）
 
 本目录归档面向用户的 HTML 交付说明，均为只读记录，不参与构建：
@@ -219,5 +234,6 @@ interface abstract class synthetic version 52.0
 | `r11-class-archive-view-report.html` | JAR 内 .class 视图对标 MT 管理器（r11）：覆盖安装后 WebView 旧缓存触发表格回退的根因、删回退 + 组件自愈 + 内置反汇编 + 缓存根治、归档场景防回归自检与 APK 内置资源实测（提交 `7457c85`、Release `build-62`） |
 | `r12-mt-class-header-report.html` | .class 反汇编文本对齐 MT 管理器（r12）：类头 / 属性块 / 收尾注释的根因与修复、真实 package-info.class 逐行对照、三级反汇编器一致性、APK 内置资源实测与逐条目 / 签名证书核对（提交 `068e2d8`、Release `build-63`） |
 | `r13-mt-decompile-report.html` | 基于 MT2.26.11.apk 反编译证据对齐 .class/JASM 语法（r13）：jasm.mtsx 官方语法定义 + classes5.dex JASM printer 格式串 + 36 个 ATT_* + Jasmin opcode 表，纠正 r10–r12 自创 camelCase 助记符、修饰符分表、类属性块、module 收尾、五组高亮词表，APK 内置资源实测与逐条目 / 签名证书核对（提交 `d7c456a`、Release `build-64`） |
+| `r14-progress-dialog-report.html` | 统一处理进度对话框（r14）：MT 同款居中「标题 + 处理中 + 进度条」、39 个 action 自动挂载、ProgressBus 线程内真实百分比、DEX / 归档 / 复制 / 优化打点、伪 DOM 与签名 APK 实测（提交 `9ffd987`、Release `build-65`） |
 
-正式签名 APK 请以仓库 Release `build-64` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。
+正式签名 APK 请以仓库 Release `build-65` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。
