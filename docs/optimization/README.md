@@ -215,6 +215,28 @@ interface abstract class synthetic version 52.0
 
 **未改动**：`AndroidManifest.xml` 字节级一致（versionCode 55）；文件格式转换 / JADX 反编译链路零影响；`assetEpoch 7 -> 8`（改了 app.js / style.css，覆盖安装强制清 WebView 缓存）。
 
+## r15 修复（基于 MT2.26.11.apk 反编译还原进度对话框）
+
+**需求**：不再照截图仿写，而是反编译 `MT2.26.11.apk` 本体取证，把 r14 的进度层对齐 MT 真实规格。
+
+**反编译证据链**：
+- ARSCLib 导出 `resources.arsc`：3423 个 string 条目 / 36259 个值，**dex 内零中文硬编码**，资源名被混淆成同一个 `MT_Protector`；提取 `assets/strings*.mtl` **11 语言 × 16 key**。
+- baksmali 2.5.2 反编译 `classes.dex`：`ProgressDialog` / `DualProgressDialog` / `BaseCancelableDialog` / `PluginProgressBar$Style` / `UIUpdater` 真实 smali。
+- 用户真机截图 `142333.jpg` 校验外观（灰卡片 / `Dex转Jar` / `处理中…` / 蓝色水平条 / 无百分比 / 无按钮）。
+- 固化：`mtre/MT_PROGRESS_RULES.md` + `tests/fixtures/mt-progress-spec.json`（13 主文案 + 60 条简体功能专属 + 全量 115 条 + 11 语言 × 16 key + 4 样式 + 5 个 dialog 结构）。
+
+**两套文案体系（r14 完全缺失）**：
+- 主程序 arsc：状态机 `处理中…` / `正在加载…` / `正在准备…` / `正在重新加载…` / `正在取消操作…` / `已取消操作` / `再按一次取消操作` / `总进度` / `运行内存不足`，及 **60 条功能专属**「正在 XXX…」（解压 / 压缩 / 复制 / 移动 / 签名 / 分割 / 合并 / 加密 / 解密 / 混淆 / 重新打包 …）。
+- 插件 `.mtl`：`正在处理…` / `正在取消…`（与主程序不同，不可混用），`{dual_progress_dialog_total}` → `总进度`。
+
+**8 项改造**：消息改 arsc 状态文案机 + 功能专属 `TASK_STAGE`；原生阶段文案经 `mtStageText()` 规范化为 MT「正在 XXX…」格式；`ProgressDialog` 二级进度 `setSecondaryProgress`；`DualProgressDialog` 总进度双条（6dp 标签「总进度」）；`PluginProgressBar$Style` 四种样式（HORIZONTAL / CIRCULAR / CIRCULAR_SMALL / CIRCULAR_LARGE，环形 36/56/84 px）；`BaseCancelableDialog` 取消交互「再按一次取消操作 → 正在取消操作… → 已取消操作」（遮罩 / 返回键二次确认 + `cancelTask` action + `CancellationException`）；布局常量对齐 16sp 消息 / 12dp 进度条 / 6dp 总进度 / `setCancelable(false)`；证据固化为 CI 词表。
+
+**原生扩展**：`ProgressBus` 新增 `Extras`（secondary / total / totalMax / style / state / detail）、`bindJob` / `requestCancel` / `isCanceled` / `checkCanceled`、`total()` / `secondary()` / `style()` 上报；`MainActivity` 4 参 `taskProgress` 注入；**保留 r14 的 `begin/end/report` 签名，工具类零改动**，ThreadLocal + 60ms 节流语义对齐 MT `UIUpdaterGroup`。r14 的 39 个 action 自动挂载与全部真实百分比打点原样保留。
+
+**验证**：新增 `tests/progress-mt-decompile-align-check.py`（138 项）与 `tests/progress-mt-decompile-smoke.cjs`（39 项，伪 DOM 真实执行双进度 / 4 样式 / 状态 / 取消交互），均接入 CI；r14 两个基础自检适配新契约（71 项 / 17 项）。本地全套 `FAIL_FLAG=0`（10 个 Python + 9 个冒烟 + 3 个语法检查 + javac ProgressBus），r13 的 80 项 JASM 对齐与 37 项类头不回归。**签名 APK 内置实测 86/86**：从交付包拆出资源伪 DOM 真实执行进度组件（`处理中…` → 42% → 二级 72% / 总进度 30% / CIRCULAR / 正在加载… / CIRCULAR_LARGE / 正在取消操作… / 正在解压… / cancelTask 下发 → 关闭清理），并验证 `package-info.class` 输出与 MT 逐字符一致、`Sample.class` 输出 `aload_0`、`module-info` 用 `end of module`。Actions 构建 #66 全 success。
+
+**兼容性**：`AndroidManifest.xml` 字节级一致（versionCode 55）；461→461 条目无增删（变化仅 app.html / app.js / style.css / classes.dex + 3 个重签 META-INF）；签名块 v2/v3 方案一致，**签名证书本体 SHA-256 `bfe0c27b…9504` 与 r14 完全一致，可直接覆盖安装**。`DataEngine` / `ArchiveTools` / `DexEngine` 业务逻辑零改动，DEX 转 JAR 与 JADX 反编译链路不受影响。`assetEpoch 8 -> 9`（改了 app.js / style.css / ProgressBus，覆盖安装强制清 WebView 缓存）。
+
 ## 交付与修复报告（`reports/`）
 
 本目录归档面向用户的 HTML 交付说明，均为只读记录，不参与构建：
@@ -235,5 +257,6 @@ interface abstract class synthetic version 52.0
 | `r12-mt-class-header-report.html` | .class 反汇编文本对齐 MT 管理器（r12）：类头 / 属性块 / 收尾注释的根因与修复、真实 package-info.class 逐行对照、三级反汇编器一致性、APK 内置资源实测与逐条目 / 签名证书核对（提交 `068e2d8`、Release `build-63`） |
 | `r13-mt-decompile-report.html` | 基于 MT2.26.11.apk 反编译证据对齐 .class/JASM 语法（r13）：jasm.mtsx 官方语法定义 + classes5.dex JASM printer 格式串 + 36 个 ATT_* + Jasmin opcode 表，纠正 r10–r12 自创 camelCase 助记符、修饰符分表、类属性块、module 收尾、五组高亮词表，APK 内置资源实测与逐条目 / 签名证书核对（提交 `d7c456a`、Release `build-64`） |
 | `r14-progress-dialog-report.html` | 统一处理进度对话框（r14）：MT 同款居中「标题 + 处理中 + 进度条」、39 个 action 自动挂载、ProgressBus 线程内真实百分比、DEX / 归档 / 复制 / 优化打点、伪 DOM 与签名 APK 实测（提交 `9ffd987`、Release `build-65`） |
+| `r15-mt-progress-decompile-report.html` | 基于 MT2.26.11.apk 反编译还原进度对话框（r15）：arsc 3423 条 / mtl 11 语言 / 5 个 smali 类的证据链、两套文案体系、60 条功能专属文案、总进度双条 / 二级进度 / 4 样式 / 再按一次取消、16sp-12dp-6dp 布局常量、签名 APK 内置 86 项实测与逐条目 / 证书核对（提交 `332f380`、Release `build-66`） |
 
-正式签名 APK 请以仓库 Release `build-65` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。
+正式签名 APK 请以仓库 Release `build-66` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。

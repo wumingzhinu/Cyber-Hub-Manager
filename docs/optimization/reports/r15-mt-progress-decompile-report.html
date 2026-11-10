@@ -1,0 +1,172 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>r15 · 基于 MT2.26.11.apk 反编译还原进度对话框</title>
+<style>
+:root{--bg:#0f1115;--card:#181b22;--line:#2a2f3a;--fg:#e6e9ef;--mut:#9aa3b2;--acc:#5aa9ff;--ok:#7bd88f;--warn:#f0b36b;--bad:#f0736b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.7 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:26px;margin:0 0 6px}h2{font-size:19px;margin:30px 0 12px;border-left:3px solid var(--acc);padding-left:10px}
+h3{font-size:16px;margin:20px 0 8px;color:var(--acc)}
+.sub{color:var(--mut);margin-bottom:22px;font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{color:var(--mut);font-weight:600}code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;color:#c9d6ea}
+pre{background:#0b0d11;border:1px solid var(--line);border-radius:8px;padding:14px;overflow:auto;font:12.5px/1.55 ui-monospace,Menlo,Consolas,monospace;color:#d8dde6}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.mut{color:var(--mut)}
+ul{margin:8px 0 8px 20px;padding:0}li{margin:5px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.kv{background:#12151b;border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.kv b{display:block;font-size:18px;color:var(--fg);margin-top:4px;word-break:break-all}
+.kv span{color:var(--mut);font-size:12px}
+.note{border-left:3px solid var(--warn);padding-left:12px;color:var(--mut);font-size:14px}
+.good{border-left:3px solid var(--ok);padding-left:12px;color:var(--mut);font-size:14px}
+.small{font-size:13px}
+/* 进度卡片示意（MT 规格：标题 + 16sp 消息 + 12dp 条 + 6dp 总进度双条） */
+.demo{display:flex;justify-content:center;padding:22px 0;background:#0b0d11;border:1px solid var(--line);border-radius:8px;gap:22px;flex-wrap:wrap}
+.demoCard{width:290px;background:#424242;border-radius:6px;padding:22px 20px 20px;box-shadow:0 18px 46px #000a}
+.demoTitle{font-size:21px;font-weight:500;color:#eee;margin-bottom:14px}
+.demoMsg{font-size:16px;color:#9aa0a6;margin-bottom:4px;white-space:nowrap}
+.demoTrack{position:relative;height:6px;border-radius:3px;background:#00000055;overflow:hidden;margin-top:12px}
+.demoSec{position:absolute;left:0;top:0;height:100%;width:72%;background:#5a9fd4aa;border-radius:3px}
+.demoFill{position:absolute;left:0;top:0;height:100%;width:55%;background:#2586d0;border-radius:3px;z-index:2}
+.demoTotalLabel{font-size:12px;color:#9aa0a6;margin:6px 0 0}
+.demoTotalTrack{height:6px;border-radius:3px;background:#00000055;overflow:hidden;margin-top:6px}
+.demoTotalFill{height:100%;width:30%;background:#2586d0;border-radius:3px}
+</style></head><body><div class="wrap">
+<h1>r15 · 基于 MT2.26.11.apk 反编译还原进度对话框</h1>
+<div class="sub">远程提交 <code>332f380</code>（本地 <code>c8e1cff</code>） · GitHub Actions 构建 <code>#66</code> · Release <code>build-66</code> · 版本号 0.1.59（versionCode 55 不变，可覆盖安装）</div>
+
+<div class="grid">
+<div class="kv"><span>交付 APK</span><b>Cyber-Hub-Manager-0.1.59-r15.apk</b></div>
+<div class="kv"><span>文件大小</span><b>21,398,868 字节</b></div>
+<div class="kv"><span>SHA-256</span><b style="font-size:12px">925e3ce38dbf8a3ed35e83b9844ce902667e21a4cba8b32f19c18aea23f9285f</b></div>
+<div class="kv"><span>构建结论</span><b class="ok">Actions #66 success</b></div>
+</div>
+
+<h2>需求：不再照截图仿写，而是反编译 MT 本体取证</h2>
+<div class="card">
+<p>r14 按用户截图实现了「标题 + 处理中... + 蓝色进度条」的统一进度对话框，但那是<strong>照着一张 PNG 猜</strong>。本轮要求「<strong>根据 apk 反编译还原</strong>」——延续 r13 的做法，直接反编译 <code>MT2.26.11.apk</code> 安装包，从真实实现里提取进度对话框的布局、文案、颜色、样式与更新机制，把 r14 对齐成 MT 的真实规格。</p>
+<p class="good">结论：MT 的进度能力远比一张截图丰富——<b>两套文案体系</b>、<b>总进度双条</b>、<b>二级进度</b>、<b>4 种样式</b>、<b>再按一次取消</b> 交互，还有精确到 16sp / 12dp / 6dp 的布局常量。r14 只覆盖了其中「水平条 + 标题」一项。</p>
+</div>
+
+<h2>一、反编译证据链</h2>
+<div class="card">
+<table>
+<tr><th>证据</th><th>位置 / 手段</th><th>产出</th></tr>
+<tr><td>安装包</td><td><code>/workspace/mt-analysis/MT2.26.11.apk</code>，38,498,857 B</td><td>MT 管理器 2.26.11 本体</td></tr>
+<tr><td>资源表</td><td><code>resources.arsc</code> 3,150,364 B，ARSCLib <code>TableBlock.load()</code> 遍历</td><td>导出 <b>3423 个 string 条目 / 36259 个值</b>（多语言）；资源名被混淆成同一个 <code>MT_Protector</code>，只能靠资源 ID 区分</td></tr>
+<tr><td>插件文案</td><td><code>assets/strings*.mtl</code>：默认 + az/be/es/in/it/ru/tr/uk/zh-CN/zh-TW 共 <b>11 份</b></td><td>每份 <b>16 个 key</b>，纯文本 <code>key: value</code></td></tr>
+<tr><td>代码</td><td><code>classes.dex</code> → baksmali 2.5.2 <code>disassemble --classes</code></td><td>5 个进度类 + 基类/辅助类 smali</td></tr>
+<tr><td>真机截图</td><td>用户 <code>142333.jpg</code>，1264×2780</td><td>外观校验：灰卡片 / <code>Dex转Jar</code> / <code>处理中…</code> / 蓝色水平条 / 无百分比 / 无按钮</td></tr>
+</table>
+<p class="note">关键发现：<b>dex 里零中文硬编码</b>，所有主程序 UI 文案都在 <code>resources.arsc</code>；插件 API 另有一套 <code>.mtl</code> 语言包。两套文案并存，混用即错。</p>
+<p>证据固化：<code>mtre/MT_PROGRESS_RULES.md</code>（规则文档）、<code>mtre/mt_strings.tsv</code>（arsc 全量导出）、<code>mtre/smali_progress/</code>（smali 产物）、<code>tests/fixtures/mt-progress-spec.json</code>（CI 词表快照，13 主文案 + 60 条简体功能专属 + 全量 115 条 + 11 语言 × 16 key + 4 样式 + 5 个 dialog 结构）。</p>
+</div>
+
+<h2>二、MT 的两套文案体系（r14 完全缺失）</h2>
+<div class="card">
+<h3>2.1 主程序 <code>resources.arsc</code>：状态机 + 功能专属</h3>
+<table>
+<tr><th>资源 ID</th><th>简体值</th><th>角色</th></tr>
+<tr><td><code>0x7f120966</code></td><td><code>处理中…</code></td><td>默认处理消息（截图中「处理中…」即此资源）</td></tr>
+<tr><td><code>0x7f12057b</code> / <code>0x7f120956</code> / <code>0x7f1209c7</code></td><td><code>正在加载…</code> / <code>正在准备…</code> / <code>正在重新加载…</code></td><td>3 个状态</td></tr>
+<tr><td><code>0x7f120163</code> / <code>0x7f12003a</code> / <code>0x7f120162</code></td><td><code>正在取消操作…</code> / <code>已取消操作</code> / <code>再按一次取消操作</code></td><td>取消三态</td></tr>
+<tr><td><code>0x7f1208e9</code> / <code>0x7f120c58</code></td><td><code>运行内存不足</code> / <code>总进度</code></td><td>OOM / 双进度标签</td></tr>
+<tr><td><code>0x7f12025d</code></td><td><code>Dex转Jar</code></td><td>功能标题（与截图一致）</td></tr>
+</table>
+<p>MT 每个耗时功能都有<b>专属</b>进行中文案，而不是统一「处理中」：<code>正在解压…</code> <code>正在压缩…</code> <code>正在复制…</code> <code>正在移动…</code> <code>正在签名…</code> <code>正在分割文件…</code> <code>正在合并文件…</code> <code>正在加密文件…</code> <code>正在解密字符串…</code> <code>正在重新打包…</code> <code>正在混淆…</code> <code>正在生成 arsc 文件…</code> …… 共整理出 <b>60 条简体功能专属文案</b>。</p>
+<h3>2.2 插件 API <code>assets/strings*.mtl</code>：16 key × 11 语言</h3>
+<pre>loading / preparing / reloading / processing / canceling
+press_again_to_cancel / out_of_memory_error
+dual_progress_dialog_total  →  总进度
+{ dual_progress_dialog_total } 模板在 smali 里直接作为 TextView 文本</pre>
+<p class="note">差异：主程序 arsc 是 <code>处理中…</code> / <code>正在取消操作…</code>，插件 .mtl 是 <code>正在处理…</code> / <code>正在取消…</code>。r15 取主程序 arsc 一套，插件词表仅作为证据快照入库。</p>
+</div>
+
+<h2>三、对话框结构还原（smali 逐条）</h2>
+<div class="card">
+<h3>3.1 <code>ProgressDialog</code></h3>
+<pre>buildVerticalLayout()
+  .addTextView("message")        // textSize 16sp, singleLine, ellipsize, marginTop 8dp, gone()
+  .addProgressBar("progressBar") // marginTop 12dp
+  .build()
+buildDialog().setView(view).setCancelable(false)   // 不可取消 → 截图无按钮
+UIUpdaterGroup 注册 4 个 updater：title / message / progress / secondaryProgress</pre>
+<p>关键能力：<code><b>setSecondaryProgress</b></code> 二级进度、<code>setIndeterminate</code>、<code>show/dismiss</code> 走 <code>ThreadUtil.runOnUiThread()</code>；有消息时 messageView marginTop 由 8dp 调为 6dp。</p>
+<h3>3.2 <code>DualProgressDialog</code>（总进度双条）</h3>
+<pre>message (16sp, marginTop 8dp)
+subProgressBar     // marginTop 12dp ← 当前子任务进度
+"{dual_progress_dialog_total}"  // marginTop 6dp  ← 「总进度」标签
+totalProgressBar   // marginTop 6dp  ← 总进度
+setCancelable(false)</pre>
+<h3>3.3 <code>BaseCancelableDialog</code> 取消交互</h3>
+<p>返回键/点击 → 首次提示 <code>再按一次取消操作</code> → 二次确认 → <code>正在取消操作…</code> → 任务在打点处退出 → <code>已取消操作</code> → dismiss。</p>
+<h3>3.4 <code>PluginProgressBar$Style</code></h3>
+<p><code>HORIZONTAL</code> / <code>CIRCULAR</code> / <code>CIRCULAR_SMALL</code> / <code>CIRCULAR_LARGE</code> 四种（截图用的是 HORIZONTAL）。</p>
+</div>
+
+<h2>四、r14 → r15 的 8 项差距与处理</h2>
+<div class="card">
+<table>
+<tr><th>#</th><th>维度</th><th>r14（照截图仿写）</th><th>MT 本体</th><th>r15 处理</th></tr>
+<tr><td>1</td><td>消息文案</td><td>固定 <code>处理中...</code>（英文三点）</td><td><code>处理中…</code> + 5 态 + 功能专属 <code>正在 XXX…</code></td><td>arsc 状态文案机 + 60 条功能专属</td></tr>
+<tr><td>2</td><td>阶段文案</td><td>自编「正在压缩 xxx」</td><td>arsc 60+ 条功能专属</td><td><code>TASK_STAGE</code> + <code>mtStageText()</code> 规范化为 MT 格式</td></tr>
+<tr><td>3</td><td>总进度</td><td>无</td><td><code>DualProgressDialog</code> + <code>总进度</code></td><td>第二条进度 + 6dp 标签</td></tr>
+<tr><td>4</td><td>二级进度</td><td>无</td><td><code>setSecondaryProgress</code></td><td><code>.tpSecondary</code> 叠加层</td></tr>
+<tr><td>5</td><td>样式</td><td>仅水平条</td><td>4 种 Style</td><td>CIRCULAR 三档（36/56/84 px 环）</td></tr>
+<tr><td>6</td><td>取消</td><td>无</td><td>BaseCancelableDialog 3 段文案 + 二次确认</td><td>遮罩/返回键二次确认 + <code>cancelTask</code> + <code>CancellationException</code></td></tr>
+<tr><td>7</td><td>布局常量</td><td>自定 14px 说明</td><td>16sp / 12dp / 6dp / <code>setCancelable(false)</code></td><td>CSS 对齐</td></tr>
+<tr><td>8</td><td>文案来源</td><td>自编</td><td>arsc + .mtl 反编译</td><td>固化为 CI fixture 词表</td></tr>
+</table>
+<div class="demo">
+<div class="demoCard"><div class="demoTitle">Dex转Jar</div><div class="demoMsg">处理中…</div>
+<div class="demoTrack"><div class="demoSec"></div><div class="demoFill"></div></div>
+<div class="demoTotalLabel">总进度</div><div class="demoTotalTrack"><div class="demoTotalFill"></div></div></div>
+</div>
+<p class="small mut" style="text-align:center">示意：标题 + 16sp 消息 + 12dp 条（浅色为二级进度、深色为主进度）+ 6dp「总进度」第二条。</p>
+</div>
+
+<h2>五、三层实现</h2>
+<div class="card">
+<table>
+<tr><th>层</th><th>文件</th><th>实现</th></tr>
+<tr><td>界面</td><td><code>app.html</code> / <code>style.css</code></td><td><code>MT_MSG</code>（9 态文案）、<code>TASK_STAGE</code>（功能专属）、<code>MT_STYLES</code>（4 样式）；DOM 补 <code>tpSecondary/tpTotal/tpTotalLabel/tpTotalFill/tpCircular/tpRing</code>；CSS 16px 消息、12dp 条、6dp 总进度、3 档环形</td></tr>
+<tr><td>调度</td><td><code>app.js</code></td><td><code>rpc()</code> 按 action 自动挂载（39 个），4 参 <code>__taskProgress(job,pct,msg,extras)</code> 处理 secondary / total / style / state；<code>taskCancelAttempt()</code> 二次确认；<code>__taskBack()</code> 返回键；<code>act()</code> 识别「已取消操作」只 toast</td></tr>
+<tr><td>数据</td><td><code>ProgressBus.java</code> / <code>MainActivity.java</code></td><td>Extras（secondary/total/totalMax/style/state/detail）、<code>bindJob/requestCancel/isCanceled/checkCanceled</code>、<code>total()/secondary()/style()</code> 上报、4 参 <code>taskProgress</code> 注入、<code>cancelTask</code> action；保留 r14 的 <code>begin/end/report</code> 签名（工具类零改动），ThreadLocal + 60ms 节流对齐 <code>UIUpdaterGroup</code></td></tr>
+</table>
+<p class="good">r14 的 39 个 action 自动挂载与真实百分比打点（DEX 转 JAR 0–8%→10–90%→92%→100%、归档解压按条目、复制按文件数、APK 优化按条目）全部保留，本轮是<b>在其之上叠加 MT 规格</b>，无功能回退。</p>
+</div>
+
+<h2>六、验证体系</h2>
+<div class="card">
+<table>
+<tr><th>项</th><th>结果</th></tr>
+<tr><td>新增静态自检</td><td><code>tests/progress-mt-decompile-align-check.py</code> <b class="ok">138/138</b>（证据快照 / arsc 文案 / 60 条功能文案全命中 / 双进度 / 二级 / 4 样式 / 取消 / 布局常量 / 原生注入 / 版本 CI）</td></tr>
+<tr><td>新增运行时冒烟</td><td><code>tests/progress-mt-decompile-smoke.cjs</code> <b class="ok">39/39</b>（伪 DOM 真实执行 arsc 文案机 / 阶段规范化 / 二级 / 总进度 / 4 样式 / 状态 / 取消交互 / 清理）</td></tr>
+<tr><td>r14 基础自检更新</td><td><code>progress-dialog-check.py</code> <b class="ok">71/71</b>、<code>progress-dialog-smoke.cjs</code> <b class="ok">17/17</b>（适配双参 open、Sink 绑定、通用 epoch、沙箱扩容）</td></tr>
+<tr><td>全套回归</td><td><b class="ok">FAIL_FLAG=0</b>：10 个 Python + 9 个冒烟 + 3 个 <code>node --check</code> + <code>javac ProgressBus</code>；r13 的 80 项 JASM 对齐与 37 项类头自检不回归</td></tr>
+<tr><td>签名 APK 内置实测</td><td><code>verify_r15_apk.py</code> <b class="ok">86/86</b>：从交付 APK 拆出资源，伪 DOM 真实执行进度组件（<code>处理中…</code> → 42% → 二级 72% / 总进度 30% / CIRCULAR / 正在加载… / CIRCULAR_LARGE / 正在取消操作… / 正在解压… / cancelTask 下发 → 关闭清理），并验证 <code>classview.js</code> 的 <code>package-info.class</code> 输出与 MT 逐字符一致、<code>Sample.class</code> 输出 <code>aload_0</code>、<code>module-info</code> 用 <code>end of module</code></td></tr>
+</table>
+</div>
+
+<h2>七、APK 逐条目 / 签名核对</h2>
+<div class="card">
+<table>
+<tr><th>项</th><th>r14</th><th>r15</th><th>结论</th></tr>
+<tr><td>条目总数</td><td>461</td><td>461</td><td class="ok">无增删</td></tr>
+<tr><td>变化条目</td><td colspan="2"><code>assets/app.html</code>、<code>assets/app.js</code>、<code>assets/style.css</code>、<code>classes.dex</code>（ProgressBus/MainActivity 改动）、3 个重签 META-INF</td><td class="ok">7 项，均符合预期</td></tr>
+<tr><td>AndroidManifest.xml</td><td colspan="2">字节级一致，8,964 B</td><td class="ok">versionCode 55 不变</td></tr>
+<tr><td>签名块方案</td><td>v2 / v3，block 4088</td><td>v2 / v3，block 4088</td><td class="ok">一致</td></tr>
+<tr><td>签名证书本体 SHA-256</td><td><code>bfe0c27b…9504</code></td><td><code>bfe0c27b…9504</code></td><td class="ok">完全一致，可直接覆盖安装</td></tr>
+</table>
+<p class="note">本轮改动了 <code>ProgressBus.java</code> 与 <code>MainActivity.java</code>，故 <code>classes.dex</code> 也变化（r13→r14 只改前端时不变化）；<code>DataEngine</code> / <code>ArchiveTools</code> / <code>DexEngine</code> 的业务逻辑零改动，DEX 转 JAR 与 JADX 反编译链路不受影响。</p>
+</div>
+
+<h2>八、版本与缓存</h2>
+<div class="card">
+<p><code>UI_BUILD = r15</code> · <code>app.html</code> 脚本 <code>?v=r15</code> · <code>MainActivity.assetEpoch 8 → 9</code>（本轮改动了 <code>app.js</code> / <code>style.css</code> / <code>ProgressBus.java</code>，覆盖安装时强制 <code>clearCache(true)</code>，避免沿用 r14 缓存组件）。关于页版本说明已补充 r15 反编译还原段落。</p>
+<p class="small mut">提交清单：11 个文件，+1335 / −43。证据规则文档 <code>mtre/MT_PROGRESS_RULES.md</code>、词表快照 <code>tests/fixtures/mt-progress-spec.json</code> 随仓库归档；两个新自检接入 <code>.github/workflows/build-apk.yml</code>。</p>
+</div>
+
+<p class="sub" style="margin-top:30px">依据：<code>MT2.26.11.apk</code>（resources.arsc + assets/strings*.mtl 11 语言 + classes.dex smali）+ 用户真机截图 <code>142333.jpg</code>。所有文案与布局常量均来自反编译取证，非照图臆造。</p>
+</div></body></html>
