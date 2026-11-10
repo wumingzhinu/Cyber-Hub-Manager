@@ -237,12 +237,30 @@ public final class DexTools {
             totalMethods += weight.methods;
             totalTypes += weight.types;
         }
-        int maxClasses = Math.max(1, opts.optInt("maxClasses", 0));
-        int count = opts.optInt("count", 0);
-        if (count <= 0 && maxClasses <= 0) count = 2;
+        // 依据 MT2.26.11.apk 反编译还原的「DEX 重新划分」规格
+        // （resources.arsc 字符串表 0x7f120290~0x7f12029b）：
+        //   模式一「均匀分配」(0x7f120291)：指定「生成的Dex数量」(0x7f120294) -> count
+        //   模式二「按限制分配」(0x7f120296)：指定「方法数量限制」(0x7f120298) -> methodLimit
+        //   dex 写入硬约束：单个 dex 方法数 <= 65536，超出明确报错
+        //   (0x7f12028a「无法生成dex，单个dex内的方法数超过65536。」；
+        //    classes3.dex l/ۜۜۨ.smali:437 throw new l/֫ۨ۬(0x7f12028a))
+        // r16 缺陷修复：maxClasses 未指定时必须为 0（原 Math.max(1,...) 会把每组第 2 个类
+        //   立即切走，count=2 也能拆出 19379 个 DEX 并静默产出 40MB 坏 APK）。
+        final int DEX_METHOD_LIMIT = 65536;      // MT 0x7f120297「最大为 65536」
+        final int MT_RECOMMENDED_LIMIT = 64000;  // MT 0x7f120297「建议输入 64000」
+        int maxClasses = Math.max(0, opts.optInt("maxClasses", 0)); // 兼容旧参数：每 DEX 最大类数
+        int count = Math.max(0, opts.optInt("count", 0));             // MT「生成的Dex数量」
+        int methodLimit = opts.optInt("methodLimit", 0);              // MT「方法数量限制」
+        if (count <= 0 && methodLimit <= 0 && maxClasses <= 0) count = 2;
+        if (count > 0) {
+            methodLimit = DEX_METHOD_LIMIT;   // 均匀分配：只受 65536 物理上限约束
+        } else {
+            if (methodLimit <= 0) methodLimit = MT_RECOMMENDED_LIMIT;
+            methodLimit = Math.min(methodLimit, DEX_METHOD_LIMIT);
+        }
         long desired = (count > 0)
                 ? Math.max(1, (totalMethods + count - 1) / count)
-                : Math.max(1, maxClasses);
+                : Math.max(1, methodLimit);
 
         List<List<ClassDef>> groups = new ArrayList<>();
         List<ClassDef> current = new ArrayList<>();
@@ -250,6 +268,9 @@ public final class DexTools {
         for (int i = 0; i < all.size(); i++) {
             ClassWeight weight = weights.get(i);
             ClassDef classDef = all.get(i);
+            if (weight.methods > DEX_METHOD_LIMIT)
+                throw new Exception("无法生成dex，单个dex内的方法数超过" + DEX_METHOD_LIMIT
+                        + "（类 " + classDef.getType() + "）");
             if (current.isEmpty() && (weight.methods > REFERENCE_BUDGET
                     || weight.types > REFERENCE_BUDGET || weight.strings > REFERENCE_BUDGET)) {
                 throw new Exception("单个类 " + classDef.getType() + " 的引用数超过 DEX 上限，无法划分");
@@ -258,10 +279,11 @@ public final class DexTools {
                     || sum.types + weight.types > REFERENCE_BUDGET
                     || sum.strings + weight.strings > REFERENCE_BUDGET
                     || sum.fields + weight.fields > REFERENCE_BUDGET);
+            boolean overMethods = !current.isEmpty() && sum.methods + weight.methods > methodLimit;
             boolean overClasses = maxClasses > 0 && !current.isEmpty() && current.size() >= maxClasses;
             boolean overDesired = count > 0 && groups.size() < count - 1 && !current.isEmpty()
                     && sum.methods + weight.methods > desired;
-            if (overflow || overClasses || overDesired) {
+            if (overflow || overMethods || overClasses || overDesired) {
                 groups.add(current);
                 current = new ArrayList<>();
                 sum = new ClassWeight(0, 0, 0, 0);
@@ -273,6 +295,11 @@ public final class DexTools {
                     sum.types + weight.types, sum.strings + weight.strings);
         }
         if (!current.isEmpty()) groups.add(current);
+        // MT 0x7f120292「您所填写的 dex 数量太小，无法存入所有的代码，是否自动增加 dex 数量？」：
+        // 数量不足时先向用户确认，绝不静默产出更多 DEX（原缺陷正是静默产出 19379 个 DEX）。
+        // 前端识别 NEED_MORE_DEX 后弹确认框，用户同意再以 autoIncrease=true 重跑。
+        if (count > 0 && groups.size() > count && !opts.optBoolean("autoIncrease", false))
+            throw new Exception("NEED_MORE_DEX:" + groups.size() + ":" + DEX_METHOD_LIMIT);
 
         File tempDir = File.createTempFile(".dex-split-", ".dir");
         tempDir.delete();
@@ -315,7 +342,10 @@ public final class DexTools {
         JSONObject out = new JSONObject();
         out.put("dexes", outputs.size());
         out.put("classes", all.size());
-        out.put("requested", Math.max(1, count > 0 ? count : maxClasses > 0 ? (all.size() + maxClasses - 1) / maxClasses : 1));
+        out.put("mode", count > 0 ? "uniform" : "limited");
+        out.put("requested", count > 0 ? count : groups.size());
+        out.put("autoIncreased", count > 0 && outputs.size() > count);
+        out.put("methodLimit", methodLimit);
         out.put("maxMethods", REFERENCE_BUDGET);
         JSONArray names = new JSONArray();
         for (Map.Entry<String, byte[]> entry : outputs.entrySet())

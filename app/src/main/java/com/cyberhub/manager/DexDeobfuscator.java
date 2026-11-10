@@ -79,11 +79,18 @@ public final class DexDeobfuscator {
   DexBackedDexFile dex = new DexBackedDexFile(Opcodes.forDexVersion(35), original);
 
   // 1) 类映射：Lold/Name; -> Lnew/Name;
+  // r16 修复：把「本 dex 内所有现存类全名」作为保留集合传给命名器，
+  // 避免生成的可读名与未被重命名的原有类撞车（DexPool.internClass 会抛
+  // "Class ... has already been interned"）。此前 generateReadableName 只按
+  // classMap.values() 去重，且把带分号的 "aaa;" 与不带分号的 "aaa" 比较，
+  // 去重恒失效，多个超长/短类名会被重命名成同一个名字导致功能崩溃。
+  Set<String> existingTypes = new HashSet<>();
+  for (ClassDef c : dex.getClasses()) existingTypes.add(c.getType());
   Map<String,String> classMap = new LinkedHashMap<>();
   for (ClassDef c : dex.getClasses()) {
    if (!shouldProcess(c.getType(), obf, targetClasses)) continue;
    if (!containsObfName(c.getType(), obf)) continue;
-   String nt = generateReadableName(c.getType(), classMap);
+   String nt = generateReadableName(c.getType(), classMap, existingTypes);
    if(nt!=null)classMap.put(c.getType(), nt);
   }
   // 2) 成员映射：以旧引用为 key，统一改定义类与名字
@@ -169,34 +176,65 @@ public final class DexDeobfuscator {
   return dotted.equals(rule);
  }
 
- /** 类描述符里是否有"混淆名"段 */
+ /**
+  * 类描述符里是否有"混淆名"段。
+  *
+  * <p>依据 MT2.26.11.apk 反编译还原的「DEX混淆对抗」规则说明（resources.arsc
+  * 0x7f120263）：「对于子类的类名，会先使用 $ 分割然后再进行匹配，例如 Name$a，
+  * 会依次对 Name 和 a 进行匹配，而不是对 Name$a 进行匹配」。因此在按正则判定
+  * 混淆名时，先按 $ 分段逐段匹配，再对整段类名兜底匹配。
+  * 包名维度的规则（按 / 分段、.* / .** 后缀）由 targetClasses 的 matchRule 承担。
+  */
  static boolean containsObfName(String typeDesc, Pattern obf) {
-  // Lcom/foo/Bar; -> 检查最后一段类名（Bar）
   String simple = typeDesc.substring(typeDesc.lastIndexOf('/')+1, typeDesc.length()-1);
+  for (String seg : simple.split("\\$")) {
+   if (!seg.isEmpty() && obf.matcher(seg).find()) return true;
+  }
   return obf.matcher(simple).find();
  }
 
- /** 生成可读名：保留包路径与内部类层级，外层类名取 abc 序列且不冲突 */
+ /** 兼容既有调用：无保留集合时等价于只按已生成名去重。 */
  static String generateReadableName(String typeDesc, Map<String,String> classMap) {
+  return generateReadableName(typeDesc, classMap, null);
+ }
+
+ /**
+  * 生成可读名：保留包路径与内部类层级，外层类名取 abc 序列且不冲突。
+  *
+  * <p>r16 修复：
+  * <ul>
+  *   <li>原实现把 classMap 里的完整类型（如 {@code "Lx/aaa;"}）截出的
+  *       {@code "aaa;"} <b>带分号</b>放进 used，而候选名 {@code base} 是
+  *       {@code "aaa"} <b>不带分号</b>，导致去重恒不生效，多个类被映射为同一名字，
+  *       DexPool.internClass 抛 "Class ... has already been interned"；</li>
+  *   <li>同时把 reservedTypes（本 dex 全部现存类）纳入去重，避免生成名与
+  *       未被重命名的原有类撞车。</li>
+  * </ul>
+  */
+ static String generateReadableName(String typeDesc, Map<String,String> classMap, Set<String> reservedTypes) {
   int lastSlash = typeDesc.lastIndexOf('/');
   if(lastSlash<0)return null;
   String pkg = typeDesc.substring(0, lastSlash+1);
   String simple = typeDesc.substring(lastSlash+1, typeDesc.length()-1);
   int dollar = simple.indexOf('$');
   String inner = dollar>=0 ? simple.substring(dollar) : "";
+  // 去掉结尾描述符分号；内部类只保留 $ 前的主类名作为已用 base
   Set<String> used=new HashSet<>();
   for(String v:classMap.values()){
-   if(v.startsWith(pkg)){
-    String s=v.substring(pkg.length());
-    int d=s.indexOf('$');
-    used.add(d>=0?s.substring(0,d):s);
-   }
+   if(!v.startsWith(pkg))continue;
+   String s=v.substring(pkg.length());
+   if(s.endsWith(";"))s=s.substring(0,s.length()-1);
+   int d=s.indexOf('$');
+   used.add(d>=0?s.substring(0,d):s);
   }
+  // reservedTypes 里未被重命名的类同样占位（按完整类型比较，天然带分号）
+  Set<String> reservedFull = reservedTypes==null ? Collections.emptySet() : reservedTypes;
   String base;
   int n=1;
   while(true){
    base=toAbc(n++);
-   if(!used.contains(base))break;
+   String candidate = pkg + base + ";";
+   if(!used.contains(base) && !reservedFull.contains(candidate))break;
    if(n>100000)return null;
   }
   return pkg + base + inner + ";";

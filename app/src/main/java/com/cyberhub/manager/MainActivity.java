@@ -70,8 +70,10 @@ public class MainActivity extends Activity {
         * r13 再提升到 7：本轮改动了 vendor/classview.js 的 opcode 助记符 /
         * 属性块 / 词表，必须清掉 r12 旧组件缓存。
         * r14 提升到 8（进度组件）、r15 提升到 9：基于 MT2.26.11.apk 反编译还原
-        * 重写进度文案 / 双进度 / 样式 / 取消交互，必须清掉 r14 旧组件缓存。 */
-       if(getPreferences(0).getInt("assetEpoch",0)<9){web.clearCache(true);getPreferences(0).edit().putInt("assetEpoch",9).apply();}
+        * 重写进度文案 / 双进度 / 样式 / 取消交互，必须清掉 r14 旧组件缓存。
+        * r16 提升到 10：基于 MT 反编译重做 DEX 重新划分 / 混淆对抗的对话框与参数，
+        * app.js 变动，覆盖安装必须清掉 r15 旧脚本缓存。 */
+       if(getPreferences(0).getInt("assetEpoch",0)<10){web.clearCache(true);getPreferences(0).edit().putInt("assetEpoch",10).apply();}
         web.setWebChromeClient(new WebChromeClient(){@Override public boolean onConsoleMessage(ConsoleMessage m){
             if(m.messageLevel()==ConsoleMessage.MessageLevel.ERROR)android.util.Log.e("CyberHubUI",m.message()+" @ "+m.sourceId()+":"+m.lineNumber());return true;
         }});

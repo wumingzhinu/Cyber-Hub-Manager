@@ -188,7 +188,11 @@ ck('finally{if(!taskJob.isEmpty())ProgressBus.end();}' in main, 'Bridge 未在 f
 m = re.search(r"const UI_BUILD='(r\d+)';", js)
 ck(m is not None and m.group(1) >= 'r15', 'UI_BUILD 应递增到 r15 或更高')
 ck(m is not None and ('?v=' + m.group(1)) in html, 'app.html 脚本版本号应与 UI_BUILD 一致')
-ck("getPreferences(0).getInt(\"assetEpoch\",0)<9" in main, 'assetEpoch 应提升到 9')
+# r16 起改为通用校验：epoch 只增不减且两处取值一致，避免每轮改死值
+m_ep = re.search(r'getInt\("assetEpoch",0\)<(\d+)', main)
+ck(m_ep is not None and int(m_ep.group(1)) >= 9
+   and ('putInt("assetEpoch",%s)' % m_ep.group(1)) in main,
+   'assetEpoch 应提升到 >=9 且两处取值一致（覆盖安装清缓存）')
 ck('r15 基于 MT2.26.11.apk 反编译还原进度对话框' in js, '关于页应记录 r15 反编译还原说明')
 ck('tests/progress-mt-decompile-align-check.py' in ci, 'CI 未接入本对齐自检')
 ck('tests/progress-mt-decompile-smoke.cjs' in ci, 'CI 未接入反编译运行时冒烟')
