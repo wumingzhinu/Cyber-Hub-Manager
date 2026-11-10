@@ -237,6 +237,28 @@ interface abstract class synthetic version 52.0
 
 **兼容性**：`AndroidManifest.xml` 字节级一致（versionCode 55）；461→461 条目无增删（变化仅 app.html / app.js / style.css / classes.dex + 3 个重签 META-INF）；签名块 v2/v3 方案一致，**签名证书本体 SHA-256 `bfe0c27b…9504` 与 r14 完全一致，可直接覆盖安装**。`DataEngine` / `ArchiveTools` / `DexEngine` 业务逻辑零改动，DEX 转 JAR 与 JADX 反编译链路不受影响。`assetEpoch 8 -> 9`（改了 app.js / style.css / ProgressBus，覆盖安装强制清 WebView 缓存）。
 
+## r16 修复（基于 MT2.26.11.apk 反编译修复 DEX 重新划分 / DEX 混淆对抗）
+
+**需求**：不再按代码逻辑推断，而是反编译 MT 安装包本体取证，按 MT 真实规格重做这两项功能。
+
+**问题**：倒序逐项实测 15 项 APK 功能时发现 2 个真实缺陷——
+- 「DEX 重新划分」`maxClasses` 默认被写成 `Math.max(1,…)=1`，与「指定数量」模式冲突，`count=2` 把 19379 个类各拆一个 DEX，**静默产出 40MB 不可用 APK 且不报错**；
+- 「DEX 混淆对抗」重命名去重集合存的是带描述符分号的 `"aaa;"`、却与 `"aaa"` 比较，去重恒失效，多个类重名触发 `already been interned` 崩溃。
+另有 4 项与 MT 规格不符（第二模式按类数而非方法数、缺 65536 硬约束、数量不足静默多切、对话框文案与默认值不一致）。
+
+**反编译证据链**（`MT2.26.11.apk`）：
+- ARSCLib 导出 `resources.arsc`：`0x7f120291 均匀分配` / `0x7f120294 生成的Dex数量` / `0x7f120296 按限制分配` / `0x7f120298 方法数量限制` / `0x7f120297 最大 65536，建议输入 64000` / `0x7f120292 是否自动增加 dex 数量？` / `0x7f12029a Android 5.0 警告` / `0x7f12029b 正在重新分配…` / `0x7f120261 DEX混淆对抗` / `0x7f120263 按 $ 分割逐段匹配`；
+- baksmali 反编译 `classes3.dex`：`l/ۜۜۨ.smali:437` 对 `0x7f12028a「无法生成dex，单个dex内的方法数超过65536。」` 明确 `throw`；`classes.dex` 的 `l/᩹ۤۙ.smali:870-880` 注册两项菜单；
+- 固化：`mt-dex-rules.md` + `tests/fixtures/mt-dex-spec.json` + `tests/mt-dex-align-check.py`（CI 接入，38 项；附 MT 字符串表时 55 项）。
+
+**按 MT 规格的改造**：`DexTools.repartition` 两模式互斥（`maxClasses` 默认 0）、`DEX_METHOD_LIMIT=65536` 硬约束、`MT_RECOMMENDED_LIMIT=64000`、`methodLimit` 参数、`NEED_MORE_DEX:n` 信号与 `autoIncrease` 确认开关 / `autoIncreased` 输出；前端对话框按 MT 原文重做并补 `confirmBox` 询问；`DexDeobfuscator` 去分号去重 + `reservedTypes` 保留集合 + `$` 分段匹配。其余 13 项 APK 功能零改动。
+
+**验证**：本地 CI 前端测试集 23/23、MT DEX 规格对齐 55/55（CI 38/38）、静态链路 63/63、双样本倒序回归 15/15 + 15/15；
+Actions 构建 #68 全 success（含核心 JVM 冒烟测试——`ApkToolsSmokeTest` 已适配 MT「数量不足先询问再自动增加」契约）；
+**交付 APK 内置实测 119/119**（MT DEX 规格文案 / DEX 后端常量 / 旧文案清除 / r15 进度组件 86 项回归 / classview 反汇编 / V1+V2+V3 签名与证书）。
+
+**兼容性**：`AndroidManifest.xml` 与 r15 **字节级一致**（versionCode 55 / 0.1.59 / `com.cyberhub.manager`）；461→461 条目无增删（变化仅 `assets/app.html`、`assets/app.js`、`classes.dex` + 3 个重签 META-INF）；签名方案 v1/v2/v3 齐全，**v1 内嵌 X.509 证书 SHA-256 `bfe0c27b…9504` 与 r15 完全一致，可直接覆盖安装**。`assetEpoch 9 -> 10`（app.js 变动，覆盖安装强制清 WebView 缓存，`?v=r16`）。
+
 ## 交付与修复报告（`reports/`）
 
 本目录归档面向用户的 HTML 交付说明，均为只读记录，不参与构建：
@@ -258,5 +280,6 @@ interface abstract class synthetic version 52.0
 | `r13-mt-decompile-report.html` | 基于 MT2.26.11.apk 反编译证据对齐 .class/JASM 语法（r13）：jasm.mtsx 官方语法定义 + classes5.dex JASM printer 格式串 + 36 个 ATT_* + Jasmin opcode 表，纠正 r10–r12 自创 camelCase 助记符、修饰符分表、类属性块、module 收尾、五组高亮词表，APK 内置资源实测与逐条目 / 签名证书核对（提交 `d7c456a`、Release `build-64`） |
 | `r14-progress-dialog-report.html` | 统一处理进度对话框（r14）：MT 同款居中「标题 + 处理中 + 进度条」、39 个 action 自动挂载、ProgressBus 线程内真实百分比、DEX / 归档 / 复制 / 优化打点、伪 DOM 与签名 APK 实测（提交 `9ffd987`、Release `build-65`） |
 | `r15-mt-progress-decompile-report.html` | 基于 MT2.26.11.apk 反编译还原进度对话框（r15）：arsc 3423 条 / mtl 11 语言 / 5 个 smali 类的证据链、两套文案体系、60 条功能专属文案、总进度双条 / 二级进度 / 4 样式 / 再按一次取消、16sp-12dp-6dp 布局常量、签名 APK 内置 86 项实测与逐条目 / 证书核对（提交 `332f380`、Release `build-66`） |
+| `r16-mt-dex-release-report.html` | 基于 MT2.26.11.apk 反编译修复 DEX 重新划分 / 混淆对抗（r16）：2 个真实缺陷 + 4 项规格偏差、arsc/string id 与 smali 证据链、均匀分配 / 按限制分配（64000 / 65536）/ 数量不足先询问再自动增加、签名 APK 内置 119 项实测与逐条目 / 证书核对（提交 `94745769` + `92e6e7bf`、Release `build-68`） |
 
-正式签名 APK 请以仓库 Release `build-66` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。
+正式签名 APK 请以仓库 Release `build-68` 为准（versionCode 55、签名密钥未变，可覆盖安装）；归档目录内的 `.apk` 与密钥文件均不入库。

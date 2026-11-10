@@ -1,0 +1,143 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>r16 基于 MT 反编译修复 DEX 重新划分 / 混淆对抗 — 交付报告</title>
+<style>
+:root{--bg:#0f1115;--card:#181b22;--bd:#2b303b;--fg:#e6e9ef;--mut:#9aa4b2;--blue:#4c8dff;--ok:#3ecf8e;--warn:#ffb454;--bad:#ff6b6b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:25px;margin:0 0 6px}h2{font-size:18px;margin:30px 0 12px;border-left:3px solid var(--blue);padding-left:10px}
+h3{font-size:15px;margin:18px 0 8px;color:var(--blue)}
+.sub{color:var(--mut);font-size:13px;margin-bottom:20px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:16px 18px;margin:12px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:14px 0}
+.kpi{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px}
+.kpi .k{color:var(--mut);font-size:12px}.kpi .v{font-size:20px;font-weight:700;margin-top:4px}
+table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0}
+th,td{border:1px solid var(--bd);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:#20242d;color:var(--mut);font-weight:600}
+code{background:#222733;color:#cfe0ff;padding:1px 5px;border-radius:4px;font-size:12px}
+.ok{color:var(--ok);font-weight:700}.warn{color:var(--warn);font-weight:700}.bad{color:var(--bad);font-weight:700}
+.tag{display:inline-block;background:#233047;color:#9dc0ff;border-radius:5px;padding:1px 7px;font-size:12px}
+ul{margin:8px 0;padding-left:22px}li{margin:4px 0}
+.note{color:var(--mut);font-size:12.5px}
+pre{background:#11141a;border:1px solid var(--bd);border-radius:8px;padding:12px;overflow:auto;font-size:12px;color:#c9d4e5}
+</style></head><body><div class="wrap">
+<h1>r16 · 基于 MT 管理器 APK 反编译修复 DEX 重新划分 / 混淆对抗</h1>
+<div class="sub">交付报告 · 生成时间 2026-11-10 19:54 CST · 版本 0.1.59（versionCode 55，保持不变，可覆盖安装）</div>
+
+<div class="grid">
+<div class="kpi"><div class="k">GitHub 提交</div><div class="v">94745769</div><div class="note">代码 · 92e6e7bf 测试适配</div></div>
+<div class="kpi"><div class="k">Actions 构建</div><div class="v">#68</div><div class="note">Release build-68 · 全 success</div></div>
+<div class="kpi"><div class="k">APK 大小 / SHA-256</div><div class="v">21,398,868 B</div><div class="note">5dd850ff314f07764dc84c30…</div></div>
+<div class="kpi"><div class="k">APK 内置实测</div><div class="v ok">119/119</div><div class="note">0 失败 · V1+V2+V3 校验通过</div></div>
+</div>
+
+<div class="card">
+<b>一句话结论：</b>按「基于 MT 管理器修改」的要求，本轮把上一阶段倒序功能测试发现的
+<span class="bad">2 个真实缺陷</span>与 <span class="warn">4 项与 MT 规格不符</span>，
+全部依据 <code>MT2.26.11.apk</code> 本体的反编译证据重新实现，并已提交 GitHub、
+由 Actions #68 编译打包出签名 APK、完成下载核对与文档归档。
+</div>
+<h2>一、首先是什么有问题</h2>
+<div class="card"><p>倒序逐项实测 MT 截图中的 15 项「APK 功能」时，首轮 14 项 FAIL 里
+<b>13 项不是产品问题</b>（9 项是测试用默认 <code>ApkVerifier</code> 按 minSdk=26 推断「不需要 V1」的假阴性；
+4 项是 r15 自身资源极简、工具按契约明确拒绝「无内容可处理」，MT 自己也有「未找到可解密的数据」这类提示）。
+真正需要处理的是下列 6 项：</p>
+<table><tr><th>类别</th><th>功能</th><th>问题</th><th>基于 MT 的修复</th></tr>
+<tr><td><span class='tag'>功能缺陷 #15</span></td><td><b>DEX 重新划分</b></td><td>maxClasses 默认被写成 Math.max(1,…)=1，与「指定数量」模式冲突；count=2 把 19379 个类各拆一个 DEX，静默产出 40MB 不可用 APK 且不报错</td><td class='ok'>默认改 0 保持互斥 + 65536 硬约束 + NEED_MORE_DEX 询问后自动增加</td></tr>
+<tr><td><span class='tag'>功能缺陷 #14</span></td><td><b>DEX 混淆对抗</b></td><td>重命名去重集合存带分号的 &quot;aaa;&quot; 却与 &quot;aaa&quot; 比较，去重恒失效，多个类重名触发 already been interned 崩溃</td><td class='ok'>去分号 + reservedTypes 保留集合避让原有类 + 按 $ 分段匹配</td></tr>
+<tr><td><span class='tag'>规格偏差 A</span></td><td><b>第二划分模式</b></td><td>做成「按每个 DEX 的类数」</td><td class='ok'>MT 是「按方法数限制」，改为 methodLimit（默认 64000、上限 65536）</td></tr>
+<tr><td><span class='tag'>规格偏差 B</span></td><td><b>方法数上限</b></td><td>无 65536 硬约束</td><td class='ok'>新增 DEX_METHOD_LIMIT=65536，超限明确报错（MT 0x7f12028a）</td></tr>
+<tr><td><span class='tag'>规格偏差 C</span></td><td><b>数量不足</b></td><td>静默多切 DEX</td><td class='ok'>MT 是先询问「是否自动增加 dex 数量？」，确认后才自动增加</td></tr>
+<tr><td><span class='tag'>规格偏差 D</span></td><td><b>对话框</b></td><td>模式名 / 参数 / 默认值 / 说明均不一致</td><td class='ok'>按 MT 原文重做，补 Android 5.0 警告与「正在重新分配…」</td></tr>
+</table><p class='note'>其中 #15 最危险：不报错、静默产出坏 APK；#14 直接崩溃。二者均由上一轮倒序测试的产物合理性断言揪出。</p></div>
+<h2>二、基于 MT 管理器 APK 本体反编译还原的规格</h2>
+<div class="card"><p>不按代码逻辑推断，而是从 <code>/workspace/mt-analysis/MT2.26.11.apk</code> 取证：
+ARSCLib 导出 <code>resources.arsc</code> 字符串表、baksmali 2.5.2 反编译 <code>classes.dex</code> /
+<code>classes3.dex</code>，逐条核对文案确实来自 MT 本体。</p>
+<table><tr><th>string id</th><th>MT 原文 / 规格</th><th>用途</th></tr>
+<tr><td><code>0x7f120290</code></td><td>DEX重新划分</td><td>菜单标题</td></tr>
+<tr><td><code>0x7f120291</code></td><td>均匀分配</td><td>模式一</td></tr>
+<tr><td><code>0x7f120294</code></td><td>生成的Dex数量</td><td>模式一参数</td></tr>
+<tr><td><code>0x7f120296</code></td><td>按限制分配</td><td>模式二</td></tr>
+<tr><td><code>0x7f120298</code></td><td>方法数量限制</td><td>模式二参数</td></tr>
+<tr><td><code>0x7f120297</code></td><td>限制每个 dex 的方法数，最大 65536，建议输入 64000</td><td>MT 规格说明</td></tr>
+<tr><td><code>0x7f120292</code></td><td>您所填写的 dex 数量太小，无法存入所有的代码，是否自动增加 dex 数量？</td><td>数量不足交互</td></tr>
+<tr><td><code>0x7f12028a</code></td><td>无法生成dex，单个dex内的方法数超过65536。</td><td>超限报错（classes3.dex smali 实证）</td></tr>
+<tr><td><code>0x7f12029a</code></td><td>多 dex 的 Android 5.0 兼容性警告</td><td>警告文案</td></tr>
+<tr><td><code>0x7f12029b</code></td><td>正在重新分配…</td><td>进度文案</td></tr>
+<tr><td><code>0x7f120261</code></td><td>DEX混淆对抗</td><td>菜单标题</td></tr>
+<tr><td><code>0x7f120263</code></td><td>按正则规则重命名，子类类名先按 $ 分割再逐段匹配</td><td>混淆对抗规则</td></tr>
+</table><p><b>smali 落点：</b>
+<code>classes3.dex → l/ۜۜۨ.smali:437</code> 确实对 65536 超限 <code>throw</code>（证明 MT 是明确报错而非静默）；
+<code>classes.dex → l/᩹ۤۙ.smali:870-880</code> 注册「DEX重新划分 / DEX混淆对抗 / DEX字符串解密」等菜单项。
+证据固化于 <code>mtre/MT_DEX_RULES.md</code>、<code>tests/fixtures/mt-dex-spec.json</code>。</p></div>
+<h2>三、按 MT 规格改了什么</h2>
+<table><tr><th>文件</th><th>修改内容</th></tr>
+<tr><td><code>DexTools.java</code></td><td>repartition 双模式互斥、65536 硬约束、NEED_MORE_DEX / autoIncrease / autoIncreased、methodLimit、MT 进度文案</td></tr>
+<tr><td><code>DexDeobfuscator.java</code></td><td>分号去重修复、reservedTypes / existingTypes 保留集合、三参命名器兼容重载、containsObfName 按 $ 分段</td></tr>
+<tr><td><code>app.js</code></td><td>MT 文案对话框（均匀分配 / 按限制分配 / 64000 / 65536 / confirmBox 询问）、r16 关于页说明、UI_BUILD r16</td></tr>
+<tr><td><code>app.html</code></td><td>脚本 ?v=r15 → ?v=r16</td></tr>
+<tr><td><code>MainActivity.java</code></td><td>assetEpoch 9 → 10（覆盖安装强制清 WebView 缓存）</td></tr>
+<tr><td><code>tests/mt-dex-align-check.py + fixture</code></td><td>MT DEX 规格对齐自检 38 项（含 tsv 时 55 项），接入 CI</td></tr>
+<tr><td><code>tests/ApkToolsSmokeTest.java</code></td><td>适配 MT「数量不足先询问再自动增加」契约，修复 CI #67 的 JVM 冒烟失败</td></tr>
+<tr><td><code>.github/workflows/build-apk.yml</code></td><td>CI 接入 MT DEX 规格对齐自检</td></tr>
+</table><div class="card"><b>交互链路（MT 0x7f120292）：</b>用户填「生成的Dex数量=2」→
+后端按 65536 方法数约束计算需要 7 个 DEX → 抛 <code>NEED_MORE_DEX:7:65536</code> →
+前端 <code>confirmBox</code> 弹出 MT 原文「您所填写的 dex 数量太小…是否自动增加 dex 数量？」→
+用户确认后带 <code>autoIncrease:true</code> 重跑 → 产出 7 个 DEX 的合法签名 APK，
+全程以「正在重新分配…」回报进度。<b>其余 13 项 APK 功能零改动。</b></div>
+<h2>四、验证结果</h2>
+<div class='grid'>
+<div class='kpi'><div class='k'>CI #68 全流程</div><div class='v ok'>success</div></div>
+<div class='kpi'><div class='k'>本地 CI 前端测试集</div><div class='v ok'>23/23</div></div>
+<div class='kpi'><div class='k'>MT DEX 规格对齐</div><div class='v ok'>55/55（CI 38/38）</div></div>
+<div class='kpi'><div class='k'>静态链路闭环</div><div class='v ok'>63/63</div></div>
+<div class='kpi'><div class='k'>倒序回归 r15 样本</div><div class='v ok'>15/15</div></div>
+<div class='kpi'><div class='k'>倒序回归 增强样本</div><div class='v ok'>15/15</div></div>
+<div class='kpi'><div class='k'>签名 APK 内置实测</div><div class='v ok'>119/119</div></div>
+<div class='kpi'><div class='k'>apksig V1/V2/V3</div><div class='v ok'>minSdk=21 全 true</div></div>
+</div>
+<div class="card"><h3>CI #67 失败与修复（如实记录）</h3>
+<p>首次推送 <code>94745769</code> 触发的 Actions #67 在「核心 JVM 冒烟测试」失败：
+<code>ApkToolsSmokeTest.java:51</code> 用 <code>count=2</code> 调 <code>DexTools.repartition</code>，
+旧测试未处理 r16 新引入的 <code>NEED_MORE_DEX:7:65536</code> 信号。
+这不是产品缺陷，而是测试未适配 MT 的「先询问再自动增加」契约。</p>
+<pre>Exception in thread "main" java.lang.Exception: NEED_MORE_DEX:7:65536
+  at com.cyberhub.manager.DexTools.repartition(DexTools.java:302)
+  at com.cyberhub.manager.ApkToolsSmokeTest.main(ApkToolsSmokeTest.java:51)</pre>
+<p>修复：测试捕获该信号，按 MT 交互链路带 <code>autoIncrease=true</code> 重跑并断言
+<code>autoIncreased=true</code> 与 <code>dexes&gt;=2</code>。本地 JVM 真实执行通过
+（19379 类 → 7 个 DEX，签名校验通过），提交 <code>92e6e7bf</code> 后 Actions #68 全 success。</p></div>
+<div class='card'><h3>交付 APK 核对（全部通过）</h3><table>
+<tr><th>项目</th><th>结果</th></tr>
+<tr><td>SHA-256（与 Release 官方 digest 一致）</td><td class='ok'>5dd850ff314f07764dc84c30c9a504b767f548285169949fb1eab91a6a22d991</td></tr>
+<tr><td>条目数 r15 → r16</td><td class='ok'>461 → 461，无增删</td></tr>
+<tr><td>变化条目（共 6）</td><td class='ok'><code>META-INF/CYBERHUB.RSA</code>, <code>META-INF/CYBERHUB.SF</code>, <code>META-INF/MANIFEST.MF</code>, <code>assets/app.html</code>, <code>assets/app.js</code>, <code>classes.dex</code></td></tr>
+<tr><td>AndroidManifest.xml</td><td class='ok'>与 r15 字节级一致（versionCode 55 / 0.1.59 / com.cyberhub.manager）</td></tr>
+<tr><td>签名方案</td><td class='ok'>v1 + v2 + v3 齐全；apksig 以 minSdk=21 校验 v1/v2/v3 全 true</td></tr>
+<tr><td>v1 内嵌 X.509 证书 SHA-256</td><td class='ok'><code>bfe0c27bf3ebdf5d199f566e6ea4405416f61e30a7bf702289336ae3c4109504</code>（与 r15 完全一致，可覆盖安装）</td></tr>
+<tr><td>签名块方案</td><td class='ok'>v2 / v3 / 0x42726577，与 r15 一致</td></tr>
+<tr><td>DEX</td><td class='ok'>classes.dex, classes2.dex, classes3.dex（3 个，结构完整）</td></tr>
+<tr><td>APK 内置 119 项</td><td class='ok'>MT DEX 规格文案 15 项 + DEX 后端常量 10 项 + 旧文案清除 3 项 + r15 进度对话框 86 项回归 + classview 反汇编 + 签名/证书</td></tr>
+</table></div>
+<h2>五、兼容性与安装建议</h2>
+<div class="card"><ul>
+<li><b>versionCode 55 / versionName 0.1.59 / 包名 com.cyberhub.manager 均未变</b>，
+签名证书本体与 r15 一致 → <span class="ok">直接覆盖安装即可，无需卸载</span>。</li>
+<li><code>assetEpoch 9 → 10</code>：本轮改了 <code>app.js</code>，覆盖安装后应用会强制
+<code>clearCache(true)</code> 并按 <code>?v=r16</code> 重新加载脚本，避免旧对话框缓存导致新规格不生效。</li>
+<li>DEX 转 JAR、归档浏览、JADX 反编译、r15 的统一处理进度对话框等既有链路零改动
+（APK 内置 86 项进度组件伪 DOM 真实执行回归全部通过）。</li>
+<li>若覆盖安装后仍看到旧界面，请强制停止应用并清除 WebView 缓存后重开。</li>
+</ul></div>
+<h2>六、交付物</h2><div class="card"><ul>
+<li>签名安装包：<code>/workspace/Cyber-Hub-Manager-0.1.59-r16.apk</code>
+（21,398,868 B，Release <a href="https://github.com/wumingzhinu/Cyber-Hub-Manager/releases/tag/build-68">build-68</a>）</li>
+<li>本报告：<code>/workspace/r16-mt-dex-release-report.html</code></li>
+<li>MT 反编译规格与可复现资产：<code>/workspace/apk-feature-test/mt-align/</code>
+（MT_DEX_RULES.md、对齐校验脚本与 fixture、双样本倒序测试结果）</li>
+<li>上一阶段报告：<code>/workspace/r16-mt-dex-align-report.html</code>（问题诊断与 MT 对照修改）、
+<code>/workspace/r16-apk-features-reverse-test-report.html</code>（15 项倒序功能测试）</li>
+</ul><p class="note">按「只保留最新安装包」，r15 旧 APK 已从 /workspace 移除。</p></div>
+</div></body></html>
