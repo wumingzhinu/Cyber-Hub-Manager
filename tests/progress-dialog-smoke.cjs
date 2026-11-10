@@ -11,7 +11,7 @@ const vm = require('vm');
 const ROOT = path.resolve(__dirname, '..');
 const SRC = fs.readFileSync(path.join(ROOT, 'app/src/main/assets/app.js'), 'utf8');
 
-const start = SRC.indexOf('const TASK_TITLES=');
+const start = SRC.indexOf('const MT_MSG=');
 const end = SRC.indexOf('window.receive=r=>');
 if (start < 0 || end < 0 || end <= start) {
   console.error('FAIL: 无法从 app.js 定位进度组件片段');
@@ -35,10 +35,19 @@ const els = {
   '#tpTitle': mk('tpTitle'),
   '#tpMsg': mk('tpMsg'),
   '#tpFill': mk('tpFill'),
+  '#tpSecondary': mk('tpSecondary'),
+  '#tpTotal': mk('tpTotal'),
+  '#tpTotalLabel': mk('tpTotalLabel'),
+  '#tpTotalFill': mk('tpTotalFill'),
+  '#tpCircular': mk('tpCircular'),
 };
 const $ = sel => els[sel] || null;
 
-const ctx = { window: {}, document: {}, $, console, Math, Object, Set, String };
+const ctx = {
+  window: { CyberNative: { request: () => {} } },
+  document: {}, $, console, Math, Object, Set, String, Date,
+  setTimeout: () => 0,
+};
 vm.createContext(ctx);
 vm.runInContext(code + '\n;this.__out={TASK_TITLES,taskProgressOpen,taskProgressClose};', ctx);
 const out = ctx.__out;
@@ -60,14 +69,14 @@ const job = out.taskProgressOpen('Dex转Jar');
 ck(typeof job === 'string' && job.length > 1, 'taskProgressOpen 应返回 job id');
 ck(dialog.hidden === false, '打开后对话框应显示');
 ck(els['#tpTitle'].textContent === 'Dex转Jar', '标题应为 Dex转Jar');
-ck(els['#tpMsg'].textContent === '处理中...', '默认说明应为 处理中...');
+ck(els['#tpMsg'].textContent === '处理中…', '默认说明应为 MT arsc 的 处理中…');
 ck(dialog._cls.has('indeterminate'), '打开时应处于不确定进度');
 ck(els['#tpFill'].style.width === '0%', '初始填充宽度应为 0%');
 
 ctx.window.__taskProgress(job, 42, '正在反编译 classes.dex');
 ck(els['#tpFill'].style.width === '42%', '收到 42 后填充宽度应为 42%');
 ck(!dialog._cls.has('indeterminate'), '收到确定百分比后应移除不确定动画');
-ck(els['#tpMsg'].textContent === '正在反编译 classes.dex', '说明文字应更新为真实阶段');
+ck(els['#tpMsg'].textContent === '正在反编译… classes.dex', '说明文字应按 MT「正在 XXX…」格式规范化');
 
 ctx.window.__taskProgress('t-not-current', 88, '不应生效');
 ck(els['#tpFill'].style.width === '42%', '非当前 job 的进度应被忽略');

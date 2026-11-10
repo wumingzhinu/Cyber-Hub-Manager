@@ -68,8 +68,10 @@ public class MainActivity extends Activity {
          * classview.js / app.js 缓存，导致归档内 .class 仍走旧的「类信息查看器」。
         * 提升 assetEpoch 强制 clearCache(true)；localAsset 亦返回 no-store。
         * r13 再提升到 7：本轮改动了 vendor/classview.js 的 opcode 助记符 /
-        * 属性块 / 词表，必须清掉 r12 旧组件缓存。 */
-       if(getPreferences(0).getInt("assetEpoch",0)<8){web.clearCache(true);getPreferences(0).edit().putInt("assetEpoch",8).apply();}
+        * 属性块 / 词表，必须清掉 r12 旧组件缓存。
+        * r14 提升到 8（进度组件）、r15 提升到 9：基于 MT2.26.11.apk 反编译还原
+        * 重写进度文案 / 双进度 / 样式 / 取消交互，必须清掉 r14 旧组件缓存。 */
+       if(getPreferences(0).getInt("assetEpoch",0)<9){web.clearCache(true);getPreferences(0).edit().putInt("assetEpoch",9).apply();}
         web.setWebChromeClient(new WebChromeClient(){@Override public boolean onConsoleMessage(ConsoleMessage m){
             if(m.messageLevel()==ConsoleMessage.MessageLevel.ERROR)android.util.Log.e("CyberHubUI",m.message()+" @ "+m.sourceId()+":"+m.lineNumber());return true;
         }});
@@ -260,13 +262,18 @@ public class MainActivity extends Activity {
     }
     /** r14：通用处理进度（0-100，-1 表示不确定），注入前端进度对话框。 */
     void taskProgress(String job,int percent,String message){
-        runOnUiThread(()->{if(web!=null)web.evaluateJavascript("window.__taskProgress&&window.__taskProgress("+JSONObject.quote(job)+","+percent+","+(message==null?"null":JSONObject.quote(message))+")",null);});
+        taskProgress(job,percent,message,null);
+    }
+    /** r15：MT 反编译还原的扩展字段（secondary / total / style / state），见 MT_PROGRESS_RULES.md。 */
+    void taskProgress(String job,int percent,String message,ProgressBus.Extras extras){
+        final String ext=extras==null?"null":extras.toJson();
+        runOnUiThread(()->{if(web!=null)web.evaluateJavascript("window.__taskProgress&&window.__taskProgress("+JSONObject.quote(job)+","+percent+","+(message==null?"null":JSONObject.quote(message))+","+ext+")",null);});
     }
     public final class Bridge {
         @JavascriptInterface public void request(String id,String action,String args){
             (action.equals("apkIcon")||action.equals("listThumb")?thumbnails:worker).execute(()->{JSONObject response=new JSONObject();String taskJob="";try{
                 JSONObject a=new JSONObject(args);Object result;taskJob=a.optString("__task","");
-                if(!taskJob.isEmpty()){final String job=taskJob;ProgressBus.begin((pct,msg)->taskProgress(job,pct,msg));}
+                if(!taskJob.isEmpty()){final String job=taskJob;ProgressBus.begin(new ProgressBus.Sink(){@Override public void report(int pct,String msg){taskProgress(job,pct,msg);}@Override public void report(int pct,String msg,ProgressBus.Extras x){taskProgress(job,pct,msg,x);}});ProgressBus.bindJob(job);}
                 switch(action){
                     case "apkIcon":result=engine.iconForPath(a.getString("path"));break;
                     case "listThumb":result=listThumb(a);break;
@@ -295,6 +302,7 @@ public class MainActivity extends Activity {
                     case "openWithLaunch":{File f=new File(a.getString("path"));if(!f.isFile())throw new IOException("文件未找到");if(!f.canRead())throw new IOException("无法读取此文件");File shared=shareCopy(f);String mime=a.optString("mime",openWithMime(f.getPath()));String pkg=a.getString("pkg"),cls=a.getString("cls");runOnUiThread(()->openWithLaunch(shared,mime,pkg,cls));result=true;break;}
                     case "setAppIcon":result=ExtraTools.setIconVariant(MainActivity.this,a.optString("variant","默认"));break;
                     case "getAppIcon":result=ExtraTools.iconVariant(MainActivity.this);break;
+                    case "cancelTask":result=ProgressBus.requestCancel(a.optString("job",""));break;
                     default:result=engine.call(action,a);
                 }
                 response.put("id",id);response.put("ok",true);response.put("data",result==null?JSONObject.NULL:result);

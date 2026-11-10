@@ -70,14 +70,14 @@ for title in ("dexToJar:'Dex转Jar'", "dexToSmali:'Dex转Smali'", "dexRepair:'�
               "batchTransfer:'复制文件'", "sign:'签名APK'", "optimize:'APK优化'",
               "clone:'生成共存APK'", "gpgEncrypt:'GPG加密'"):
     ck(title in js, 'TASK_TITLES 缺映射 ' + title)
-ck('function taskProgressOpen(title)' in js, '缺 taskProgressOpen')
+ck('function taskProgressOpen(title' in js, '缺 taskProgressOpen')
 ck('function taskProgressClose()' in js, '缺 taskProgressClose')
 ck('window.__taskProgress=' in js, '缺原生进度注入入口 window.__taskProgress')
 ck("el.classList.add('indeterminate')" in js, '打开时应进入不确定进度状态')
 ck("const f=$('#tpFill');if(f)f.style.width=Math.max(0,Math.min(100,percent))+'%'" in js,
    '__taskProgress 应按 0-100 设置填充宽度')
 ck('const SLOW_TASKS=' in js, '缺耗时任务白名单 SLOW_TASKS')
-ck('TASK_TITLES[action]?taskProgressOpen(TASK_TITLES[action])' in js,
+ck('TASK_TITLES[action]?taskProgressOpen(TASK_TITLES[action]' in js,
    'rpc 未按 action 自动挂载进度对话框')
 ck('Object.assign({},args,{__task:job})' in js, 'rpc 未把 __task 传给原生')
 ck('if(job)taskProgressClose();resolve(v)' in js, 'rpc 成功回调未关闭进度')
@@ -94,10 +94,13 @@ ck('now - s.lastAt < 60' in bus, 'ProgressBus 缺 60ms 节流（避免高频 eva
 # --- 4) 原生注入与生命周期 ----------------------------------------------
 ck('void taskProgress(String job,int percent,String message)' in main, 'MainActivity 缺 taskProgress')
 ck('window.__taskProgress&&window.__taskProgress(' in main, 'MainActivity 未注入 __taskProgress')
-ck('ProgressBus.begin((pct,msg)->taskProgress(job,pct,msg))' in main, 'Bridge 未绑定 ProgressBus')
+ck('ProgressBus.begin(' in main and 'ProgressBus.Sink' in main, 'Bridge 未绑定 ProgressBus')
+ck('ProgressBus.bindJob(job)' in main, 'Bridge 未绑定 job（r15 取消通道）')
 ck('finally{if(!taskJob.isEmpty())ProgressBus.end();}' in main, 'Bridge 未在 finally 释放 ProgressBus')
-ck('assetEpoch",0)<8' in main, 'assetEpoch 应提升到 8')
-ck('putInt("assetEpoch",8)' in main, 'assetEpoch 写入值应为 8')
+ep = re.search(r'getPreferences\(0\)\.getInt\("assetEpoch",0\)<(\d+)', main)
+put = re.search(r'putInt\("assetEpoch",(\d+)\)', main)
+ck(ep is not None and int(ep.group(1)) >= 8, 'assetEpoch 应提升到 8 或更高')
+ck(put is not None and int(put.group(1)) >= 8, 'assetEpoch 写入值应为 8 或更高')
 
 # --- 5) 真实进度打点 -----------------------------------------------------
 ck('ProgressBus.report(n*100/total,"正在修复 "' in dex, 'DexEngine.repair 缺进度')
